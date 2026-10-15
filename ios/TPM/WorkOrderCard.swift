@@ -10,6 +10,7 @@ struct WorkOrderCard<Destination: View>: View {
     let facts: [(String, String)]
     @ViewBuilder let destination: () -> Destination
     @State private var expanded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             NavigationLink { destination().modifier(DetailTabVisibility()) } label: {
@@ -28,7 +29,7 @@ struct WorkOrderCard<Destination: View>: View {
                     .lineLimit(1).truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Button {
-                    withAnimation(.snappy) { expanded.toggle() }
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.24)) { expanded.toggle() }
                 } label: {
                     HStack(spacing: 6) {
                         Text(expanded ? "收起详情" : "展开详情")
@@ -50,6 +51,7 @@ struct WorkOrderCard<Destination: View>: View {
                     }
                     NavigationLink { destination().modifier(DetailTabVisibility()) } label: { Text("打开工单") }.buttonStyle(.plain).font(.subheadline)
                 }.padding(.top, 4)
+                    .transition(.opacity)
             }
         }.buttonStyle(.plain).padding(.vertical, 8)
     }
@@ -110,4 +112,3 @@ struct DetailTabVisibility: ViewModifier {
             .onDisappear { navigation.hideTabs = false }
     }
 }
-
