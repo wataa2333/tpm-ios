@@ -55,6 +55,7 @@ extension EnvironmentValues {
     @Entry var previewReferences = false
     @Entry var loadingViewport = CGRect.zero
     @Entry var bottomSafeArea: CGFloat = 0
+    @Entry var documentSearch = false
 }
 
 struct BottomAction: View {

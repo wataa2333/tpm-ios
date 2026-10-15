@@ -152,7 +152,16 @@ func erpCardFacts(_ item: JSONValue) -> [(String, String)] {
 struct LiveWorkflowDetail: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var navigation: BottomNavigationModel
-    private func completed() { processing = false; returning = false; editing = false; navigation.refresh = UUID(); dismiss() }
+    @State private var returnToList = false
+    private func completed() {
+        returnToList = true
+        processing = false; returning = false; editing = false
+        navigation.refresh = UUID()
+    }
+    private func taskSheetClosed() {
+        if returnToList { dismiss() }
+        else { Task { await load() } }
+    }
     @EnvironmentObject private var session: LiveSession
     let kind: WorkflowKind
     let id: String
@@ -229,11 +238,11 @@ struct LiveWorkflowDetail: View {
                 HStack { if returnAvailable { BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) { returning = true }.disabled(loading) }; Spacer(); BottomAction(title: task["name"].text, symbol: "arrow.right.circle") { processing = true }.disabled(loading) }.padding(.horizontal, 20).padding(.vertical, 8)
             }
         }
-        .sheet(isPresented: $returning, onDismiss: { Task { await load() } }) { NavigationStack { WorkflowTaskView(task: task, kind: kind, previewReturn: true, onCompleted: completed) } }
-        .sheet(isPresented: $editing, onDismiss: { Task { await load() } }) {
+        .sheet(isPresented: $returning, onDismiss: taskSheetClosed) { NavigationStack { WorkflowTaskView(task: task, kind: kind, previewReturn: true, onCompleted: completed) } }
+        .sheet(isPresented: $editing, onDismiss: taskSheetClosed) {
             NavigationStack { if kind == .fault { OriginalFaultForm(existing: detail.object, onSaved: completed) } else { OriginalERPForm(existing: detail.object, onSaved: { _ in completed() }) } }
         }
-        .sheet(isPresented: $processing, onDismiss: { Task { await load() } }) {
+        .sheet(isPresented: $processing, onDismiss: taskSheetClosed) {
             NavigationStack {
                 if kind == .fault && task["category"].text == "REPAIRED" { OriginalRepairForm(faultID: id, task: task, onCompleted: completed) }
                 else { WorkflowTaskView(task: task, kind: kind, onCompleted: completed) }

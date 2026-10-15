@@ -257,7 +257,16 @@ struct FaultDetailView: View {
     @State private var returning = false
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var navigation: BottomNavigationModel
-    private func completed() { processing = false; returning = false; navigation.refresh = UUID(); dismiss() }
+    @State private var returnToList = false
+    private func completed() {
+        returnToList = true
+        processing = false
+        returning = false
+        navigation.refresh = UUID()
+    }
+    private func taskSheetClosed() {
+        if returnToList { dismiss() }
+    }
     private var fault: Fault? { store.faults.first { $0.id == id } }
     var body: some View {
         Group {
@@ -297,14 +306,14 @@ struct FaultDetailView: View {
                         }
                     }.padding(.horizontal, 20).padding(.vertical, 8)
                 }
-                .sheet(isPresented: $processing) {
+                .sheet(isPresented: $processing, onDismiss: taskSheetClosed) {
                     NavigationStack {
                         if fault.state == .signed { SignInPreview(asset: fault.asset, onCompleted: completed) }
                         else if fault.state == .working { OriginalRepairForm(faultID: id, task: .object(["name": .string("维修处理")]), preview: true, onCompleted: completed) }
                         else { WorkflowTaskView(task: .object(["name": .string(fault.state.actionTitle), "category": .string(fault.state.code)]), kind: .fault, preview: true, onCompleted: completed) }
                     }
                 }
-                .sheet(isPresented: $returning) { NavigationStack { WorkflowTaskView(task: .object(["name": .string("退单"), "category": .string(fault.state.code)]), kind: .fault, preview: true, previewReturn: true, onCompleted: completed) } }
+                .sheet(isPresented: $returning, onDismiss: taskSheetClosed) { NavigationStack { WorkflowTaskView(task: .object(["name": .string("退单"), "category": .string(fault.state.code)]), kind: .fault, preview: true, previewReturn: true, onCompleted: completed) } }
 
             } else { ContentUnavailableView("单据不存在", systemImage: "doc.questionmark") }
         }

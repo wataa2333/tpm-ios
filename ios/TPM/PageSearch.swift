@@ -48,12 +48,13 @@ private struct PageSearch: ViewModifier {
     let prompt: String
     let submit: () -> Void
     @State private var localActive = false
+    @Environment(\.documentSearch) private var documentSearch
     @EnvironmentObject private var navigation: BottomNavigationModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
         let active = presented ?? $localActive
         content.safeAreaInset(edge: .top, spacing: 0) {
-            if !navigation.presentingDocument {
+            if !navigation.presentingDocument || documentSearch {
             HStack(spacing: 10) {
                 NativeSearchInput(text: $text, active: active, prompt: prompt, submit: submit)
                     .frame(height: 44)

@@ -37,7 +37,8 @@ struct NativeTabShell<Content: View>: View {
                 NavigationStack {
                     if kind == .fault { OriginalFaultForm(preview: preview) }
                     else { OriginalERPForm(preview: preview) }
-                }.presentationDragIndicator(.visible)
+                }.environment(\.documentSearch, true)
+                    .presentationDragIndicator(.visible)
             }
     }
 }
