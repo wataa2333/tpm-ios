@@ -11,7 +11,7 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(search.isHittable)
         capture(app, "Fault top search")
         search.tap(); search.typeText("立式")
-        XCTAssertTrue(app.staticTexts["立式加工中心"].exists)
+        XCTAssertTrue(app.staticTexts["立式加工中心异常报修"].exists)
         capture(app, "Fault search results")
         search.tap()
         if let text = search.value as? String { search.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: text.count)) }
@@ -41,7 +41,7 @@ final class PreviewTests: XCTestCase {
         capture(app, "Repair ERP entry")
         app.buttons["新建出库单"].tap()
         XCTAssertTrue(app.navigationBars["ERP 出库"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["BX-DEMO-001"].exists)
+        XCTAssertTrue(app.staticTexts["BX-DEMO-001"].waitForExistence(timeout: 10))
         capture(app, "Repair linked ERP form")
         for _ in 0..<4 where !app.staticTexts["空气滤芯"].isHittable { app.swipeUp() }
         XCTAssertTrue(app.staticTexts["申请数量：2 个"].exists)
@@ -66,13 +66,14 @@ final class PreviewTests: XCTestCase {
         add(attachment)
     }
 
-    func testFaultRequiredValidationAndStackedActions() {
+    func testFaultRequiredValidationAndSideBySideActions() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "new-fault"]
         app.launch()
         XCTAssertTrue(app.buttons["提交"].waitForExistence(timeout: 20))
         XCTAssertTrue(app.buttons["保存"].exists)
-        XCTAssertLessThanOrEqual(app.buttons["提交"].frame.maxY, app.buttons["保存"].frame.minY)
+        XCTAssertLessThan(app.buttons["保存"].frame.midX, app.buttons["提交"].frame.midX)
+        XCTAssertLessThan(abs(app.buttons["提交"].frame.midY - app.buttons["保存"].frame.midY), 3)
         app.buttons["提交"].tap()
         XCTAssertTrue(app.alerts["请检查表单"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.alerts.staticTexts["请填写或选择报修名称"].exists)

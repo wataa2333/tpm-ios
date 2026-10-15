@@ -42,3 +42,15 @@ import Foundation
     #expect(materialUnit(.object(["uom": .object(["uomDesc": .string("米")])])) == "米")
     #expect(materialQuantity("2", material: .object([:])) == "2 PCS")
 }
+
+@Test func faultStagesFollowOriginalWorkflowOrder() {
+    #expect(FaultState.allCases.map(\.code) == ["UNTREATED", "REPORTED", "RECEIVED", "SIGNED", "REPAIRED", "VERIFIED", "RESOLVED", "FINISHED"])
+    #expect(FaultSearchField.assetCode.key == "asset.assetCode")
+    #expect(FaultSearchField.machine.key == "asset.addressCode")
+    #expect(FaultSearchField.reporter.key == "applyUser.realName")
+}
+
+@Test func returnActionMustBeNamedByOriginalServer() {
+    #expect(isReturnCondition(.object(["name": .string("退单"), "value": .string("reject")])))
+    #expect(!isReturnCondition(.object(["name": .string("不同意"), "value": .string("reject")])))
+}

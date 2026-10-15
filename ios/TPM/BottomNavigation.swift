@@ -20,7 +20,7 @@ struct BottomNavigation: View {
                         Button { selection = index } label: {
                             VStack(spacing: 3) {
                                 Image(systemName: tabs[index].1).font(.system(size: 20))
-                                Text(tabs[index].0).font(.system(size: 10, weight: .medium)).lineLimit(1)
+                                Text(tabs[index].0).font(.system(size: 11, weight: .medium)).lineLimit(1)
                             }
                             .foregroundStyle(selection == index ? Color.accentColor : Color.primary)
                             .frame(maxWidth: .infinity, minHeight: 50)

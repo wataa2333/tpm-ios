@@ -1,5 +1,15 @@
 import SwiftUI
 
+struct PreviewFactoryButton: View {
+    @State private var shown = false
+    var body: some View {
+        Button("示例一厂", systemImage: "chevron.up.chevron.down") { shown = true }
+            .font(.subheadline)
+            .accessibilityLabel("切换厂区")
+            .sheet(isPresented: $shown) { NavigationStack { FactorySwitchView(preview: true) } }
+    }
+}
+
 struct FactorySwitcherButton: View {
     @EnvironmentObject private var session: LiveSession
     @State private var presented = false

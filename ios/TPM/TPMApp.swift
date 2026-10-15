@@ -25,15 +25,11 @@ struct PreviewRouter: View {
 }
 
 enum FaultState: String, CaseIterable, Identifiable {
-    case reported = "待受理", working = "待完成", verifying = "待确认", finished = "已完成"
+    case draft = "报修", reported = "待受理", received = "待抢单", signed = "待签到", working = "待完成", verifying = "待确认", resolved = "待复线", finished = "已完结"
     var id: String { rawValue }
-    var color: Color {
-        switch self { case .reported: .orange; case .working: .blue; case .verifying: .purple; case .finished: .green }
-    }
-    var symbol: String {
-        switch self { case .reported: "tray"; case .working: "wrench.and.screwdriver"; case .verifying: "checkmark.bubble"; case .finished: "checkmark.circle" }
-    }
-
+    var code: String { ["UNTREATED", "REPORTED", "RECEIVED", "SIGNED", "REPAIRED", "VERIFIED", "RESOLVED", "FINISHED"][FaultState.allCases.firstIndex(of: self)!] }
+    var color: Color { switch self { case .draft: .purple; case .reported: .orange; case .received, .signed: .blue; case .working: .teal; case .verifying, .resolved: .indigo; case .finished: .green } }
+    var symbol: String { switch self { case .draft: "square.and.pencil"; case .reported: "tray"; case .received: "hand.raised"; case .signed: "location"; case .working: "wrench.and.screwdriver"; case .verifying: "checkmark.bubble"; case .resolved: "arrow.triangle.2.circlepath"; case .finished: "checkmark.circle" } }
 }
 
 struct Asset: Identifiable, Hashable {
@@ -60,6 +56,7 @@ struct Fault: Identifiable {
     let time: String
     var state: FaultState
     var records: [String]
+    var name: String { asset.name + "异常报修" }
     var result: String = ""
     var photoCount: Int = 0
 }
@@ -93,9 +90,9 @@ struct Outbound: Identifiable {
 final class DemoStore: ObservableObject {
     @Published var faults: [Fault] = FaultState.allCases.enumerated().flatMap { offset, state in
         (0..<2).map { index in
-            Fault(id: "BX-202610\(15-offset)-00\(index+1)", asset: Asset.samples[(offset+index)%4],
+            Fault(id: "BX-202610\(16-offset)-00\(index+1)", asset: Asset.samples[index],
                   description: ["主轴运行时出现异常振动，伴随间歇性异响。", "设备启动后压力不稳定，请检查运行状态。"][index],
-                  reporter: ["张明", "李华"][index], time: offset == 0 ? "今天 09:\(index == 0 ? "30" : "15")" : "10月\(15-offset)日 14:20", state: state,
+                  reporter: ["张明", "李华"][index], time: offset == 0 ? "今天 09:\(index == 0 ? "30" : "15")" : "10月\(16-offset)日 14:20", state: state,
                   records: ["报修申请已提交"] + (offset > 0 ? ["设备部已受理"] : []) + (offset > 1 ? ["维修结果已提交，等待确认"] : []) + (offset > 2 ? ["报修人已确认完成"] : []),
                   result: offset > 1 ? "检查并更换磨损部件，试运行正常。" : "")
         }
@@ -117,7 +114,7 @@ struct StatusLabel: View {
     let state: FaultState
     var body: some View {
         HStack(spacing: 5) { Image(systemName: state.symbol); Text(state.rawValue) }
-            .font(.caption).foregroundStyle(state.color).fixedSize()
+            .font(.subheadline.weight(.medium)).foregroundStyle(state.color).fixedSize()
     }
 }
 
@@ -125,13 +122,14 @@ struct MainTabs: View {
     @State private var selection: Int
     init(selection: Int = 0) { _selection = State(initialValue: selection) }
     var body: some View {
-        TabView(selection: $selection) {
-            Tab("主页", systemImage: "house", value: 0) { NavigationStack { HomeView() } }
-            Tab("工作台", systemImage: "square.grid.2x2", value: 1) { NavigationStack { WorkspaceView() } }
-            Tab("故障报修", systemImage: "wrench.and.screwdriver", value: 2) { NavigationStack { FaultListView() } }
-            Tab("我的", systemImage: "person.crop.circle", value: 3) { NavigationStack { ProfileView() } }
+        Group {
+            switch selection {
+            case 0: NavigationStack { HomeView() }
+            case 1: NavigationStack { WorkspaceView() }
+            case 2: NavigationStack { FaultListView() }
+            default: NavigationStack { ProfileView() }
+            }
         }
-        .toolbar(.hidden, for: .tabBar)
         .safeAreaInset(edge: .bottom, spacing: 0) { BottomNavigation(selection: $selection, preview: true) }
     }
 }
@@ -155,7 +153,8 @@ struct HomeView: View {
                 NavigationLink { OrderPoolView(kind: "精密度检查") } label: { PoolEntry(title: "精密度检查工单池", symbol: "ruler", subtitle: "设备精度检查任务") }
             }
         }
-        .navigationTitle("主页")
+        .navigationTitle("主页").navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { PreviewFactoryButton() } }
     }
 }
 
@@ -183,11 +182,11 @@ struct WorkspaceView: View {
             }
             Section("备品备件") {
                 NavigationLink { OutboundListView() } label: { PoolEntry(title: "ERP 出库", symbol: "shippingbox", subtitle: "出库单查询与明细") }
-                NavigationLink { StockListView() } label: { PoolEntry(title: "库存", symbol: "archivebox", subtitle: "物料数量、规格与库位") }
+                NavigationLink { WarehouseStockView(preview: true) } label: { PoolEntry(title: "仓库库存", symbol: "archivebox", subtitle: "仓库明细、物料数量与入库记录") }
             }
             Section { DemoNotice() }
         }
-        .navigationTitle("工作台")
+        .navigationTitle("工作台").navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -195,18 +194,31 @@ struct FaultListView: View {
     @EnvironmentObject private var store: DemoStore
     @EnvironmentObject private var navigation: BottomNavigationModel
     @State private var state: FaultState
+    @State private var searchField: FaultSearchField = .name
     @State private var query = ""
     @State private var creating = false
-    init(initialState: FaultState = .reported) { _state = State(initialValue: initialState) }
+    init(initialState: FaultState = .received) { _state = State(initialValue: initialState) }
     private var rows: [Fault] {
-        store.faults.filter { $0.state == state && (query.isEmpty || ($0.asset.name + $0.asset.id + $0.id + $0.description).localizedCaseInsensitiveContains(query)) }
+        store.faults.filter { fault in
+            let value: String
+            switch searchField {
+            case .name: value = fault.name
+            case .number: value = fault.id
+            case .machine: value = fault.asset.id
+            case .assetCode: value = "FA-" + fault.asset.id
+            case .assetName: value = fault.asset.name
+            case .address: value = fault.asset.location
+            case .reporter: value = fault.reporter
+            case .group: value = "设备维修组"
+            case .repairer: value = "示例维修人"
+            }
+            return fault.state == state && (query.isEmpty || value.localizedCaseInsensitiveContains(query))
+        }
     }
     var body: some View {
         List {
             Section {
-                Picker("报修状态", selection: $state) {
-                    ForEach(FaultState.allCases) { Text($0.rawValue).tag($0) }
-                }.pickerStyle(.segmented).listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+                Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }
             } footer: { DemoNotice() }
             Section {
                 ForEach(rows) { fault in
@@ -215,13 +227,21 @@ struct FaultListView: View {
                         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
                 }
-                if rows.isEmpty { ContentUnavailableView("暂无相关报修", systemImage: state.symbol, description: Text("可以切换状态或调整搜索内容。")) }
+                if rows.isEmpty { CompactEmptyState() }
             } header: {
                 HStack { Text(state.rawValue); Spacer(); Text("\(rows.count) 单").monospacedDigit() }
             }
         }
-        .navigationTitle("故障报修")
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索设备、编号或故障")
+        .navigationTitle("故障报修").navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            HorizontalCategories(titles: FaultState.allCases.map(\.rawValue), selection: Binding(get: { FaultState.allCases.firstIndex(of: state)! }, set: { state = FaultState.allCases[$0] }))
+        }
+        .simultaneousGesture(DragGesture(minimumDistance: 45).onEnded { value in
+            guard abs(value.translation.width) > abs(value.translation.height) * 1.5 else { return }
+            let index = FaultState.allCases.firstIndex(of: state)!
+            state = FaultState.allCases[min(max(index + (value.translation.width < 0 ? 1 : -1), 0), FaultState.allCases.count - 1)]
+        })
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索" + searchField.rawValue)
         .onAppear { navigation.newDocument = .fault }
         .onDisappear { if navigation.newDocument == .fault { navigation.newDocument = nil } }
         .sheet(isPresented: $creating) { NavigationStack { NewFaultView() } }
@@ -233,13 +253,14 @@ struct FaultRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text(fault.asset.name).font(.headline)
+                Text(fault.name).font(.headline)
                 Spacer()
                 StatusLabel(state: fault.state)
             }
             Text(fault.description).font(.subheadline).lineLimit(2)
-            Text("\(fault.asset.id) · \(fault.asset.location)").font(.caption).foregroundStyle(.secondary)
-            HStack { Text(fault.reporter); Spacer(); Text(fault.time) }.font(.caption).foregroundStyle(.secondary)
+            Text("机台号：\(fault.asset.id) · 资产编码：FA-\(fault.asset.id)").font(.subheadline).foregroundStyle(.secondary)
+            Text("地址：\(fault.asset.location)").font(.subheadline).foregroundStyle(.secondary)
+            HStack { Text("报修人：" + fault.reporter); Spacer(); Text(fault.time) }.font(.subheadline).foregroundStyle(.secondary)
         }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 6)
     }
 }
@@ -248,6 +269,7 @@ struct FaultDetailView: View {
     @EnvironmentObject private var store: DemoStore
     let id: String
     @State private var processing = false
+    @State private var returning = false
     private var fault: Fault? { store.faults.first { $0.id == id } }
     var body: some View {
         Group {
@@ -262,7 +284,7 @@ struct FaultDetailView: View {
                     Section("设备") {
                         NavigationLink { AssetDetailView(asset: fault.asset) } label: {
                             VStack(alignment: .leading, spacing: 5) {
-                                Text(fault.asset.name).font(.headline)
+                                Text(fault.name).font(.headline)
                                 Text("\(fault.asset.id) · \(fault.asset.location)").font(.subheadline).foregroundStyle(.secondary)
                             }
                         }
@@ -270,6 +292,7 @@ struct FaultDetailView: View {
                     Section("故障描述") { Text(fault.description).textSelection(.enabled) }
                     if !fault.result.isEmpty { Section("维修结果") { Text(fault.result) } }
                     Section("附件") { Text(fault.photoCount == 0 ? "暂无附件" : "已选择 \(fault.photoCount) 张照片（演示，不上传）").foregroundStyle(.secondary) }
+                    Section { NavigationLink { WorkflowNodesView(processID: "", preview: true) } label: { Label("处理流程", systemImage: "point.3.connected.trianglepath.dotted") } }
                     Section("处理记录") {
                         ForEach(Array(fault.records.enumerated()), id: \.offset) { index, record in
                             Label(record, systemImage: index == fault.records.count - 1 ? "circle.inset.filled" : "circle").font(.subheadline)
@@ -277,11 +300,24 @@ struct FaultDetailView: View {
                     }
                     Section { DemoNotice() }
                 }
-                .toolbar {
-                    ToolbarSpacer(.flexible, placement: .bottomBar)
-                    ToolbarItem(placement: .bottomBar) { Button("维修处理") { processing = true }.buttonStyle(.glassProminent) }
+                .safeAreaInset(edge: .bottom) {
+                    HStack {
+                        if [.signed, .working].contains(fault.state) { BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) { returning = true } }
+                        Spacer()
+                        if fault.state != .finished {
+                            BottomAction(title: fault.state == .received ? "领取工单" : fault.state == .signed ? "签到" : fault.state == .reported ? "受理报修" : fault.state == .verifying ? "确认完成" : "维修处理", symbol: fault.state.symbol) { processing = true }
+                        }
+                    }.padding(.horizontal, 20).padding(.vertical, 8)
                 }
-                .sheet(isPresented: $processing) { NavigationStack { FaultProcessingView(id: id) } }
+                .sheet(isPresented: $processing) {
+                    NavigationStack {
+                        if fault.state == .signed { SignInPreview(asset: fault.asset) }
+                        else if fault.state == .working { FaultProcessingView(id: id) }
+                        else { WorkflowTaskView(task: .object(["name": .string(fault.state == .received ? "领取工单" : fault.state == .reported ? "受理报修" : "确认完成"), "category": .string(fault.state.code)]), kind: .fault, preview: true) }
+                    }
+                }
+                .sheet(isPresented: $returning) { NavigationStack { WorkflowTaskView(task: .object(["name": .string("退单"), "category": .string(fault.state.code)]), kind: .fault, preview: true, previewReturn: true) } }
+
             } else { ContentUnavailableView("单据不存在", systemImage: "doc.questionmark") }
         }
         .navigationTitle("报修详情").navigationBarTitleDisplayMode(.inline)
@@ -319,7 +355,7 @@ struct AssetRow: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(asset.name).font(.headline)
             Text("\(asset.id) · \(asset.model)").font(.subheadline).foregroundStyle(.secondary)
-            Text(asset.location).font(.caption).foregroundStyle(.secondary)
+            Text(asset.location).font(.subheadline).foregroundStyle(.secondary)
         }.padding(.vertical, 4)
     }
 }
@@ -341,26 +377,9 @@ struct AssetPickerView: View {
 
 struct AssetDetailView: View {
     let asset: Asset
+    var initialTab = "详情"
     var body: some View {
-        List {
-            Section {
-                Text(asset.name).font(.title2.bold())
-                LabeledContent("资产编号", value: asset.id)
-                LabeledContent("使用状态", value: asset.state)
-                LabeledContent("规格型号", value: asset.model)
-            }
-            Section("使用信息") {
-                LabeledContent("设备位置", value: asset.location)
-                LabeledContent("使用部门", value: asset.department)
-                LabeledContent("责任人", value: asset.owner)
-            }
-            Section("设备资料") {
-                LabeledContent("资产类别", value: "生产设备")
-                LabeledContent("启用日期", value: "2023-06-12")
-            }
-            Section { DemoNotice() }
-        }
-        .navigationTitle("资产详情").navigationBarTitleDisplayMode(.inline)
+        AssetRecordDetail(record: .object(["assetId": .number(1), "assetName": .string(asset.name), "assetCode": .string("FA-" + asset.id), "addressCode": .string(asset.id), "address": .string(asset.location), "model": .string(asset.model), "dept": PreviewIdentity.department, "user": PreviewIdentity.user]), preview: true, initialTab: initialTab)
     }
 }
 
@@ -376,7 +395,7 @@ struct OrderPoolView: View {
                         VStack(alignment: .leading, spacing: 7) {
                             Text("\(asset.name)\(kind)").font(.headline)
                             Text("\(asset.id) · \(asset.location)").font(.subheadline).foregroundStyle(.secondary)
-                            Text(store.claimedOrders.contains(kind + asset.id) ? "已领取（模拟）" : "待接单 · 今天 10:00").font(.caption).foregroundStyle(.secondary)
+                            Text(store.claimedOrders.contains(kind + asset.id) ? "已领取（模拟）" : "待接单 · 今天 10:00").font(.subheadline).foregroundStyle(.secondary)
                         }.padding(.vertical, 5)
                     }
                 }
@@ -404,9 +423,10 @@ struct OrderDetailView: View {
             Section("任务内容") {
                 Text(kind == "维修" ? "检查设备异常振动和运行异响，记录故障原因与处理结果。" : kind == "保养" ? "检查润滑状态、清洁过滤部件，并记录试运行情况。" : "检查定位精度、重复定位精度，记录测量结果。")
             }
-            Section { Button(claimed ? "已领取（模拟）" : "领取工单") { confirming = true }.disabled(claimed) } footer: { DemoNotice() }
+            Section { DemoNotice() }
         }
         .navigationTitle("工单详情").navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) { HStack { Spacer(); BottomAction(title: claimed ? "已领取" : "领取工单", symbol: "hand.raised") { confirming = true }.disabled(claimed) }.padding(.horizontal, 20).padding(.vertical, 8) }
         .confirmationDialog("领取这张模拟工单？", isPresented: $confirming, titleVisibility: .visible) { Button("领取模拟工单") { store.claimedOrders.insert(kind + asset.id) } }
     }
 }
@@ -423,7 +443,7 @@ struct StockListView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(material.name).font(.headline)
                                 Text(material.specification).font(.subheadline).foregroundStyle(.secondary)
-                                Text(material.shelf).font(.caption).foregroundStyle(.secondary)
+                                Text(material.shelf).font(.subheadline).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Text("\(material.quantity) \(material.unit)").font(.subheadline.monospacedDigit())
@@ -473,7 +493,7 @@ struct OutboundListView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(outbound.material.name).font(.headline)
                             Text("\(outbound.id) · \(outbound.quantity) \(outbound.material.unit)").font(.subheadline).foregroundStyle(.secondary)
-                            Text("\(outbound.department) · \(outbound.applicant) · \(outbound.date)").font(.caption).foregroundStyle(.secondary)
+                            Text("\(outbound.department) · \(outbound.applicant) · \(outbound.date)").font(.subheadline).foregroundStyle(.secondary)
                         }.padding(.vertical, 5)
                     }
                 }
@@ -522,10 +542,11 @@ struct ProfileView: View {
     var body: some View {
         List {
             Section { Label("个人演示", systemImage: "person.crop.circle"); LabeledContent("当前环境", value: "界面预览") }
+            Section { NavigationLink { FactorySwitchView(preview: true) } label: { LabeledContent("切换厂区", value: "示例一厂") } }
             Section("应用") { LabeledContent("版本", value: "0.2.0"); LabeledContent("数据来源", value: "模拟数据") }
             Section { Text("账号、工厂和业务权限将在对接原服务器后显示。").foregroundStyle(.secondary) }
         }
-        .navigationTitle("我的")
+        .navigationTitle("我的").navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -537,13 +558,22 @@ struct PreviewScreen: View {
         case "workspace": MainTabs(selection: 1)
         case "faults": MainTabs(selection: 2)
         case "profile": MainTabs(selection: 3)
+        case "draft": NavigationStack { FaultListView(initialState: .draft) }
+        case "reported": NavigationStack { FaultListView(initialState: .reported) }
+        case "signed": NavigationStack { FaultListView(initialState: .signed) }
+        case "resolved": NavigationStack { FaultListView(initialState: .resolved) }
+        case "sign-in": NavigationStack { SignInPreview(asset: Asset.samples[0]) }
+        case "return-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("退单"), "category": .string("SIGNED")]), kind: .fault, preview: true, previewReturn: true) }
+        case "claim-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("领取工单"), "category": .string("RECEIVED")]), kind: .fault, preview: true) }
+        case "accept-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("受理报修"), "category": .string("REPORTED")]), kind: .fault, preview: true) }
+        case "asset-repairs": NavigationStack { AssetDetailView(asset: Asset.samples[0], initialTab: "维修") }
         case "working": NavigationStack { FaultListView(initialState: .working) }
         case "verifying": NavigationStack { FaultListView(initialState: .verifying) }
         case "finished": NavigationStack { FaultListView(initialState: .finished) }
         case "new-fault": NavigationStack { OriginalFaultForm(preview: true) }
         case "erp-form": NavigationStack { OriginalERPForm(preview: true) }
         case "workflow": NavigationStack { WorkflowNodesView(processID: "", preview: true) }
-        case "loading": ProgressView("正在加载…")
+        case "loading": ZStack { NavigationStack { FaultListView() }; LoadingOverlay(title: "正在加载工单…") }
         case "factories": NavigationStack { FactorySwitchView(preview: true) }
         case "login": NativeLoginView()
         case "asset-picker": NavigationStack { ReferencePicker(source: .assets, preview: true) { _ in } }
@@ -556,12 +586,13 @@ struct PreviewScreen: View {
         case "fault-type-picker": NavigationStack { ReferencePicker(source: .faultTypes, preview: true) { _ in } }
         case "outbound-material-picker": NavigationStack { ReferencePicker(source: .outboundMaterials, multiple: true, preview: true) { _ in } }
         case "fault-detail": NavigationStack { FaultDetailView(id: "BX-20261015-001") }
-        case "repair-result": NavigationStack { FaultDetailView(id: "BX-20261013-001") }
+        case "repair-result": NavigationStack { FaultDetailView(id: "BX-20261011-001") }
         case "processing": NavigationStack { FaultProcessingView(id: "BX-20261014-001") }
         case "assets": NavigationStack { AssetListView() }
         case "asset-detail": NavigationStack { AssetDetailView(asset: Asset.samples[0]) }
-        case "stock": NavigationStack { StockListView() }
-        case "stock-detail": NavigationStack { MaterialDetailView(material: Material.samples[0]) }
+        case "stock": NavigationStack { WarehouseStockView(preview: true) }
+        case "stock-detail": NavigationStack { WarehouseStockFacts(row: PreviewWarehouse.rows[0]) }
+        case "warehouse-receipts": NavigationStack { WarehouseReceiptsView(preview: true) }
         case "outbound": NavigationStack { OutboundListView() }
         case "outbound-detail": NavigationStack { OutboundDetailView(id: "CK-20261015-001") }
         case "repair-pool": NavigationStack { OrderPoolView(kind: "维修") }

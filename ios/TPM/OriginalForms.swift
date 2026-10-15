@@ -175,7 +175,7 @@ struct ReferencePicker: View {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(label(value)).foregroundStyle(.primary)
                             let detail = subtitle(value)
-                            if !detail.isEmpty { Text(detail).font(.caption).foregroundStyle(.secondary) }
+                            if !detail.isEmpty { Text(detail).font(.subheadline).foregroundStyle(.secondary) }
                         }
                         Spacer()
                         if picked.contains(identity(value)) { Image(systemName: "checkmark") }
@@ -188,7 +188,7 @@ struct ReferencePicker: View {
             if let error { Section { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } } }
             if !loading && visible.isEmpty && error == nil { ContentUnavailableView("暂无匹配内容", systemImage: "magnifyingglass") }
         }
-        .overlay { if loading || selecting { ProgressView("正在加载…") } }
+        .overlay { if loading || selecting { LoadingOverlay(title: "正在加载…") } }
         .navigationTitle(source.title).navigationBarTitleDisplayMode(.inline)
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索")
         .task { picked = Set(selected); await load() }
@@ -387,7 +387,7 @@ struct OriginalFaultForm: View {
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(model.loading || model.saving)
-        .overlay { if model.loading { ProgressView("正在加载表单…") } }
+        .overlay { if model.loading || model.saving { LoadingOverlay(title: model.saving ? "正在提交报修…" : "正在加载表单…") } }
         .navigationTitle(existing == nil ? "故障报修" : "编辑报修").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(model.saving || photoUploading) }
@@ -398,7 +398,7 @@ struct OriginalFaultForm: View {
                             save: { prepare(false) }, submit: { prepare(true) })
         }
         .task {
-            if preview { model.loading = false; model.ready = true; model.data = ["faultTime": .string("2026-10-15 09:30"), "albums": .array([])] }
+            if preview { model.loading = false; model.ready = true; model.data = ["faultTime": .string("2026-10-16 09:30"), "albums": .array([]), "applyUser": PreviewIdentity.user, "applyDept": PreviewIdentity.department, "userPhone": .string("13800000000")] }
             else { await model.load(session, existing: existing) }
         }
         .confirmationDialog(confirming == true ? "提交报修单到原系统？" : "保存报修单到原系统？", isPresented: $showConfirmation, titleVisibility: .visible) {
@@ -502,7 +502,7 @@ struct OriginalERPForm: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(line["material"]["materialDesc"].text)
-                            Text(line["material"]["materialCode"].text).font(.caption).foregroundStyle(.secondary)
+                            Text(line["material"]["materialCode"].text).font(.subheadline).foregroundStyle(.secondary)
                             Text("申请数量：\(materialQuantity(line["entryQuantity"].text, material: line["material"]))").font(.subheadline).foregroundStyle(.secondary)
                         }
                     }
@@ -516,7 +516,7 @@ struct OriginalERPForm: View {
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(model.loading || model.saving)
-        .overlay { if model.loading { ProgressView("正在加载领料申请…") } }
+        .overlay { if model.loading || model.saving { LoadingOverlay(title: model.saving ? "正在提交领料申请…" : "正在加载领料申请…") } }
         .navigationTitle("ERP 出库").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(model.saving) }
@@ -533,6 +533,7 @@ struct OriginalERPForm: View {
                 model.data = ["applyDate": .string("2026-10-15"), "outboundTime": .string("2026-10-15 09:30"), "erpMaterialOutbounds": .array([
                     .object(["material": .object(["id": .number(1), "materialCode": .string("WL-10028"), "materialDesc": .string("深沟球轴承"), "onhandQty": .number(24), "lot": .string("LOT-01"), "subInv": .string("备件仓")]), "entryQuantity": .number(2)]),
                     .object(["material": .object(["id": .number(2), "materialCode": .string("WL-10046"), "materialDesc": .string("空气滤芯"), "onhandQty": .number(8), "lot": .string("LOT-02"), "subInv": .string("备件仓")]), "entryQuantity": .number(1)])])]
+                model.data["user"] = PreviewIdentity.user; model.data["recipientUser"] = PreviewIdentity.user; model.data["dept"] = PreviewIdentity.department
                 model.data["erpMaterialOutbounds"] = .array(PreviewBusinessData.erpLines)
                 if let referenceSn { model.data["referenceSn"] = .string(referenceSn) }
             } else {
@@ -563,24 +564,13 @@ struct DocumentActions: View {
     var save: (() -> Void)? = nil
     let submit: () -> Void
     var body: some View {
-        VStack(spacing: 10) {
-            Button(action: submit) {
-                HStack(spacing: 8) {
-                    if busy && submitting { ProgressView() }
-                    Label("提交", systemImage: "checkmark")
-                }.font(.headline).frame(maxWidth: .infinity, minHeight: 30)
-            }.buttonStyle(.glassProminent).controlSize(.large)
-            if let save {
-                Button(action: save) {
-                    HStack(spacing: 8) {
-                        if busy && !submitting { ProgressView() }
-                        Label("保存", systemImage: "tray.and.arrow.down")
-                    }.font(.headline).frame(maxWidth: .infinity, minHeight: 24)
-                }.buttonStyle(.glass).controlSize(.large)
-            }
+        HStack(alignment: .center) {
+            if let save { BottomAction(title: "保存", symbol: "tray.and.arrow.down", color: Color(red: 0.92, green: 0.73, blue: 0.24), busy: busy && !submitting, action: save) }
+            Spacer()
+            BottomAction(title: "提交", symbol: "checkmark.circle", color: .blue, busy: busy && submitting, action: submit)
         }
         .disabled(busy || disabled)
-        .padding(.horizontal, 20).padding(.vertical, 12)
+        .padding(.horizontal, 20).padding(.vertical, 8)
     }
 }
 

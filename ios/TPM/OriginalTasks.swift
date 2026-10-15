@@ -56,7 +56,7 @@ struct OriginalRepairForm: View {
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(loading || saving)
-        .overlay { if loading { ProgressView("正在加载维修任务…") } }
+        .overlay { if loading || saving { LoadingOverlay(title: saving ? "正在保存维修结果…" : "正在加载维修任务…") } }
         .navigationTitle(task["name"].text.isEmpty ? "处理故障维修" : task["name"].text).navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving || photoUploading) }
@@ -136,6 +136,8 @@ struct WorkflowTaskView: View {
     @Environment(\.dismiss) private var dismiss
     let task: JSONValue
     let kind: WorkflowKind
+    var preview = false
+    var previewReturn = false
     var onCompleted: (() -> Void)? = nil
     @StateObject private var assignments = OriginalFormModel(kind: "ASSET_FAULT")
     @State private var state: JSONValue = .null
@@ -153,12 +155,22 @@ struct WorkflowTaskView: View {
     @State private var assignmentsReady = false
     @State private var assignmentsLoading = false
     @State private var assignmentRequest = UUID()
+    private var isReturning: Bool { conditions.contains { $0["value"].text == condition && isReturnCondition($0) } }
+    private var isRejecting: Bool { conditions.contains { $0["value"].text == condition && ($0["name"].text.contains("驳回") || $0["name"].text.contains("拒绝")) } }
     private var needsFaultData: Bool { kind == .fault && ["REPORTED", "RECEIVED"].contains(task["category"].text) }
     private var needsERPData: Bool { kind == .erp && ["EXECUTING", "CONFIRM"].contains(task["category"].text) }
     private func field(_ key: String) -> Binding<JSONValue> { Binding(get: { taskData[key] ?? .null }, set: { taskData[key] = $0 }) }
     private func actual(_ i: Int) -> Binding<Double> { Binding(get: { materials[i]["actualQuantity"].number }, set: { number in var line = materials[i].object; line["actualQuantity"] = .number(number); materials[i] = .object(line) }) }
     var body: some View {
         Form {
+            if kind == .fault && task["category"].text == "SIGNED" {
+                Section("签到设备") {
+                    LabeledContent("资产名称", value: taskData.text("asset.assetName"))
+                    LabeledContent("资产编码", value: taskData.text("asset.assetCode"))
+                    LabeledContent("地址", value: taskData.text("asset.address"))
+                    LabeledContent("签到状态", value: "待签到")
+                }
+            }
             Section {
                 Picker(selection: $condition) { ForEach(Array(conditions.enumerated()), id: \.offset) { _, value in Text(value["name"].text).tag(value["value"].text) } } label: { RequiredLabel(title: "操作类型") }
             } header: { RequiredFieldsNotice() }
@@ -187,11 +199,11 @@ struct WorkflowTaskView: View {
                 if assignmentsLoading { ProgressView("正在加载审批人…") }
                 AssigneesFields(elements: assignments.assignees, selections: $assignments.selections)
             } }
-            Section("意见") { TextField("请输入意见", text: $comment, axis: .vertical).lineLimit(3...8).onChange(of: comment) { _, value in if value.count > 255 { comment = String(value.prefix(255)) } } }
+            Section(isReturning ? "退单原因" : isRejecting ? "驳回意见" : "意见") { TextField(isReturning ? "请输入退单原因" : isRejecting ? "请输入驳回意见" : "请输入意见", text: $comment, axis: .vertical).lineLimit(3...8).onChange(of: comment) { _, value in if value.count > 255 { comment = String(value.prefix(255)) } } }
             if let error { Section { Text(error).foregroundStyle(.red); Button("重新加载") { Task { await load() } } } }
         }
         .disabled(loading || submitting)
-        .overlay { if loading { ProgressView("正在加载当前节点…") } }
+        .overlay { if loading || submitting { LoadingOverlay(title: submitting ? "正在提交…" : "正在加载当前节点…") } }
         .navigationTitle(task["name"].text).navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(submitting) }
@@ -221,14 +233,25 @@ struct WorkflowTaskView: View {
     }
     private func load() async {
         loading = true; ready = false; assignmentsReady = false; error = nil; defer { loading = false }
+        if preview {
+            state = .object(["canSubmit": .bool(true)])
+            conditions = [.object(["name": .string(previewReturn ? "退单" : task["name"].text), "value": .string(previewReturn ? "reject" : "agree")])]
+            if !previewReturn && task["category"].text == "REPORTED" {
+                conditions = [.object(["name": .string("受理"), "value": .string("agree")]), .object(["name": .string("驳回"), "value": .string("reject")])]
+            }
+            condition = previewReturn ? "reject" : "agree"
+            taskData = ["userGroup": .object(["groupName": .string("设备维修组")]), "estimatedCompleteTime": .string("2026-10-16 23:59")]
+            ready = true; assignmentsReady = true
+            return
+        }
         do {
             state = try await session.request("workflow/getWorkflowTaskState", query: ["processInstanceId": task["processInstanceId"].text])
             let form = try await session.request("workflow/getFormPropertiesConditionsByTaskId", query: ["taskId": task["id"].text])
             conditions = form["flowConditions"].array
-            condition = conditions.first?["value"].text ?? ""
-            if needsFaultData {
+            condition = (previewReturn ? conditions.first(where: { isReturnCondition($0) }) : conditions.first)?["value"].text ?? ""
+            if needsFaultData || (kind == .fault && task["category"].text == "SIGNED") {
                 let fault = try await session.request("fault/getAssetFaultDetailById", query: ["faultId": task["businessKey"].text])
-                taskData = ["repairWay": .string("SELF"), "faultType": fault["faultType"], "groupId": fault["userGroup"]["groupId"], "userGroup": fault["userGroup"], "estimatedCompleteTime": .string(serverDate(Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: Date())!))]
+                taskData = ["asset": fault["asset"], "repairWay": .string("SELF"), "faultType": fault["faultType"], "groupId": fault["userGroup"]["groupId"], "userGroup": fault["userGroup"], "estimatedCompleteTime": .string(serverDate(Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: Date())!))]
             }
             if needsERPData { materials = try await session.request("erpOutbound/getErpMaterialOutboundsByOutboundId", query: ["outboundId": task["businessKey"].text]).array }
             try await fetchAssignments()
@@ -236,6 +259,7 @@ struct WorkflowTaskView: View {
         } catch { self.error = error.localizedDescription }
     }
     private func fetchAssignments() async throws {
+        if preview { assignmentsReady = true; return }
         let request = UUID(); assignmentRequest = request
         assignmentsLoading = true; assignmentsReady = false
         defer { if assignmentRequest == request { assignmentsLoading = false } }
@@ -249,7 +273,7 @@ struct WorkflowTaskView: View {
     }
     private func loadAssignments() async { do { try await fetchAssignments() } catch { self.error = error.localizedDescription } }
     private func submit() async {
-        guard !submitting, ready, assignmentsReady, !assignmentsLoading, state["canSubmit"].bool else { return }
+        guard !preview, !submitting, ready, assignmentsReady, !assignmentsLoading, state["canSubmit"].bool else { return }
         submitting = true; error = nil; defer { submitting = false }
         do {
             if condition == "agree" {
@@ -268,7 +292,9 @@ struct WorkflowTaskView: View {
                 taskData["repairman"] = session.authentication["name"]
                 taskData["repairmanPhone"] = .null
                 taskData["userGroup"] = .object(["groupId": taskData["groupId"] ?? .null])
-                payload["taskData"] = .string(JSONValue.object(taskData).encodedString)
+                var originalTaskData = taskData
+                originalTaskData.removeValue(forKey: "asset")
+                payload["taskData"] = .string(JSONValue.object(originalTaskData).encodedString)
             }
             if needsERPData {
                 for line in materials where line["actualQuantity"].number < 1 || line["actualQuantity"].number > line["entryQuantity"].number { throw APIError(message: "实发数量应在 1 与申请数量之间") }
@@ -315,4 +341,8 @@ struct TaskHandoffView: View {
             _ = try await session.request(path, body: .object(body)); completed(); dismiss()
         } catch { self.error = error.localizedDescription }
     }
+}
+
+func isReturnCondition(_ value: JSONValue) -> Bool {
+    value["name"].text.contains("退单") || value["name"].text.contains("返单")
 }
