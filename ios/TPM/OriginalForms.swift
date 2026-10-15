@@ -276,6 +276,16 @@ struct RequiredFieldsNotice: View {
     }
 }
 
+struct RequiredFormHeader: View {
+    let title: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            RequiredFieldsNotice().textCase(nil)
+            Text(title)
+        }
+    }
+}
+
 struct ReferenceField: View {
     let title: String
     let source: ReferenceSource
@@ -349,15 +359,14 @@ struct OriginalFaultForm: View {
     private func text(_ key: String) -> Binding<String> { Binding(get: { model.data.text(key) }, set: { model.data[key] = .string($0) }) }
     var body: some View {
         Form {
-            Section { RequiredFieldsNotice() }.listRowBackground(Color.clear)
-            Section("故障报修") {
+            Section {
                 VStack(alignment: .leading, spacing: 8) {
                     RequiredLabel(title: "报修名称")
                     TextField("请输入报修名称", text: text("faultName")).onChange(of: model.data.text("faultName")) { _, value in if value.count > 64 { model.data["faultName"] = .string(String(value.prefix(64))) } }
                 }
                 ReferenceField(title: "报修资产", source: .assets, value: field("asset"), required: true)
                 ServerDateField(title: "故障时间", value: field("faultTime"), required: true)
-            }
+            } header: { RequiredFormHeader(title: "故障报修") }
             Section("申请与受理") {
                 ReferenceField(title: "故障申请人", source: .users, value: field("applyUser"), required: true) { user in
                     model.data["applyDept"] = user["depts"].array.first ?? .null
@@ -470,8 +479,7 @@ struct OriginalERPForm: View {
     }
     var body: some View {
         Form {
-            Section { RequiredFieldsNotice() }.listRowBackground(Color.clear)
-            Section("领料申请") {
+            Section {
                 ReferenceField(title: "申请人", source: .users, value: field("user"), required: true)
                 ServerDateField(title: "申请日期", value: field("applyDate"), dateOnly: true, required: true)
                 ReferenceField(title: "项目号", source: .projects, value: field("project"), required: true) { project in model.data["projectCode"] = project["projectCode"]; model.data["projectDesc"] = project["projectName"] }
@@ -480,7 +488,7 @@ struct OriginalERPForm: View {
                 ReferenceField(title: "领用部门", source: .departments, value: field("dept"), required: true)
                 ReferenceField(title: "ERP记账部门", source: .divisions, value: field("division"), required: true)
                 ServerDateField(title: "出库时间", value: field("outboundTime"), required: true)
-            }
+            } header: { RequiredFormHeader(title: "领料申请") }
             Section {
                 Button("添加出库物料", systemImage: "plus") { selecting = true }.disabled(preview)
                 ForEach(Array((model.data["erpMaterialOutbounds"]?.array ?? []).enumerated()), id: \.offset) { index, line in

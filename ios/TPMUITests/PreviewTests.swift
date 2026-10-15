@@ -2,6 +2,17 @@ import XCTest
 
 @MainActor
 final class PreviewTests: XCTestCase {
+    func testFactorySelectionRequiresDifferentFactory() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "factories"]
+        app.launch()
+        XCTAssertTrue(app.buttons["示例一厂"].waitForExistence(timeout: 20))
+        XCTAssertFalse(app.buttons["切换"].isEnabled)
+        app.buttons["示例二厂"].tap()
+        XCTAssertTrue(app.buttons["切换"].isEnabled)
+        XCTAssertEqual(app.buttons["示例二厂"].value as? String, "已选择")
+        capture(app, "Factory selection")
+    }
     private func capture(_ app: XCUIApplication, _ name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
@@ -46,4 +57,3 @@ final class PreviewTests: XCTestCase {
         capture(app, "ERP multiple materials")
     }
 }
-

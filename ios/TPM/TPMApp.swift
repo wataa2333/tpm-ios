@@ -543,6 +543,7 @@ struct PreviewScreen: View {
         case "erp-form": NavigationStack { OriginalERPForm(preview: true) }
         case "workflow": NavigationStack { WorkflowNodesView(processID: "", preview: true) }
         case "loading": ProgressView("正在加载…")
+        case "factories": NavigationStack { FactorySwitchView(preview: true) }
         case "fault-detail": NavigationStack { FaultDetailView(id: "BX-20261015-001") }
         case "repair-result": NavigationStack { FaultDetailView(id: "BX-20261013-001") }
         case "processing": NavigationStack { FaultProcessingView(id: "BX-20261014-001") }

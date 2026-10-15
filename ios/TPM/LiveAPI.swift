@@ -62,9 +62,15 @@ struct APIError: LocalizedError {
 final class LiveSession: ObservableObject {
     @Published private(set) var authentication: Fields = [:]
     @Published var signingIn = false
+    @Published private(set) var scopeRevision = UUID()
     private let root = URL(string: "http://tpm.forbetter.cn:8855/")!
     private let account = "tpm-session"
     var signedIn: Bool { !authentication.text("token").isEmpty }
+    var factories: [JSONValue] { authentication["factories"]?.array ?? [] }
+    var currentFactoryID: String { authentication.text("factoryId") }
+    var currentFactoryName: String {
+        factories.first { $0["factoryId"].text == currentFactoryID }?["factoryName"].text ?? "选择厂区"
+    }
     init() { restore() }
     func restore() {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.personal.tpm", kSecAttrAccount as String: account, kSecReturnData as String: true]
@@ -85,6 +91,7 @@ final class LiveSession: ObservableObject {
         } else if update != errSecSuccess { throw APIError(message: "无法更新登录会话") }
     }
     func signOut() {
+        scopeRevision = UUID()
         authentication = [:]
         SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.personal.tpm", kSecAttrAccount as String: account] as CFDictionary)
     }
@@ -101,6 +108,31 @@ final class LiveSession: ObservableObject {
         guard !result["token"].text.isEmpty else { throw APIError(message: "服务器没有返回有效登录会话") }
         authentication = result.object
         do { try persist() } catch { authentication = [:]; throw error }
+        scopeRevision = UUID()
+    }
+    func refreshFactories() async throws {
+        let info = try await request("security/getMobileLoginUserInfo")
+        guard case .array = info["factories"] else { throw APIError(message: "服务器未返回厂区列表，请重试") }
+        authentication["factories"] = info["factories"]
+        try persist()
+    }
+    func changeFactory(to factoryID: String) async throws {
+        guard factories.contains(where: { $0["factoryId"].text == factoryID }) else { throw APIError(message: "请选择账号可访问的厂区") }
+        guard factoryID != currentFactoryID else { return }
+        var components = URLComponents(url: root.appendingPathComponent("rest/security/changeFactory"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "factoryId", value: factoryID)]
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.setValue("Bearer " + authentication.text("token"), forHTTPHeaderField: "Authorization")
+        let result = try await perform(request, allowPlainText: true)
+        guard case .string(let token) = result, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw APIError(message: "服务器未返回新厂区的登录令牌，请重新登录核对当前厂区")
+        }
+        let previous = authentication
+        authentication["token"] = .string(token)
+        authentication["factoryId"] = factories.first { $0["factoryId"].text == factoryID }?["factoryId"] ?? .string(factoryID)
+        do { try persist() } catch { authentication = previous; throw error }
+        scopeRevision = UUID()
     }
     func request(_ path: String, query: [String: String] = [:], body: JSONValue? = nil) async throws -> JSONValue {
         var components = URLComponents(url: root.appendingPathComponent("rest").appendingPathComponent(path), resolvingAgainstBaseURL: false)!
@@ -114,12 +146,14 @@ final class LiveSession: ObservableObject {
         }
         return try await perform(request)
     }
-    private func perform(_ input: URLRequest) async throws -> JSONValue {
+    private func perform(_ input: URLRequest, allowPlainText: Bool = false) async throws -> JSONValue {
+        let scope = scopeRevision
         var request = input
         request.timeoutInterval = 60
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, response) = try await URLSession.shared.data(for: request)
+        guard scope == scopeRevision else { throw CancellationError() }
         guard let http = response as? HTTPURLResponse else { throw APIError(message: "服务器响应无效") }
         guard (200..<300).contains(http.statusCode) else {
             if http.statusCode == 401 { signOut() }
@@ -132,6 +166,9 @@ final class LiveSession: ObservableObject {
             try persist()
         }
         if data.isEmpty { return .null }
+        if allowPlainText, let text = String(data: data, encoding: .utf8), (try? JSONDecoder().decode(JSONValue.self, from: data)) == nil {
+            return .string(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
         return try JSONDecoder().decode(JSONValue.self, from: data)
     }
     func page(_ path: String, offset: Int = 0, filters: [JSONValue] = []) async throws -> JSONValue {

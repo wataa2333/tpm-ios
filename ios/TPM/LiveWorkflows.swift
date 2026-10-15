@@ -11,7 +11,7 @@ enum WorkflowKind: String, Identifiable {
 
 struct AuthenticatedRoot: View {
     @EnvironmentObject private var session: LiveSession
-    var body: some View { if session.signedIn { LiveTabs() } else { NativeLoginView() } }
+    var body: some View { if session.signedIn { LiveTabs().id(session.scopeRevision) } else { NativeLoginView() } }
 }
 struct LiveTabs: View {
     @EnvironmentObject private var session: LiveSession
@@ -27,6 +27,7 @@ struct LiveTabs: View {
                             NavigationLink("精密度检查工单池") { OrderPoolView(kind: "精密度检查") }
                         }
                     }.navigationTitle("主页")
+                        .toolbar { ToolbarItem(placement: .topBarTrailing) { FactorySwitcherButton() } }
                 }
             }
             Tab("工作台", systemImage: "square.grid.2x2") {
@@ -45,6 +46,7 @@ struct LiveTabs: View {
                 NavigationStack {
                     List {
                         Section { LabeledContent("账号", value: session.authentication.text("name")); LabeledContent("姓名", value: session.authentication.text("fullName")) }
+                        Section { NavigationLink { FactorySwitchView() } label: { LabeledContent("厂区", value: session.currentFactoryName) } }
                         Section { Button("退出登录", role: .destructive) { session.signOut() } }
                     }.navigationTitle("我的")
                 }

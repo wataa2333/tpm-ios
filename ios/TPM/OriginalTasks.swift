@@ -23,14 +23,13 @@ struct OriginalRepairForm: View {
     private func useQuantity(_ index: Int) -> Binding<Double> { Binding(get: { data["erpRepairMaterials"]!.array[index]["useNum"].number }, set: { quantity in var rows = data["erpRepairMaterials"]!.array; var row = rows[index].object; row["useNum"] = .number(quantity); rows[index] = .object(row); data["erpRepairMaterials"] = .array(rows) }) }
     var body: some View {
         Form {
-            Section { RequiredFieldsNotice() }.listRowBackground(Color.clear)
-            Section("维修任务信息") {
+            Section {
                 ReferenceField(title: "维修故障类型", source: .faultTypes, value: field("faultType"), required: true)
                 HStack { Text("维修花费"); Spacer(); TextField("0", value: Binding(get: { data["spend"]?.number ?? 0 }, set: { data["spend"] = .number($0) }), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
                 ServerDateField(title: "维修开始时间", value: field("startTime"), required: true)
                 ServerDateField(title: "维修结束时间", value: field("endTime"), required: true)
                 Button { choosingAssistants = true } label: { LabeledContent("辅助维修人", value: (data["repairUsers"]?.array ?? []).map { $0["realName"].text }.joined(separator: "、")) }
-            }
+            } header: { RequiredFormHeader(title: "维修任务信息") }
             Section("ERP 出库") {
                 Button("新建出库单", systemImage: "plus") { creatingERP = true }.disabled(preview)
                 Button("添加出库物料", systemImage: "shippingbox") { choosing = true }.disabled(preview)
@@ -152,10 +151,9 @@ struct WorkflowTaskView: View {
     private func actual(_ i: Int) -> Binding<Double> { Binding(get: { materials[i]["actualQuantity"].number }, set: { number in var line = materials[i].object; line["actualQuantity"] = .number(number); materials[i] = .object(line) }) }
     var body: some View {
         Form {
-            Section { RequiredFieldsNotice() }.listRowBackground(Color.clear)
             Section {
                 Picker(selection: $condition) { ForEach(Array(conditions.enumerated()), id: \.offset) { _, value in Text(value["name"].text).tag(value["value"].text) } } label: { RequiredLabel(title: "操作类型") }
-            }
+            } header: { RequiredFieldsNotice() }
             if needsFaultData && ["agree", "assign", "appoint"].contains(condition) {
                 Section("维修安排") {
                     if ["assign", "appoint"].contains(condition) { ReferenceField(title: "维修人员", source: .users, value: field("assignUser"), required: true) }

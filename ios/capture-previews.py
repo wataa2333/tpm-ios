@@ -37,13 +37,14 @@ screens = [
 captures = [(f"{index:02d}-{screen}", "light", ["--screen", screen])
             for index, screen in enumerate(screens, 1)]
 captures += [("07-faults-dark", "dark", ["--screen", "faults"])]
+captures += [("11-factories", "light", ["--screen", "factories"])]
 for name, appearance, arguments in captures:
     subprocess.run(["xcrun", "simctl", "terminate", udid, "com.personal.tpm"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     sim("ui", udid, "appearance", appearance)
     sim("launch", udid, "com.personal.tpm", *arguments,
         "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN")
-    time.sleep(5)
+    time.sleep(10 if "erp-form" in arguments else 5)
     sim("io", udid, "screenshot", str(output / f"{name}.png"))
 (output / "capture-info.json").write_text(json.dumps({
     "device": device["name"], "data": "fictional demo data",
