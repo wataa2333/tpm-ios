@@ -147,10 +147,9 @@ struct WorkflowTaskView: View {
                 Section("维修安排") {
                     if ["assign", "appoint"].contains(condition) { ReferenceField(title: "维修人员", source: .users, value: field("assignUser")) }
                     if task["category"].text == "REPORTED" {
-                        Picker("维修途径", selection: Binding(get: { taskData.text("repairWay") }, set: { taskData["repairWay"] = .string($0) })) { Text("自修").tag("SELF"); Text("外协").tag("OUTSIDE") }
+                        LabeledContent("维修途径", value: "自修")
                         ReferenceField(title: "维修班组", source: .groups, value: field("userGroup")) { group in taskData["groupId"] = group["groupId"] }
                         ServerDateField(title: "预计完成时间", value: field("estimatedCompleteTime"))
-                        if taskData.text("repairWay") == "OUTSIDE" { Text("外协附加申请尚未核对完成，当前不能提交该分支。").foregroundStyle(.secondary) }
                     }
                 }
             }
@@ -183,7 +182,7 @@ struct WorkflowTaskView: View {
                 }
             }
             ToolbarSpacer(.flexible, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) { Button { confirming = true } label: { HStack { if submitting { ProgressView() }; Text("提交") } }.buttonStyle(.glassProminent).disabled(!state["canSubmit"].bool || loading || submitting || condition.isEmpty || (needsFaultData && taskData.text("repairWay") == "OUTSIDE")) }
+            ToolbarItem(placement: .bottomBar) { Button { confirming = true } label: { HStack { if submitting { ProgressView() }; Text("提交") } }.buttonStyle(.glassProminent).disabled(!state["canSubmit"].bool || loading || submitting || condition.isEmpty) }
         }
         .task { await load() }
         .onChange(of: condition) { _, _ in Task { await loadAssignments() } }
@@ -282,3 +281,4 @@ struct TaskHandoffView: View {
         } catch { self.error = error.localizedDescription }
     }
 }
+
