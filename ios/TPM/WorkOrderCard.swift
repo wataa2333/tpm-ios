@@ -19,7 +19,7 @@ struct WorkOrderCard<Destination: View>: View {
                 }
             }.buttonStyle(.plain).navigationLinkIndicatorVisibility(.hidden)
             HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(referenceTitle + "：" + (reference.isEmpty ? "—" : reference)).frame(maxWidth: .infinity, alignment: .leading)
+                Text(reference.isEmpty ? "—" : reference).frame(maxWidth: .infinity, alignment: .leading)
                 Text(time).frame(maxWidth: .infinity, alignment: .trailing)
             }.font(.subheadline).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
             DisclosureGroup(isExpanded: $expanded) {
