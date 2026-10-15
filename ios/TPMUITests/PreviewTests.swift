@@ -155,12 +155,15 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["我的待办"].waitForExistence(timeout: 15))
         XCTAssertLessThan(app.buttons["我的待办"].firstMatch.frame.minX, app.buttons["主页"].firstMatch.frame.minX)
         app.buttons["主页"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["新建报修"].exists)
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "维修工单池")).firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "精密度检查工单池")).firstMatch.exists)
         app.buttons["工作台"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["新建报修"].exists)
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "资产台账")).firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "ERP 出库")).firstMatch.exists)
         app.buttons["我的"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["新建报修"].exists)
         XCTAssertFalse(app.buttons["切换厂区"].exists)
     }
 

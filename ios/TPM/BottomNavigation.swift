@@ -43,7 +43,7 @@ struct BottomNavigation: View {
                         .accessibilityAddTraits(selection == index ? [.isSelected] : [])
                     }
                 }.padding(4).glassEffect(.regular.interactive(), in: .capsule)
-                if let kind = navigation.newDocument {
+                let kind = navigation.newDocument ?? .fault
                     Button { creating = kind } label: {
                         Image(systemName: "plus").font(.system(size: 22, weight: .regular))
                             .foregroundStyle(.primary).frame(width: 30, height: 30)
@@ -53,7 +53,6 @@ struct BottomNavigation: View {
                     .matchedTransitionSource(id: "new-document", in: documentTransition)
                     .accessibilityLabel(kind == .fault ? "新建报修" : "新建领料单")
                     .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
-                }
             }
         }
         .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 8)
@@ -62,7 +61,6 @@ struct BottomNavigation: View {
         }
         .sensoryFeedback(.selection, trigger: selection)
         .sensoryFeedback(.impact(weight: .light), trigger: creating?.id)
-        .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.25), value: navigation.newDocument)
         .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.25), value: navigation.hideTabs)
         .sheet(item: $creating, onDismiss: { navigation.refresh = UUID() }) { kind in
             NavigationStack {
