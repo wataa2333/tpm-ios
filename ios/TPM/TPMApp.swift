@@ -143,6 +143,7 @@ struct MainTabs: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { NativeTabBar(selection: $selection, preview: true) }
+        .onChange(of: selection) { navigation.hideTabs = false }
     }
 }
 
@@ -196,7 +197,9 @@ struct FaultListView: View {
     }
     var body: some View {
         VStack(spacing: 0) {
-            WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex(of: state)! }, set: { state = FaultState.allCases[$0] }))
+            WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex(of: state)! }, set: { state = FaultState.allCases[$0] }), counts: Dictionary(uniqueKeysWithValues: FaultState.allCases.map { stage in
+                (stage.code, store.faults.filter { $0.state == stage }.count)
+            }))
         List {
             if searching { Section {
                 Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }
@@ -222,7 +225,7 @@ struct FaultListView: View {
         .navigationTitle("故障报修").navigationBarTitleDisplayMode(.inline)
         .searchPageChrome(isSearching: searching)
         .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索" + searchField.rawValue)
-        .onAppear { navigation.newDocument = .fault }
+        .onAppear { navigation.newDocument = .fault; navigation.hideTabs = false }
         .onDisappear { if navigation.newDocument == .fault { navigation.newDocument = nil } }
         .sheet(isPresented: $creating) { NavigationStack { NewFaultView() } }
     }
@@ -297,6 +300,7 @@ struct FaultDetailView: View {
             } else { ContentUnavailableView("单据不存在", systemImage: "doc.questionmark") }
         }
         .navigationTitle("报修详情").navigationBarTitleDisplayMode(.inline)
+        .modifier(DetailTabVisibility())
     }
 }
 
@@ -321,6 +325,7 @@ struct AssetListView: View {
             } footer: { DemoNotice() }
         }
         .navigationTitle("资产台账").searchPageChrome()
+        .modifier(ListTabVisibility())
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "资产编号、名称、型号或位置")
         .overlay { if !query.isEmpty && !Asset.samples.contains(where: { ($0.id + $0.name + $0.model + $0.location).localizedCaseInsensitiveContains(query) }) { ContentUnavailableView.search(text: query) } }
     }
@@ -375,6 +380,7 @@ struct OrderPoolView: View {
             } footer: { DemoNotice() }
         }
         .navigationTitle("\(kind)工单池").navigationBarTitleDisplayMode(.inline)
+        .modifier(ListTabVisibility())
         .searchPageChrome()
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索设备或资产编号")
     }
@@ -428,6 +434,7 @@ struct StockListView: View {
             } footer: { DemoNotice() }
         }
         .navigationTitle("库存").searchPageChrome()
+        .modifier(ListTabVisibility())
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "物料编号、名称、规格或库位")
     }
 }
@@ -471,6 +478,7 @@ struct OutboundListView: View {
             } footer: { DemoNotice() }
         }
         .navigationTitle("ERP 出库").searchPageChrome()
+        .modifier(ListTabVisibility())
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索出库单、物料或部门")
     }
 }
@@ -499,6 +507,7 @@ struct OutboundDetailView: View {
                 Section { DemoNotice() }
             }
             .navigationTitle("出库详情").navigationBarTitleDisplayMode(.inline)
+            .modifier(DetailTabVisibility())
             .safeAreaInset(edge: .bottom) {
                 if !item.completed { HStack { Spacer(); BottomAction(title: "确认出库", symbol: "checkmark.circle") { confirming = true } }.padding(.horizontal, 20).padding(.vertical, 8) }
             }

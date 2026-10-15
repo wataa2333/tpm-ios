@@ -2,6 +2,13 @@ import Testing
 import Foundation
 @testable import TPM
 
+@Test func statusCountUsesServerTotalRatherThanLoadedRows() {
+    let page = JSONValue.object(["totalElements": .number(103), "content": .array([.object([:])])])
+    #expect(serverPageCount(page) == 103)
+    #expect(serverPageCount(.object(["content": .array([])])) == nil)
+    #expect(serverPageCount(.object(["totalElements": .number(0)])) == 0)
+}
+
 @Test func processRolesDoNotLeakRawExpressions() {
     #expect(workflowParticipantLabel("${initiator}") == "发起人")
     #expect(workflowParticipantLabel("REPAIR_USER") == "维修人员")

@@ -171,8 +171,8 @@ final class LiveSession: ObservableObject {
         }
         return try JSONDecoder().decode(JSONValue.self, from: data)
     }
-    func page(_ path: String, offset: Int = 0, filters: [JSONValue] = []) async throws -> JSONValue {
-        try await request(path, body: .object(["offset": .number(Double(offset)), "limit": .number(20), "sort": .string("createTime"), "order": .string("desc"), "filters": .array(filters)]))
+    func page(_ path: String, offset: Int = 0, filters: [JSONValue] = [], limit: Int = 20) async throws -> JSONValue {
+        try await request(path, body: .object(["offset": .number(Double(offset)), "limit": .number(Double(limit)), "sort": .string("createTime"), "order": .string("desc"), "filters": .array(filters)]))
     }
     func uploadPhoto(_ data: Data, directory: String) async throws -> JSONValue {
         var components = URLComponents(url: root.appendingPathComponent("rest/upload/uploadImage"), resolvingAgainstBaseURL: false)!

@@ -2,6 +2,29 @@ import XCTest
 
 @MainActor
 final class PreviewTests: XCTestCase {
+    func testNestedDetailsNeverRestoreTabsOverTaskActions() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "faults"]
+        app.launch()
+        for _ in 0..<3 {
+            app.staticTexts["立式加工中心异常报修"].firstMatch.tap()
+            XCTAssertTrue(app.navigationBars["报修详情"].waitForExistence(timeout: 10))
+            XCTAssertFalse(app.buttons["我的待办"].exists)
+            XCTAssertFalse(app.buttons["新建报修"].exists)
+            let flow = app.buttons["处理流程"]
+            for _ in 0..<6 where !flow.isHittable { app.swipeUp() }
+            flow.tap()
+            XCTAssertTrue(app.navigationBars["处理流程"].waitForExistence(timeout: 10))
+            XCTAssertFalse(app.buttons["我的待办"].exists)
+            app.navigationBars.buttons.firstMatch.tap()
+            XCTAssertTrue(app.navigationBars["报修详情"].waitForExistence(timeout: 10))
+            XCTAssertFalse(app.buttons["我的待办"].exists)
+            app.navigationBars.buttons.firstMatch.tap()
+            XCTAssertTrue(app.buttons["新建报修"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.buttons["我的待办"].exists)
+        }
+    }
+
     func testReferenceSelectionsSurviveReturningToForm() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "new-fault"]
@@ -33,6 +56,8 @@ final class PreviewTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["受理组别"].exists)
         let expand = app.buttons["order-expand-FA-CNC-008"].firstMatch
         XCTAssertTrue(expand.waitForExistence(timeout: 15))
+        XCTAssertNotNil(app.buttons["待抢单"].value as? String)
+        XCTAssertTrue((app.buttons["待抢单"].value as? String)?.contains("单") == true)
         capture(app, "Compact work orders")
         expand.tap()
         for _ in 0..<3 where !app.staticTexts["受理组别"].isHittable { app.swipeUp() }

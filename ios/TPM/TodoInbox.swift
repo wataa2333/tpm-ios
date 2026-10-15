@@ -60,7 +60,7 @@ struct TodoInboxView: View {
         .task(id: "\(navigation.refresh)-\(category)-\(query)") { await load() }
         .refreshable { await load() }
         .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载待办…") }
-        .onAppear { navigation.newDocument = .fault }
+        .onAppear { navigation.newDocument = .fault; navigation.hideTabs = false }
         .onDisappear { navigation.newDocument = nil }
     }
 

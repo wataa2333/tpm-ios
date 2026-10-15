@@ -85,6 +85,7 @@ struct AssetRecordDetail: View {
         }
         .searchPageChrome()
         .navigationTitle("资产详情").navigationBarTitleDisplayMode(.inline)
+        .modifier(DetailTabVisibility())
         .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载" + tabs[tab] + "…") }
         .onAppear { tab = tabs.firstIndex(of: initialTab) ?? 0 }
         .task(id: tab) { await load() }

@@ -117,6 +117,14 @@ struct DetailTabVisibility: ViewModifier {
     @EnvironmentObject private var navigation: BottomNavigationModel
     func body(content: Content) -> some View {
         content.onAppear { navigation.hideTabs = true }
-            .onDisappear { navigation.hideTabs = false }
+    }
+}
+
+/// The arriving screen owns visibility; departures never restore a bar over
+/// another detail during a push/pop transition.
+struct ListTabVisibility: ViewModifier {
+    @EnvironmentObject private var navigation: BottomNavigationModel
+    func body(content: Content) -> some View {
+        content.onAppear { navigation.hideTabs = false }
     }
 }

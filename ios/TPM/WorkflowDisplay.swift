@@ -1,5 +1,10 @@
 import Foundation
 
+func serverPageCount(_ page: JSONValue) -> Int? {
+    guard case .number(let total) = page["totalElements"], total >= 0, total.isFinite, total < Double(Int.max) else { return nil }
+    return Int(total)
+}
+
 /// Process definition variables describe roles, not literal user names.
 func workflowParticipantLabel(_ raw: String) -> String {
     let roles = ["${initiator}": "发起人", "initiator": "发起人", "REPAIR_USER": "维修人员"]

@@ -97,6 +97,7 @@ struct DashboardHome: View {
         }
         .background(Color(uiColor: .systemGroupedBackground))
         .navigationTitle("主页").navigationBarTitleDisplayMode(.large)
+        .modifier(ListTabVisibility())
         .toolbar { ToolbarItem(placement: .topBarTrailing) {
             if preview { PreviewFactoryButton() } else { FactorySwitcherButton() }
         } }
@@ -125,5 +126,6 @@ struct DashboardWorkspace: View {
         }
         .background(Color(uiColor: .systemGroupedBackground))
         .navigationTitle("工作台").navigationBarTitleDisplayMode(.large)
+        .modifier(ListTabVisibility())
     }
 }

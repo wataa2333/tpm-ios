@@ -36,6 +36,7 @@ struct LiveTabs: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             NativeTabBar(selection: $selection)
         }
+        .onChange(of: selection) { navigation.hideTabs = false }
     }
 }
 struct LiveWorkflowList: View {
@@ -52,10 +53,11 @@ struct LiveWorkflowList: View {
     @State private var last = true
     @State private var adding = false
     @State private var loadingMore = false
+    @State private var stateCounts: [String: Int] = [:]
     init(kind: WorkflowKind, initialState: String = "RECEIVED") { self.kind = kind; _state = State(initialValue: initialState) }
     var body: some View {
         VStack(spacing: 0) {
-            if kind == .fault { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? 2 }, set: { state = FaultState.allCases[$0].code })) }
+            if kind == .fault { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? 2 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
         List {
             if kind == .fault && searching { Section { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } } } }
             ForEach(Array(rows.enumerated()), id: \.offset) { _, item in
@@ -88,9 +90,10 @@ struct LiveWorkflowList: View {
         .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号")
         .onSubmit(of: .search) { Task { await reload() } }
         
-        .refreshable { await reload() }
+        .refreshable { await reload(); await reloadCounts() }
         .task(id: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)") { await reload() }
-        .onAppear { navigation.newDocument = kind }
+        .task(id: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)") { await reloadCounts() }
+        .onAppear { navigation.newDocument = kind; navigation.hideTabs = false }
         .onDisappear { if navigation.newDocument == kind { navigation.newDocument = nil } }
         .sheet(isPresented: $adding, onDismiss: { Task { await reload() } }) {
             NavigationStack { if kind == .fault { OriginalFaultForm() } else { OriginalERPForm() } }
@@ -108,7 +111,29 @@ struct LiveWorkflowList: View {
             try Task.checkCancellation()
             rows = more ? rows + data["content"].array : data["content"].array
             last = data["last"].bool
+            if kind == .fault, let count = serverPageCount(data) { stateCounts[state] = count }
         } catch { self.error = error.localizedDescription }
+    }
+    private func reloadCounts() async {
+        guard kind == .fault else { return }
+        stateCounts = [:]
+        let searchFilters = query.isEmpty ? [] : [filter(searchField.key, query, "like")]
+        let api = session
+        await withTaskGroup(of: (String, Int?).self) { group in
+            for stage in FaultState.allCases {
+                let code = stage.code
+                group.addTask {
+                    do {
+                        let response = try await api.page("fault/pageAssetFault", filters: searchFilters + [filter("faultState", code)], limit: 1)
+                        return (code, serverPageCount(response))
+                    } catch { return (code, nil) }
+                }
+            }
+            for await (code, count) in group {
+                guard !Task.isCancelled else { return }
+                if let count { stateCounts[code] = count }
+            }
+        }
     }
 }
 func faultStateName(_ state: String) -> String {
@@ -198,6 +223,7 @@ struct LiveWorkflowDetail: View {
             }
         }
         .navigationTitle(kind == .fault ? "报修详情" : "出库详情").navigationBarTitleDisplayMode(.inline)
+        .modifier(DetailTabVisibility())
         .task { await load() }
         .toolbar {
             if canEdit {
@@ -285,6 +311,7 @@ struct LiveCatalogView: View {
         }
         .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载…") }
         .navigationTitle(source == .assets ? "资产台账" : "库存")
+        .modifier(ListTabVisibility())
         .searchPageChrome(isSearching: searching)
         .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: byCode ? "搜索编号" : "搜索名称")
         .onSubmit(of: .search) { Task { await load() } }
@@ -354,6 +381,7 @@ struct WorkflowNodesView: View {
         .initialLoadingContent(loading && history.isEmpty && definition.isEmpty)
         .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载流程…") }
         .navigationTitle("处理流程").navigationBarTitleDisplayMode(.inline)
+        .modifier(DetailTabVisibility())
         .task { await load() }.refreshable { await load() }
     }
     private func load() async {

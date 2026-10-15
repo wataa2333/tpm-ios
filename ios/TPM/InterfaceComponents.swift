@@ -127,6 +127,7 @@ struct NativeTabBar: View {
 
 struct WorkOrderStatusStrip: View {
     @Binding var selection: Int
+    var counts: [String: Int] = [:]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     private var animation: Animation { reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.28) }
@@ -145,6 +146,9 @@ struct WorkOrderStatusStrip: View {
                                     Text(state.rawValue).font(.subheadline.weight(.semibold))
                                         .lineLimit(1).transition(.opacity)
                                 }
+                                Text(counts[state.code].map(String.init) ?? "…")
+                                    .font(.caption.weight(.semibold)).monospacedDigit()
+                                    .contentTransition(.numericText())
                             }
                             .foregroundStyle(selection == index ? Color(uiColor: .systemBackground) : Color.secondary)
                             .padding(.horizontal, selection == index ? 16 : 10)
@@ -154,6 +158,7 @@ struct WorkOrderStatusStrip: View {
                         }
                         .buttonStyle(.plain).id(index)
                         .accessibilityLabel(state.rawValue)
+                        .accessibilityValue(counts[state.code].map { "\($0) 单" } ?? "数量尚未获取")
                         .accessibilityAddTraits(selection == index ? [.isSelected] : [])
                     }
                 }.padding(.horizontal, 16).padding(.vertical, 8)
