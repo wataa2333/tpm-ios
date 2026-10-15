@@ -154,9 +154,17 @@ struct WarehouseStockView: View {
 
 struct WarehouseStockFacts: View {
     let row: JSONValue
+    private func value(_ key: String) -> String {
+        let text = readableDate(row.at(key))
+        guard !text.isEmpty else { return "—" }
+        if ["amount", "inventoryLowerLimit", "inventoryLimit"].contains(key) {
+            return text + " " + (row["material"]["unit"].text.isEmpty ? "PCS" : row["material"]["unit"].text)
+        }
+        return text
+    }
     var body: some View {
         List {
-            Section("物料信息") { ForEach([("material.materialName", "名称"), ("material.materialNum", "物料编号"), ("material.materialModel", "规格型号"), ("material.brand.brandName", "品牌"), ("material.materialCategory.categoryName", "类别"), ("warehouse.warehouseName", "仓库"), ("place", "库位"), ("amount", "库存数量"), ("averagePrice", "平均价格"), ("inventoryLowerLimit", "库存下限"), ("inventoryLimit", "库存上限"), ("createTime", "记录时间")], id: \.0) { key, title in LabeledContent(title, value: readableDate(row.at(key))) } }
+            Section("物料信息") { ForEach([("material.materialName", "名称"), ("material.materialNum", "物料编号"), ("material.materialModel", "规格型号"), ("material.brand.brandName", "品牌"), ("material.materialCategory.categoryName", "类别"), ("warehouse.warehouseName", "仓库"), ("place", "库位"), ("amount", "库存数量"), ("averagePrice", "平均价格"), ("inventoryLowerLimit", "库存下限"), ("inventoryLimit", "库存上限"), ("createTime", "记录时间")], id: \.0) { key, title in LabeledContent(title, value: value(key)) } }
             LabeledContent("单位", value: row["material"]["unit"].text.isEmpty ? "PCS" : row["material"]["unit"].text)
         }.navigationTitle("仓库库存详情").navigationBarTitleDisplayMode(.inline)
     }

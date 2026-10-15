@@ -38,6 +38,7 @@ struct LiveTabs: View {
                         Section("资产管理") { NavigationLink("资产台账") { LiveCatalogView(source: .assets) } }
                         Section("备品备件") {
                             NavigationLink("ERP 出库") { LiveWorkflowList(kind: .erp) }
+                            NavigationLink("ERP 库存") { LiveCatalogView(source: .materials) }
                             NavigationLink("仓库库存") { WarehouseStockView() }
                         }
                     }.navigationTitle("工作台")

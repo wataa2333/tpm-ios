@@ -1,8 +1,10 @@
 """Capture actual simulator output for the mock-data SwiftUI preview."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import time
+from types import SimpleNamespace
 
 
 def sim(*args):
@@ -20,16 +22,18 @@ print("Capturing on", device["name"], udid, flush=True)
 if device["state"] != "Booted":
     sim("boot", udid)
 sim("bootstatus", udid, "-b")
+run_tests = os.environ.get("TPM_RUN_UI_TESTS", "true") != "false"
 test_result = subprocess.run(["xcodebuild", "test", "-project", "ios/TPM.xcodeproj", "-scheme", "TPM",
                 "-configuration", "Debug", "-destination", f"platform=iOS Simulator,id={udid}",
                 "-derivedDataPath", "build/simulator", "CODE_SIGNING_ALLOWED=NO",
-                "-resultBundlePath", "build/PreviewTests.xcresult"], check=False)
+                "-resultBundlePath", "build/PreviewTests.xcresult"], check=False) if run_tests else SimpleNamespace(returncode=0)
 sim("status_bar", udid, "override", "--time", "9:41", "--dataNetwork", "wifi",
     "--wifiMode", "active", "--wifiBars", "3", "--batteryState", "charged", "--batteryLevel", "100")
 sim("install", udid, "build/simulator/Build/Products/Debug-iphonesimulator/TPM.app")
 output = Path("build/screenshots")
 output.mkdir(parents=True, exist_ok=True)
-subprocess.run(["xcrun", "xcresulttool", "export", "attachments",
+if run_tests:
+    subprocess.run(["xcrun", "xcresulttool", "export", "attachments",
                 "--path", "build/PreviewTests.xcresult", "--output-path", str(output / "ui-tests")], check=True)
 screens = [
     "faults", "new-fault", "processing", "erp-form", "workflow", "loading",
@@ -48,6 +52,14 @@ for index, screen in enumerate(["draft", "reported", "signed", "resolved", "sign
     captures.append((f"{index:02d}-{screen}", "light", ["--screen", screen]))
 for index, screen in enumerate(["reject-accept", "confirm-order", "reject-confirm", "resolve-order", "reject-resolve", "draft-task", "erp-approval", "erp-confirm"], 65):
     captures.append((f"{index:02d}-{screen}", "light", ["--screen", screen]))
+for index, screen in enumerate(["resolved-detail", "draft-detail"], 73):
+    captures.append((f"{index:02d}-{screen}", "light", ["--screen", screen]))
+requested = set(filter(None, os.environ.get("TPM_REVIEW_SCREENS", "").split(",")))
+if requested:
+    known = {arguments[1] for _, _, arguments in captures}
+    if requested - known:
+        raise SystemExit("Unknown preview routes: " + ",".join(sorted(requested - known)))
+    captures = [capture for capture in captures if capture[2][1] in requested]
 for name, appearance, arguments in captures:
     subprocess.run(["xcrun", "simctl", "terminate", udid, "com.personal.tpm"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -59,5 +71,7 @@ for name, appearance, arguments in captures:
 (output / "capture-info.json").write_text(json.dumps({
     "device": device["name"], "data": "fictional demo data",
     "capture": "actual iOS simulator; screens launched with DEBUG preview arguments; not an end-to-end flow test",
+    "tests_run": run_tests,
+    "source_commit": os.environ.get("GITHUB_SHA", "local"),
 }, ensure_ascii=False, indent=2))
 raise SystemExit(test_result.returncode)

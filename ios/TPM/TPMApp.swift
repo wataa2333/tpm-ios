@@ -27,6 +27,9 @@ struct PreviewRouter: View {
 enum FaultState: String, CaseIterable, Identifiable {
     case draft = "报修", reported = "待受理", received = "待抢单", signed = "待签到", working = "待完成", verifying = "待确认", resolved = "待复线", finished = "已完结"
     var id: String { rawValue }
+    var actionTitle: String {
+        switch self { case .draft: "提交报修"; case .reported: "受理报修"; case .received: "领取工单"; case .signed: "签到"; case .working: "维修处理"; case .verifying: "确认完成"; case .resolved: "复线确认"; case .finished: "已完结" }
+    }
     var code: String { ["UNTREATED", "REPORTED", "RECEIVED", "SIGNED", "REPAIRED", "VERIFIED", "RESOLVED", "FINISHED"][FaultState.allCases.firstIndex(of: self)!] }
     var color: Color { switch self { case .draft: .purple; case .reported: .orange; case .received, .signed: .blue; case .working: .teal; case .verifying, .resolved: .indigo; case .finished: .green } }
     var symbol: String { switch self { case .draft: "square.and.pencil"; case .reported: "tray"; case .received: "hand.raised"; case .signed: "location"; case .working: "wrench.and.screwdriver"; case .verifying: "checkmark.bubble"; case .resolved: "arrow.triangle.2.circlepath"; case .finished: "checkmark.circle" } }
@@ -182,6 +185,7 @@ struct WorkspaceView: View {
             }
             Section("备品备件") {
                 NavigationLink { OutboundListView() } label: { PoolEntry(title: "ERP 出库", symbol: "shippingbox", subtitle: "出库单查询与明细") }
+                NavigationLink { StockListView() } label: { PoolEntry(title: "ERP 库存", symbol: "shippingbox.circle", subtitle: "ERP 物料、库存数量及库位") }
                 NavigationLink { WarehouseStockView(preview: true) } label: { PoolEntry(title: "仓库库存", symbol: "archivebox", subtitle: "仓库明细、物料数量与入库记录") }
             }
             Section { DemoNotice() }
@@ -305,7 +309,7 @@ struct FaultDetailView: View {
                         if [.received, .signed, .working].contains(fault.state) { BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) { returning = true } }
                         Spacer()
                         if fault.state != .finished {
-                            BottomAction(title: fault.state == .received ? "领取工单" : fault.state == .signed ? "签到" : fault.state == .reported ? "受理报修" : fault.state == .verifying ? "确认完成" : "维修处理", symbol: fault.state.symbol) { processing = true }
+                            BottomAction(title: fault.state.actionTitle, symbol: fault.state.symbol) { processing = true }
                         }
                     }.padding(.horizontal, 20).padding(.vertical, 8)
                 }
@@ -313,7 +317,7 @@ struct FaultDetailView: View {
                     NavigationStack {
                         if fault.state == .signed { SignInPreview(asset: fault.asset) }
                         else if fault.state == .working { FaultProcessingView(id: id) }
-                        else { WorkflowTaskView(task: .object(["name": .string(fault.state == .received ? "领取工单" : fault.state == .reported ? "受理报修" : "确认完成"), "category": .string(fault.state.code)]), kind: .fault, preview: true) }
+                        else { WorkflowTaskView(task: .object(["name": .string(fault.state.actionTitle), "category": .string(fault.state.code)]), kind: .fault, preview: true) }
                     }
                 }
                 .sheet(isPresented: $returning) { NavigationStack { WorkflowTaskView(task: .object(["name": .string("退单"), "category": .string(fault.state.code)]), kind: .fault, preview: true, previewReturn: true) } }
@@ -567,6 +571,8 @@ struct PreviewScreen: View {
         case "claim-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("领取工单"), "category": .string("RECEIVED")]), kind: .fault, preview: true) }
         case "accept-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("受理报修"), "category": .string("REPORTED")]), kind: .fault, preview: true) }
         case "reject-accept": NavigationStack { WorkflowTaskView(task: .object(["name": .string("受理报修"), "category": .string("REPORTED")]), kind: .fault, preview: true, previewCondition: "reject") }
+        case "resolved-detail": NavigationStack { FaultDetailView(id: "BX-20261010-001") }
+        case "draft-detail": NavigationStack { FaultDetailView(id: "BX-20261016-001") }
         case "confirm-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("确认完成"), "category": .string("VERIFIED")]), kind: .fault, preview: true) }
         case "reject-confirm": NavigationStack { WorkflowTaskView(task: .object(["name": .string("确认完成"), "category": .string("VERIFIED")]), kind: .fault, preview: true, previewCondition: "reject") }
         case "resolve-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("复线确认"), "category": .string("RESOLVED")]), kind: .fault, preview: true) }

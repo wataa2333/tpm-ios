@@ -1,6 +1,16 @@
 name: Build iOS preview
 on:
   workflow_dispatch:
+    inputs:
+      review_screens:
+        description: 'Comma-separated preview routes; leave blank for all pages'
+        required: false
+        type: string
+      run_ui_tests:
+        description: 'Run unit and UI tests before screenshots'
+        required: true
+        type: boolean
+        default: true
 permissions:
   contents: read
 jobs:
@@ -36,6 +46,9 @@ jobs:
           cd build/package
           zip -qr ../TPM-unsigned.ipa Payload
       - name: Build and capture simulator previews
+        env:
+          TPM_REVIEW_SCREENS: ${{ inputs.review_screens }}
+          TPM_RUN_UI_TESTS: ${{ inputs.run_ui_tests }}
         run: |
           xcodebuild -project ios/TPM.xcodeproj -scheme TPM -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/simulator CODE_SIGNING_ALLOWED=NO build
           python3 ios/capture-previews.py
