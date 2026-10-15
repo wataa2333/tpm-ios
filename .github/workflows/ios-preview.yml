@@ -31,7 +31,7 @@ jobs:
       - name: Generate Xcode project
         run: |
           brew install xcodegen
-          swift ios/render-icon.swift
+          if [ ! -f ios/TPM/Assets.xcassets/AppIcon.appiconset/AppIcon.png ]; then swift ios/render-icon.swift; fi
           cd ios
           xcodegen generate
       - name: Build unsigned application
