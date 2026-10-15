@@ -1,0 +1,36 @@
+name: Export wataa IPA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: xcode-27
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check SDK and generate project
+        run: |
+          xcodebuild -version
+          SDK_VERSION=$(xcrun --sdk iphoneos --show-sdk-version)
+          test "${SDK_VERSION%%.*}" -ge 27
+          brew install xcodegen
+          cd ios
+          xcodegen generate
+      - name: Build release application
+        run: >-
+          xcodebuild -project ios/TPM.xcodeproj -scheme TPM
+          -configuration Release -sdk iphoneos -destination 'generic/platform=iOS'
+          -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+      - name: Package for personal signing
+        run: |
+          mkdir -p build/package/Payload
+          cp -R build/Build/Products/Release-iphoneos/TPM.app build/package/Payload/
+          cd build/package
+          zip -qr ../wataa.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wataa-unsigned
+          path: build/wataa.ipa
+          retention-days: 3
+
