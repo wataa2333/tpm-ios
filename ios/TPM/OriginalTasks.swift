@@ -57,6 +57,7 @@ struct OriginalRepairForm: View {
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(loading || saving)
+        .initialLoadingContent(loading && data.isEmpty)
         .overlay { AnimatedLoadingOverlay(isPresented: loading || saving, title: saving ? "正在保存维修结果…" : "正在加载维修任务…") }
         .navigationTitle(task["name"].text.isEmpty ? "处理故障维修" : task["name"].text).navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -206,6 +207,7 @@ struct WorkflowTaskView: View {
             if preview { Section { Text("流程页面预览，使用示例数据，不执行真实提交。").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(loading || submitting)
+        .initialLoadingContent(loading && state == .null)
         .overlay { AnimatedLoadingOverlay(isPresented: loading || submitting, title: submitting ? "正在提交…" : "正在加载当前节点…") }
         .navigationTitle(task["name"].text).navigationBarTitleDisplayMode(.inline)
         .toolbar {

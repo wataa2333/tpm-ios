@@ -47,13 +47,15 @@ struct AssetRecordDetail: View {
     @State private var error: String?
     private var asset: JSONValue { detail == .null ? record : detail }
     var body: some View {
+        VStack(spacing: 0) {
+            HorizontalCategories(titles: tabs, selection: $tab)
         List {
             Section {
                 Text(asset["assetName"].text).font(.headline)
                 Text(asset["assetCode"].text).font(.subheadline).foregroundStyle(.secondary)
             }
             if tab == 0 {
-                Section("基本信息") { ForEach(assetFields, id: \.0) { key, label in LabeledContent(label, value: readableDate(asset.at(key)).isEmpty ? "—" : readableDate(asset.at(key))) } }
+                Section("基本信息") { ForEach(assetFields, id: \.0) { key, label in LabeledContent(label, value: assetDisplayValue(asset.at(key), key: key)) } }
             } else if tab == 6 {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     WorkOrderCard(title: row["faultName"].text, status: faultStateName(row["faultState"].text), reference: row["asset"]["assetCode"].text, time: readableDate(row["faultTime"]), facts: faultCardFacts(row)) {
@@ -77,8 +79,8 @@ struct AssetRecordDetail: View {
             if let error { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } }
             if preview { Section { DemoNotice() } }
         }
+        }
         .navigationTitle("资产详情").navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .top, spacing: 0) { HorizontalCategories(titles: tabs, selection: $tab) }
         .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载" + tabs[tab] + "…") }
         .onAppear { tab = tabs.firstIndex(of: initialTab) ?? 0 }
         .task(id: tab) { await load() }

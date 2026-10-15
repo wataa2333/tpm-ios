@@ -108,18 +108,17 @@ struct DashboardWorkspace: View {
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: 16)]
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 16) {
+            VStack(spacing: 16) {
                 NavigationLink {
                     if preview { AssetListView() } else { LiveCatalogView(source: .assets) }
                 } label: { DashboardCard(title: "资产台账", subtitle: "搜索与查看资产详情", symbol: "list.clipboard", palette: 4) }
+                LazyVGrid(columns: columns, spacing: 16) {
                 NavigationLink {
                     if preview { OutboundListView() } else { LiveWorkflowList(kind: .erp) }
                 } label: { DashboardCard(title: "ERP 出库", subtitle: "领料申请与出库明细", symbol: "shippingbox", palette: 1) }
                 NavigationLink {
                     if preview { StockListView() } else { LiveCatalogView(source: .materials) }
                 } label: { DashboardCard(title: "ERP 库存", subtitle: "物料、数量与库位", symbol: "square.stack.3d.up", palette: 0) }
-                NavigationLink { WarehouseStockView(preview: preview) } label: {
-                    DashboardCard(title: "仓库库存", subtitle: "库存明细与入库记录", symbol: "archivebox", palette: 5)
                 }
             }.buttonStyle(DashboardPressStyle()).padding(20)
             if preview { DemoNotice().padding(.horizontal, 20) }

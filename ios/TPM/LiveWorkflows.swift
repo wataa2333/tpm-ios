@@ -311,10 +311,12 @@ struct WorkflowNodesView: View {
     @State private var error: String?
     var body: some View {
         List {
+            if !history.isEmpty {
             Section("处理记录") {
                 ForEach(Array(history.enumerated()), id: \.offset) { _, node in
                     DisclosureGroup {
-                        if !node["assignee"].text.isEmpty { LabeledContent("处理人", value: node["assignee"].text) }
+                        let assignee = workflowParticipantLabel(node["assignee"].text)
+                        if !assignee.isEmpty { LabeledContent("处理人", value: assignee) }
                         LabeledContent("开始时间", value: node["startTimeText"].text)
                         if !node["endTimeText"].text.isEmpty { LabeledContent("完成时间", value: node["endTimeText"].text) }
                         if !node["condition"].text.isEmpty { LabeledContent("处理结果", value: node["condition"].text) }
@@ -331,19 +333,25 @@ struct WorkflowNodesView: View {
                     }
                 }
             }
+            }
+            if !definition.isEmpty {
             Section("流程节点") {
                 ForEach(Array(definition.enumerated()), id: \.offset) { _, node in
                     VStack(alignment: .leading, spacing: 5) {
                         Text(node["taskName"].text)
                         let records = history.filter { $0["activityId"].text == node["taskKey"].text }
                         Text(records.isEmpty ? "尚无处理记录" : records.contains { $0["endTime"] == .null } ? "当前节点" : "已有处理记录").font(.subheadline).foregroundStyle(.secondary)
-                        if !node["assignees"].text.isEmpty { Text(node["assignees"].text).font(.subheadline).foregroundStyle(.secondary) }
+                        let participant = workflowParticipantLabel(node["assignees"].text)
+                        if !participant.isEmpty { Text(participant).font(.subheadline).foregroundStyle(.secondary) }
                     }
                 }
             }
+            }
+            if !loading && history.isEmpty && definition.isEmpty && error == nil { CompactEmptyState(title: "暂无流程记录") }
             if let error { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } }
             if preview { Text("流程结构演示，不是真实工单记录").font(.footnote).foregroundStyle(.secondary) }
         }
+        .initialLoadingContent(loading && history.isEmpty && definition.isEmpty)
         .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载流程…") }
         .navigationTitle("处理流程").navigationBarTitleDisplayMode(.inline)
         .task { await load() }.refreshable { await load() }
@@ -356,8 +364,10 @@ struct WorkflowNodesView: View {
             return
         }
         do {
-            history = try await session.request("workflow/getWorkflowHistoryNodesByProcessInstanceId", query: ["processInstanceId": processID]).array
-            definition = try await session.request("workflow/getAssigneeElementsByProcessInstanceId", query: ["processInstanceId": processID]).array
+            let loadedHistory = try await session.request("workflow/getWorkflowHistoryNodesByProcessInstanceId", query: ["processInstanceId": processID]).array
+            let loadedDefinition = try await session.request("workflow/getAssigneeElementsByProcessInstanceId", query: ["processInstanceId": processID]).array
+            history = loadedHistory
+            definition = loadedDefinition
         } catch { self.error = error.localizedDescription }
     }
 }

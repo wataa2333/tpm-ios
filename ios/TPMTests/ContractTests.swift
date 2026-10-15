@@ -2,6 +2,19 @@ import Testing
 import Foundation
 @testable import TPM
 
+@Test func processRolesDoNotLeakRawExpressions() {
+    #expect(workflowParticipantLabel("${initiator}") == "发起人")
+    #expect(workflowParticipantLabel("REPAIR_USER") == "维修人员")
+    #expect(workflowParticipantLabel("${unknownRule}") == "")
+    #expect(workflowParticipantLabel("张三,REPAIR_USER") == "张三、维修人员")
+}
+
+@Test func assetUseStateUsesOriginalChineseLabels() {
+    #expect(assetDisplayValue(.string("IN_USE"), key: "useState") == "在用")
+    #expect(assetDisplayValue(.string("UN_USE"), key: "useState") == "闲置")
+    #expect(assetDisplayValue(.string("EWPT-01"), key: "assetCode") == "EWPT-01")
+}
+
 @Test @MainActor func erpKeepsMultipleMaterialLinesAndSaveMode() {
     let form = OriginalFormModel(kind: "ERP_OUTBOUND")
     form.addMaterial(.object(["id": .number(11), "onhandQty": .number(8)]))

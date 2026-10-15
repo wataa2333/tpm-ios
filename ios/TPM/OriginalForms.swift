@@ -400,6 +400,7 @@ struct OriginalFaultForm: View {
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(model.loading || model.saving)
+        .initialLoadingContent(model.loading && !model.ready)
         .overlay { AnimatedLoadingOverlay(isPresented: model.loading || model.saving, title: model.saving ? "正在提交报修…" : "正在加载表单…") }
         .navigationTitle(existing == nil ? "故障报修" : "编辑报修").navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -533,6 +534,7 @@ struct OriginalERPForm: View {
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(model.loading || model.saving)
+        .initialLoadingContent(model.loading && !model.ready)
         .overlay { AnimatedLoadingOverlay(isPresented: model.loading || model.saving, title: model.saving ? "正在提交领料申请…" : "正在加载领料申请…") }
         .navigationTitle("ERP 出库").navigationBarTitleDisplayMode(.inline)
         .toolbar {

@@ -20,6 +20,20 @@ extension View {
     func searchPageChrome(isSearching: Bool = false) -> some View {
         modifier(SearchPageChrome(isSearching: isSearching))
     }
+    func initialLoadingContent(_ hidden: Bool) -> some View {
+        modifier(InitialLoadingContent(hidden: hidden))
+    }
+}
+
+struct InitialLoadingContent: ViewModifier {
+    let hidden: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func body(content: Content) -> some View {
+        content.opacity(hidden ? 0 : 1)
+            .accessibilityHidden(hidden)
+            .allowsHitTesting(!hidden)
+            .animation(.easeOut(duration: reduceMotion ? 0.12 : 0.2), value: hidden)
+    }
 }
 
 struct KeyboardTabVisibility: ViewModifier {
