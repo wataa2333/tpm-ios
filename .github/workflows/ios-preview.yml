@@ -1,0 +1,42 @@
+name: Build iOS preview
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check SDK
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
+          SDK_VERSION=$(xcrun --sdk iphoneos --show-sdk-version)
+          if [ "${SDK_VERSION%%.*}" -lt 27 ]; then
+            echo 'This project requires an iOS 27 SDK. Select a compatible runner/Xcode image.'
+            exit 1
+          fi
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          cd ios
+          xcodegen generate
+      - name: Build unsigned application
+        run: >-
+          xcodebuild -project ios/TPM.xcodeproj -scheme TPM
+          -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS'
+          -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+      - name: Package for local signing
+        run: |
+          mkdir -p build/package/Payload
+          cp -R build/Build/Products/Debug-iphoneos/TPM.app build/package/Payload/
+          cd build/package
+          zip -qr ../TPM-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TPM-unsigned
+          path: build/TPM-unsigned.ipa
+          retention-days: 3
+

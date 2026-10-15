@@ -1,0 +1,11 @@
+base.apk
+apk-analysis/extracted/
+.DS_Store
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.p12
+*.mobileprovision
+*.ipa
+
