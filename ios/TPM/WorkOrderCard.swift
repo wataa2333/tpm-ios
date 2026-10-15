@@ -14,7 +14,7 @@ struct WorkOrderCard<Destination: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var emphasis: Color { FaultState.allCases.first { $0.rawValue == status }?.color ?? color }
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             NavigationLink { destination().modifier(DetailTabVisibility()) } label: {
                 HStack(alignment: .top, spacing: 12) {
                     WrappingContent { Text(title).font(.headline).foregroundStyle(.primary) }
@@ -23,11 +23,13 @@ struct WorkOrderCard<Destination: View>: View {
             }.buttonStyle(.plain).navigationLinkIndicatorVisibility(.hidden)
             WrappingContent { Text(reference.isEmpty ? "—" : reference).font(.subheadline).foregroundStyle(.secondary) }
                 .accessibilityLabel(referenceTitle + "：" + reference)
+                .accessibilityIdentifier("order-reference-" + reference)
             ForEach(Array(summaryFacts.enumerated()), id: \.offset) { _, fact in
                 WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(.subheadline).foregroundStyle(.secondary) }
             }
             HStack(alignment: .center, spacing: 16) {
                 WrappingContent { Text(time).font(.subheadline).foregroundStyle(.secondary) }
+                    .accessibilityIdentifier("order-time-" + reference)
                 Button {
                     withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.24)) { expanded.toggle() }
                 } label: {
@@ -39,7 +41,8 @@ struct WorkOrderCard<Destination: View>: View {
                     }
                     .font(.subheadline.weight(.medium)).foregroundStyle(emphasis)
                     .fixedSize(horizontal: true, vertical: false)
-                    .frame(minHeight: 44).contentShape(.rect)
+                    .frame(minHeight: 32)
+                    .contentShape(Rectangle().inset(by: -6))
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("order-expand-" + reference)

@@ -229,6 +229,9 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(expand.waitForExistence(timeout: 15))
         let title = app.staticTexts["立式加工中心异常报修"].firstMatch
         XCTAssertLessThan(expand.frame.maxY - title.frame.minY, 140)
+        let reference = app.descendants(matching: .any)["order-reference-FA-CNC-008"].firstMatch
+        let time = app.descendants(matching: .any)["order-time-FA-CNC-008"].firstMatch
+        XCTAssertLessThanOrEqual(time.frame.minY - reference.frame.maxY, 14)
         for _ in 0..<2 {
             expand.tap()
             XCTAssertEqual(expand.value as? String, "已展开")
