@@ -20,7 +20,8 @@ struct WorkOrderCard<Destination: View>: View {
                     WrappingContent { Text(title).font(.headline).foregroundStyle(.primary) }
                     if !status.isEmpty { Text(status).font(.subheadline.weight(.semibold)).foregroundStyle(emphasis).frame(maxWidth: 96, alignment: .trailing).fixedSize(horizontal: false, vertical: true) }
                 }
-            }.buttonStyle(.plain).navigationLinkIndicatorVisibility(.hidden)
+            }.buttonStyle(.borderless).navigationLinkIndicatorVisibility(.hidden)
+                .accessibilityIdentifier("order-title-" + reference)
             WrappingContent { Text(reference.isEmpty ? "—" : reference).font(.subheadline).foregroundStyle(.secondary) }
                 .accessibilityLabel(referenceTitle + "：" + reference)
                 .accessibilityIdentifier("order-reference-" + reference)
@@ -36,8 +37,10 @@ struct WorkOrderCard<Destination: View>: View {
                         Label("打开工单", systemImage: "arrow.up.right.square")
                             .font(.subheadline.weight(.semibold)).foregroundStyle(emphasis)
                             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.borderless)
+                        .accessibilityIdentifier("order-open-" + reference)
                 }.padding(.top, 4)
+                    .accessibilityElement(children: .contain)
             } label: {
                 HStack(spacing: 12) {
                     Text(time).font(.subheadline).foregroundStyle(.secondary)
@@ -65,6 +68,7 @@ struct ReadableFact: View {
             Spacer(minLength: 0)
             WrappingContent(alignment: .trailing) { Text(value.isEmpty ? "—" : value) }
         }.font(.subheadline).contentShape(.rect)
+            .accessibilityElement(children: .contain)
             .onTapGesture { shown = true }
             .accessibilityHint("轻点查看完整内容")
             .sheet(isPresented: $shown) {

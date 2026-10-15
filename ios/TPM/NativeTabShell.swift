@@ -11,7 +11,6 @@ struct NativeTabShell<Content: View>: View {
 
     var body: some View {
         TabView(selection: $selection) { content() }
-            .toolbar(navigation.hideTabs || navigation.keyboardVisible ? .hidden : .visible, for: .tabBar)
             .tabViewBottomAccessory(isEnabled: !navigation.hideTabs && !navigation.keyboardVisible) {
                 HStack {
                     Spacer()

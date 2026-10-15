@@ -333,30 +333,24 @@ struct ServerDateField: View {
     @Binding var value: JSONValue
     var dateOnly = false
     var required = false
-    @State private var presented = false
     private var date: Binding<Date> {
         Binding(get: { parsedDate(value) }, set: { value = .string(serverDate($0, dateOnly: dateOnly)) })
     }
     var body: some View {
-        Button { presented = true } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                if required { RequiredLabel(title: title) } else { Text(title) }
+        VStack(alignment: .leading, spacing: 8) {
+            if required { RequiredLabel(title: title) } else { Text(title) }
+            HStack(spacing: 8) {
+                DatePicker("日期", selection: date, displayedComponents: [.date])
+                    .labelsHidden().datePickerStyle(.compact)
+                    .accessibilityIdentifier("date-value-" + title)
+                if !dateOnly {
+                    DatePicker("时间", selection: date, displayedComponents: [.hourAndMinute])
+                        .labelsHidden().datePickerStyle(.compact)
+                        .accessibilityIdentifier("time-value-" + title)
+                }
                 Spacer(minLength: 0)
-                Text(serverDate(date.wrappedValue, dateOnly: dateOnly))
-                    .font(.subheadline).monospacedDigit().foregroundStyle(.tint)
-                    .multilineTextAlignment(.trailing).lineLimit(nil)
-            }.foregroundStyle(.primary).frame(minHeight: 44)
-        }.buttonStyle(.plain).accessibilityIdentifier("date-" + title)
-        .sheet(isPresented: $presented) {
-            NavigationStack {
-                Form {
-                    DatePicker("选择时间", selection: date, displayedComponents: dateOnly ? [.date] : [.date, .hourAndMinute])
-                        .datePickerStyle(.wheel).labelsHidden()
-                }.environment(\.locale, Locale(identifier: "zh_CN"))
-                    .navigationTitle(title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { presented = false } } }
-            }.presentationDetents([.medium, .large])
-        }
+            }.environment(\.locale, Locale(identifier: "zh_CN"))
+        }.padding(.vertical, 4)
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
     }

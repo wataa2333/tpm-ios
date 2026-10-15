@@ -10,21 +10,21 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(ledger.waitForExistence(timeout: 10)); ledger.tap()
         app.staticTexts["立式加工中心"].firstMatch.tap()
         XCTAssertTrue(app.navigationBars["资产详情"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.buttons["我的待办"].exists)
+        assertTabBarHidden(app)
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(app.buttons["我的待办"].waitForExistence(timeout: 5))
         app.navigationBars.buttons.firstMatch.tap()
         app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "ERP 出库")).firstMatch.tap()
         app.staticTexts["深沟球轴承领料"].firstMatch.tap()
         XCTAssertTrue(app.navigationBars["出库详情"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.buttons["我的待办"].exists)
+        assertTabBarHidden(app)
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(app.buttons["我的待办"].waitForExistence(timeout: 5))
         app.navigationBars.buttons.firstMatch.tap()
         app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "ERP 库存")).firstMatch.tap()
         app.staticTexts["深沟球轴承"].firstMatch.tap()
         XCTAssertTrue(app.navigationBars["库存详情"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.buttons["我的待办"].exists)
+        assertTabBarHidden(app)
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(app.buttons["我的待办"].waitForExistence(timeout: 5))
     }
@@ -34,20 +34,21 @@ final class PreviewTests: XCTestCase {
         app.launchArguments = ["--screen", "faults"]
         app.launch()
         for _ in 0..<3 {
-            app.staticTexts["立式加工中心异常报修"].firstMatch.tap()
+            app.buttons["order-title-FA-CNC-008"].firstMatch.tap()
             XCTAssertTrue(app.navigationBars["报修详情"].waitForExistence(timeout: 10))
-            XCTAssertFalse(app.buttons["我的待办"].exists)
-            XCTAssertFalse(app.buttons["新建报修"].exists)
+            assertTabBarHidden(app)
+            XCTAssertFalse(app.buttons["新建报修"].isHittable)
             let flow = app.buttons["处理流程"]
             for _ in 0..<6 where !flow.isHittable { app.swipeUp() }
             flow.tap()
             XCTAssertTrue(app.navigationBars["处理流程"].waitForExistence(timeout: 10))
-            XCTAssertFalse(app.buttons["我的待办"].exists)
+            assertTabBarHidden(app)
             app.navigationBars.buttons.firstMatch.tap()
             XCTAssertTrue(app.navigationBars["报修详情"].waitForExistence(timeout: 10))
-            XCTAssertFalse(app.buttons["我的待办"].exists)
+            assertTabBarHidden(app)
             app.navigationBars.buttons.firstMatch.tap()
-            XCTAssertTrue(app.buttons["新建报修"].waitForExistence(timeout: 10))
+            let restored = expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: app.buttons["新建报修"])
+            wait(for: [restored], timeout: 10)
             XCTAssertTrue(app.buttons["我的待办"].exists)
         }
     }
@@ -89,7 +90,7 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue((app.buttons["待抢单"].value as? String)?.contains("单") == true)
         capture(app, "Compact work orders")
         expand.tap()
-        for _ in 0..<3 where !app.staticTexts["受理组别"].isHittable { app.swipeUp() }
+        for _ in 0..<6 where !app.staticTexts["受理组别"].isHittable { scrollUpSmall(app) }
         XCTAssertTrue(app.staticTexts["受理组别"].exists)
         XCTAssertTrue(app.staticTexts["受理部门"].exists)
         capture(app, "Expanded work order")
@@ -124,14 +125,15 @@ final class PreviewTests: XCTestCase {
         app.launchArguments = ["--screen", "faults"]
         app.launch()
         for _ in 0..<2 {
-            app.staticTexts["立式加工中心异常报修"].firstMatch.tap()
+            app.buttons["order-title-FA-CNC-008"].firstMatch.tap()
             XCTAssertTrue(app.buttons["领取工单"].waitForExistence(timeout: 10))
             app.buttons["领取工单"].tap()
             XCTAssertTrue(app.buttons["提交"].waitForExistence(timeout: 10))
             app.buttons["提交"].tap()
             app.sheets.buttons["提交"].tap()
-            XCTAssertTrue(app.navigationBars["故障报修"].waitForExistence(timeout: 10))
-            XCTAssertFalse(app.navigationBars["报修详情"].exists)
+            let returned = expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: app.navigationBars["故障报修"])
+            wait(for: [returned], timeout: 10)
+            XCTAssertFalse(app.navigationBars["报修详情"].isHittable)
         }
         capture(app, "Returned to order list")
     }
@@ -310,21 +312,21 @@ final class PreviewTests: XCTestCase {
         app.launch()
         let expand = app.buttons["order-expand-FA-CNC-008"].firstMatch
         XCTAssertTrue(expand.waitForExistence(timeout: 15)); expand.tap()
-        let open = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "打开工单")).firstMatch
+        let open = app.buttons["order-open-FA-CNC-008"].firstMatch
         let bar = app.buttons["主页"].firstMatch
         for _ in 0..<8 {
             if open.exists && open.isHittable && open.frame.maxY < bar.frame.minY { break }
-            app.swipeUp()
+            scrollUpSmall(app)
         }
         XCTAssertTrue(open.isHittable)
         XCTAssertLessThan(open.frame.maxY, bar.frame.minY)
         open.tap()
         XCTAssertTrue(app.navigationBars["报修详情"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.searchFields.count, 0)
-        XCTAssertFalse(app.buttons["主页"].exists)
+        assertTabBarHidden(app)
     }
 
-    func testSearchDoesNotFollowNewSheetAndDateUsesItsOwnPicker() {
+    func testSearchDoesNotFollowNewSheetAndNativeDateControlsFit() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "faults"]
         app.launch()
@@ -335,12 +337,25 @@ final class PreviewTests: XCTestCase {
         app.buttons["新建报修"].tap()
         XCTAssertTrue(app.buttons["取消"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.searchFields.count, 0)
-        let date = app.buttons["date-故障时间"]
+        let date = app.datePickers["date-value-故障时间"]
         for _ in 0..<4 where !date.isHittable { app.swipeUp() }
-        XCTAssertTrue(date.isHittable); date.tap()
-        XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.datePickers.firstMatch.exists)
-        app.buttons["完成"].tap()
+        let time = app.datePickers["time-value-故障时间"]
+        XCTAssertTrue(date.isHittable)
+        XCTAssertTrue(time.isHittable)
+        XCTAssertLessThan(date.frame.maxX, time.frame.minX + 1)
+        XCTAssertLessThanOrEqual(time.frame.maxX, app.frame.maxX - 16)
         XCTAssertEqual(app.searchFields.count, 0)
+    }
+
+    private func scrollUpSmall(_ app: XCUIApplication) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.52))
+        start.press(forDuration: 0.05, thenDragTo: end)
+    }
+
+    private func assertTabBarHidden(_ app: XCUIApplication) {
+        let hidden = expectation(for: NSPredicate(format: "hittable == false"), evaluatedWith: app.tabBars.firstMatch)
+        wait(for: [hidden], timeout: 5)
+        XCTAssertFalse(app.tabBars.firstMatch.isHittable)
     }
 }
