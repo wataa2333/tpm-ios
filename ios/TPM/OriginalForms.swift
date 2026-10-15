@@ -149,6 +149,7 @@ struct ReferencePicker: View {
     let source: ReferenceSource
     var multiple = false
     var selected: [String] = []
+    var preview = false
     let choose: (JSONValue) -> Void
     @State private var values: [JSONValue] = []
     @State private var query = ""
@@ -161,7 +162,7 @@ struct ReferencePicker: View {
     @State private var picked = Set<String>()
     private func identity(_ v: JSONValue) -> String { [.users, .workflowUsers].contains(source) ? v["userName"].text : v["id"].text }
     private var visible: [JSONValue] {
-        source.pagePath != nil || query.isEmpty ? values : values.filter { $0.encodedString.localizedCaseInsensitiveContains(query) }
+        (!preview && source.pagePath != nil) || query.isEmpty ? values : values.filter { $0.encodedString.localizedCaseInsensitiveContains(query) }
     }
     var body: some View {
         List {
@@ -189,7 +190,7 @@ struct ReferencePicker: View {
         }
         .overlay { if loading || selecting { ProgressView("正在加载…") } }
         .navigationTitle(source.title).navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, prompt: "搜索")
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索")
         .task { picked = Set(selected); await load() }
         .onSubmit(of: .search) { Task { await load() } }
         .onChange(of: searchByCode) { Task { await load() } }
@@ -204,6 +205,7 @@ struct ReferencePicker: View {
         return [v["assetCode"].text, v["addressCode"].text, v["userName"].text, v["projectCode"].text, v["divisionName"].text].filter { !$0.isEmpty }.joined(separator: " · ")
     }
     private func select(_ value: JSONValue) async {
+        if preview { choose(value); if !multiple { dismiss() }; return }
         guard !selecting else { return }
         selecting = true
         defer { selecting = false }
@@ -225,6 +227,7 @@ struct ReferencePicker: View {
         if more { loadingMore = true } else { loading = true }
         error = nil
         defer { loading = false; loadingMore = false }
+        if preview { values = PreviewReferenceData.values(source); last = true; return }
         do {
             let response: JSONValue
             if let path = source.pagePath {
@@ -604,6 +607,31 @@ func materialUnit(_ material: JSONValue) -> String {
 
 func materialQuantity(_ quantity: String, material: JSONValue) -> String {
     quantity + " " + materialUnit(material)
+}
+
+enum PreviewReferenceData {
+    static func values(_ source: ReferenceSource) -> [JSONValue] {
+        switch source {
+        case .assets:
+            return ["立式加工中心", "螺杆空压机", "数控车床"].enumerated().map { .object(["id": .number(Double($0.offset+1)), "assetName": .string($0.element), "assetCode": .string("ZC-DEMO-00\($0.offset+1)")]) }
+        case .users, .workflowUsers:
+            return ["示例维修人", "示例申请人", "示例审批人"].enumerated().map { .object(["userId": .number(Double($0.offset+1)), "userName": .string("demo\($0.offset+1)"), "realName": .string($0.element)]) }
+        case .departments:
+            return ["示例设备部", "示例生产部"].enumerated().map { .object(["value": .number(Double($0.offset+1)), "deptName": .string($0.element)]) }
+        case .groups:
+            return [.object(["groupId": .number(1), "groupName": .string("示例维修班组")])]
+        case .divisions:
+            return [.object(["divisionId": .number(1), "divisionDesc": .string("示例 ERP 记账部门")])]
+        case .projects:
+            return [.object(["projectCode": .string("P-DEMO-001"), "projectName": .string("示例维修项目")])]
+        case .materials:
+            return PreviewBusinessData.erpLines.map { $0["material"] }
+        case .faultTypes:
+            return ["机械故障", "电气故障"].enumerated().map { .object(["key": .string(String($0.offset+1)), "typeName": .string($0.element)]) }
+        case .outboundMaterials:
+            return PreviewBusinessData.repairMaterials.map { var line = $0["materialOutbound"].object; line["outbound"] = $0["outbound"]; return .object(line) }
+        }
+    }
 }
 
 enum PreviewBusinessData {

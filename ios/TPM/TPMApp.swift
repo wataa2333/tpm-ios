@@ -221,7 +221,7 @@ struct FaultListView: View {
             }
         }
         .navigationTitle("故障报修")
-        .searchable(text: $query, prompt: "搜索设备、编号或故障")
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索设备、编号或故障")
         .onAppear { navigation.newDocument = .fault }
         .onDisappear { if navigation.newDocument == .fault { navigation.newDocument = nil } }
         .sheet(isPresented: $creating) { NavigationStack { NewFaultView() } }
@@ -308,7 +308,7 @@ struct AssetListView: View {
                 }
             } footer: { DemoNotice() }
         }
-        .navigationTitle("资产台账").searchable(text: $query, prompt: "资产编号、名称、型号或位置")
+        .navigationTitle("资产台账").searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "资产编号、名称、型号或位置")
         .overlay { if !query.isEmpty && !Asset.samples.contains(where: { ($0.id + $0.name + $0.model + $0.location).localizedCaseInsensitiveContains(query) }) { ContentUnavailableView.search(text: query) } }
     }
 }
@@ -335,7 +335,7 @@ struct AssetPickerView: View {
             }
         }
         .navigationTitle("选择设备").navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, prompt: "搜索设备名称或编号")
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索设备名称或编号")
     }
 }
 
@@ -383,7 +383,7 @@ struct OrderPoolView: View {
             } footer: { DemoNotice() }
         }
         .navigationTitle("\(kind)工单池").navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, prompt: "搜索设备或资产编号")
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索设备或资产编号")
     }
 }
 
@@ -433,7 +433,7 @@ struct StockListView: View {
                 if rows.isEmpty { ContentUnavailableView.search(text: query) }
             } footer: { DemoNotice() }
         }
-        .navigationTitle("库存").searchable(text: $query, prompt: "物料编号、名称、规格或库位")
+        .navigationTitle("库存").searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "物料编号、名称、规格或库位")
     }
 }
 
@@ -480,7 +480,7 @@ struct OutboundListView: View {
                 if rows.isEmpty { ContentUnavailableView("暂无出库单", systemImage: "shippingbox") }
             } footer: { DemoNotice() }
         }
-        .navigationTitle("ERP 出库").searchable(text: $query, prompt: "搜索出库单、物料或部门")
+        .navigationTitle("ERP 出库").searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索出库单、物料或部门")
     }
 }
 
@@ -545,6 +545,16 @@ struct PreviewScreen: View {
         case "workflow": NavigationStack { WorkflowNodesView(processID: "", preview: true) }
         case "loading": ProgressView("正在加载…")
         case "factories": NavigationStack { FactorySwitchView(preview: true) }
+        case "login": NativeLoginView()
+        case "asset-picker": NavigationStack { ReferencePicker(source: .assets, preview: true) { _ in } }
+        case "user-picker": NavigationStack { ReferencePicker(source: .users, preview: true) { _ in } }
+        case "dept-picker": NavigationStack { ReferencePicker(source: .departments, preview: true) { _ in } }
+        case "group-picker": NavigationStack { ReferencePicker(source: .groups, preview: true) { _ in } }
+        case "division-picker": NavigationStack { ReferencePicker(source: .divisions, preview: true) { _ in } }
+        case "project-picker": NavigationStack { ReferencePicker(source: .projects, preview: true) { _ in } }
+        case "material-picker": NavigationStack { ReferencePicker(source: .materials, multiple: true, preview: true) { _ in } }
+        case "fault-type-picker": NavigationStack { ReferencePicker(source: .faultTypes, preview: true) { _ in } }
+        case "outbound-material-picker": NavigationStack { ReferencePicker(source: .outboundMaterials, multiple: true, preview: true) { _ in } }
         case "fault-detail": NavigationStack { FaultDetailView(id: "BX-20261015-001") }
         case "repair-result": NavigationStack { FaultDetailView(id: "BX-20261013-001") }
         case "processing": NavigationStack { FaultProcessingView(id: "BX-20261014-001") }

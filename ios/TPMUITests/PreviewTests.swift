@@ -2,6 +2,35 @@ import XCTest
 
 @MainActor
 final class PreviewTests: XCTestCase {
+    func testVisibleFaultSearchPreviewStates() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "faults"]
+        app.launch()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 20))
+        XCTAssertTrue(search.isHittable)
+        capture(app, "Fault top search")
+        search.tap(); search.typeText("立式")
+        XCTAssertTrue(app.staticTexts["立式加工中心"].exists)
+        capture(app, "Fault search results")
+        search.tap()
+        if let text = search.value as? String { search.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: text.count)) }
+        search.typeText("不存在的设备")
+        XCTAssertTrue(app.staticTexts["暂无相关报修"].waitForExistence(timeout: 5))
+        capture(app, "Fault search empty")
+    }
+
+    func testRepairExpandedMaterialPreview() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "processing"]
+        app.launch()
+        let material = app.staticTexts["深沟球轴承"].firstMatch
+        XCTAssertTrue(material.waitForExistence(timeout: 20))
+        for _ in 0..<4 where !material.isHittable { app.swipeUp() }
+        material.tap()
+        app.swipeUp()
+        capture(app, "Repair expanded material")
+    }
     func testRepairOpensLinkedERPWithMultipleMaterials() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "processing"]
@@ -74,5 +103,7 @@ final class PreviewTests: XCTestCase {
         for _ in 0..<3 where !app.staticTexts["空气滤芯"].isHittable { app.swipeUp() }
         XCTAssertTrue(app.staticTexts["空气滤芯"].exists)
         capture(app, "ERP multiple materials")
+        let material = app.staticTexts["深沟球轴承"].firstMatch
+        if material.isHittable { material.tap(); app.swipeUp(); capture(app, "ERP expanded material") }
     }
 }

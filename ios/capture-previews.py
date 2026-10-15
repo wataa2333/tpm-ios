@@ -20,10 +20,10 @@ print("Capturing on", device["name"], udid, flush=True)
 if device["state"] != "Booted":
     sim("boot", udid)
 sim("bootstatus", udid, "-b")
-subprocess.run(["xcodebuild", "test", "-project", "ios/TPM.xcodeproj", "-scheme", "TPM",
+test_result = subprocess.run(["xcodebuild", "test", "-project", "ios/TPM.xcodeproj", "-scheme", "TPM",
                 "-configuration", "Debug", "-destination", f"platform=iOS Simulator,id={udid}",
                 "-derivedDataPath", "build/simulator", "CODE_SIGNING_ALLOWED=NO",
-                "-resultBundlePath", "build/PreviewTests.xcresult"], check=True)
+                "-resultBundlePath", "build/PreviewTests.xcresult"], check=False)
 sim("status_bar", udid, "override", "--time", "9:41", "--dataNetwork", "wifi",
     "--wifiMode", "active", "--wifiBars", "3", "--batteryState", "charged", "--batteryLevel", "100")
 sim("install", udid, "build/simulator/Build/Products/Debug-iphonesimulator/TPM.app")
@@ -41,6 +41,9 @@ captures += [("11-factories", "light", ["--screen", "factories"])]
 for index, screen in enumerate(["home", "workspace", "profile", "assets", "asset-detail", "stock", "stock-detail", "fault-detail", "working", "verifying", "finished", "repair-pool", "maintenance-pool", "precision-pool"], 12):
     captures.append((f"{index:02d}-{screen}", "light", ["--screen", screen]))
 captures += [("26-processing-dark", "dark", ["--screen", "processing"]), ("27-new-fault-dark", "dark", ["--screen", "new-fault"])]
+for index, screen in enumerate(["login", "asset-picker", "user-picker", "dept-picker", "group-picker", "division-picker", "project-picker", "material-picker", "fault-type-picker", "outbound-material-picker", "repair-result", "order-detail"], 40):
+    captures.append((f"{index:02d}-{screen}", "light", ["--screen", screen]))
+captures += [("52-home-dark", "dark", ["--screen", "home"]), ("53-workspace-dark", "dark", ["--screen", "workspace"]), ("54-erp-form-dark", "dark", ["--screen", "erp-form"])]
 for name, appearance, arguments in captures:
     subprocess.run(["xcrun", "simctl", "terminate", udid, "com.personal.tpm"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -53,3 +56,4 @@ for name, appearance, arguments in captures:
     "device": device["name"], "data": "fictional demo data",
     "capture": "actual iOS simulator; screens launched with DEBUG preview arguments; not an end-to-end flow test",
 }, ensure_ascii=False, indent=2))
+raise SystemExit(test_result.returncode)

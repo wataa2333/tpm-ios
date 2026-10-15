@@ -109,7 +109,7 @@ struct LiveWorkflowList: View {
         }
         .overlay { if loading && rows.isEmpty { ProgressView("正在加载…") } }
         .navigationTitle(kind.title)
-        .searchable(text: $query, prompt: kind == .fault ? "搜索报修名称" : "搜索出库单号")
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: kind == .fault ? "搜索报修名称" : "搜索出库单号")
         .onSubmit(of: .search) { Task { await reload() } }
         .onChange(of: state) { Task { await reload() } }
         .refreshable { await reload() }
@@ -289,7 +289,7 @@ struct LiveCatalogView: View {
         }
         .overlay { if loading { ProgressView("正在加载…") } }
         .navigationTitle(source == .assets ? "资产台账" : "库存")
-        .searchable(text: $query, prompt: byCode ? "搜索编号" : "搜索名称")
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: byCode ? "搜索编号" : "搜索名称")
         .onSubmit(of: .search) { Task { await load() } }
         .onChange(of: byCode) { Task { await load() } }
         .task { await load() }.refreshable { await load() }
