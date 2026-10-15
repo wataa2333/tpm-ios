@@ -5,7 +5,7 @@ permissions:
   contents: read
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -34,9 +34,18 @@ jobs:
           cp -R build/Build/Products/Debug-iphoneos/TPM.app build/package/Payload/
           cd build/package
           zip -qr ../TPM-unsigned.ipa Payload
+      - name: Build and capture simulator previews
+        run: |
+          xcodebuild -project ios/TPM.xcodeproj -scheme TPM -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/simulator CODE_SIGNING_ALLOWED=NO build
+          python3 ios/capture-previews.py
       - uses: actions/upload-artifact@v4
         with:
           name: TPM-unsigned
           path: build/TPM-unsigned.ipa
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iOS-native-screenshots
+          path: build/screenshots/
           retention-days: 3
 

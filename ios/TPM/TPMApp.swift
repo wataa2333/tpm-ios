@@ -3,7 +3,21 @@ import SwiftUI
 @main
 struct TPMApp: App {
     var body: some Scene {
-        WindowGroup { WorkspaceView() }
+        WindowGroup {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--preview-detail") {
+                NavigationStack {
+                    DocumentDetailView(document: Document.examples[0], isCompleted: false, onComplete: {})
+                }
+            } else if ProcessInfo.processInfo.arguments.contains("--preview-processing") {
+                ProcessingView(onComplete: {})
+            } else {
+                WorkspaceView()
+            }
+            #else
+            WorkspaceView()
+            #endif
+        }
     }
 }
 
