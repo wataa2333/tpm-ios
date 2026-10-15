@@ -227,7 +227,15 @@ struct FaultListView: View {
         .navigationTitle("故障报修").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索" + searchField.rawValue)
-        .onAppear { navigation.newDocument = .fault; navigation.hideTabs = false }
+        // Reassert the list chrome whenever a pushed detail/workflow returns.
+        // NavigationStack may keep the list alive during the push, so relying
+        // on the departure of the detail screen can leave the bar hidden or
+        // the keyboard state latched after a nested pop.
+        .onAppear {
+            navigation.newDocument = .fault
+            navigation.keyboardVisible = false
+            navigation.hideTabs = false
+        }
         .onDisappear { if navigation.newDocument == .fault { navigation.newDocument = nil } }
         .sheet(isPresented: $creating) { NavigationStack { NewFaultView() } }
     }
@@ -600,3 +608,4 @@ struct PreviewScreen: View {
 }
 
 #Preview { MainTabs().environmentObject(DemoStore()).environmentObject(LiveSession()).environmentObject(BottomNavigationModel()) }
+
