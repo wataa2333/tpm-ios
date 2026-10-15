@@ -18,19 +18,39 @@ struct WorkOrderCard<Destination: View>: View {
                     if !status.isEmpty { Text(status).font(.subheadline.weight(.medium)).foregroundStyle(color).lineLimit(1) }
                 }
             }.buttonStyle(.plain).navigationLinkIndicatorVisibility(.hidden)
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(reference.isEmpty ? "—" : reference).frame(maxWidth: .infinity, alignment: .leading)
-                Text(time).frame(maxWidth: .infinity, alignment: .trailing)
-            }.font(.subheadline).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
-            DisclosureGroup(isExpanded: $expanded) {
+            Text(reference.isEmpty ? "—" : reference)
+                .font(.subheadline).foregroundStyle(.secondary)
+                .lineLimit(1).truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel(referenceTitle + "：" + reference)
+            HStack(alignment: .center, spacing: 16) {
+                Text(time).font(.subheadline).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    withAnimation(.snappy) { expanded.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(expanded ? "收起详情" : "展开详情")
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .font(.subheadline.weight(.medium)).foregroundStyle(.blue)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(minHeight: 44).contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("order-expand-" + reference)
+                .accessibilityValue(expanded ? "已展开" : "已收起")
+            }
+            if expanded {
                 VStack(spacing: 12) {
                     ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
                         ReadableFact(title: fact.0, value: fact.1)
                     }
                     NavigationLink { destination().modifier(DetailTabVisibility()) } label: { Text("打开工单") }.buttonStyle(.plain).font(.subheadline)
-                }.padding(.top, 12)
-            } label: { Text(expanded ? "收起详情" : "展开详情").font(.subheadline) }
-                .accessibilityIdentifier("order-expand-" + reference)
+                }.padding(.top, 4)
+            }
         }.buttonStyle(.plain).padding(.vertical, 8)
     }
 }
@@ -90,3 +110,4 @@ struct DetailTabVisibility: ViewModifier {
             .onDisappear { navigation.hideTabs = false }
     }
 }
+
