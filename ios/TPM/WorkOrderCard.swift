@@ -26,9 +26,7 @@ struct WorkOrderCard<Destination: View>: View {
                 MarqueeContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(.subheadline).foregroundStyle(.secondary) }
             }
             HStack(alignment: .center, spacing: 16) {
-                Text(time).font(.subheadline).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                MarqueeContent { Text(time).font(.subheadline).foregroundStyle(.secondary) }
                 Button {
                     withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.24)) { expanded.toggle() }
                 } label: {

@@ -12,7 +12,7 @@ struct TPMApp: App {
                 PreviewRouter().modifier(KeyboardTabVisibility())
                     .environment(\.loadingViewport, geometry.frame(in: .global))
                     .environmentObject(store).environmentObject(session).environmentObject(navigation)
-                    .labeledContentStyle(SafeFactsStyle()).lineLimit(1).truncationMode(.tail)
+                    .labeledContentStyle(SafeFactsStyle())
             }
         }
     }

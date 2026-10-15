@@ -180,7 +180,13 @@ struct ReferencePicker: View {
             } else if source == .users && userMode == 1 {
                 ForEach(Array(userGroups.enumerated()), id: \.offset) { _, group in
                     let users = group["users"].array.filter { $0["enabled"] != .bool(false) && (query.isEmpty || group["groupName"].text.localizedCaseInsensitiveContains(query) || ($0["realName"].text + $0["userName"].text).localizedCaseInsensitiveContains(query)) }
-                    if !users.isEmpty { DisclosureGroup(group["groupName"].text) { ForEach(Array(users.enumerated()), id: \.offset) { _, user in Button(user.object.label) { Task { await select(user) } }.lineLimit(1) } } }
+                    if !users.isEmpty {
+                        DisclosureGroup {
+                            ForEach(Array(users.enumerated()), id: \.offset) { _, user in
+                                Button { Task { await select(user) } } label: { MarqueeContent { Text(user.object.label) } }
+                            }
+                        } label: { MarqueeContent { Text(group["groupName"].text) } }
+                    }
                 }
             } else { ForEach(Array(visible.enumerated()), id: \.offset) { _, value in
                 Button { Task { await select(value) } } label: {

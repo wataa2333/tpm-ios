@@ -16,7 +16,7 @@ struct FactorySwitcherButton: View {
     var body: some View {
         Button { presented = true } label: {
             HStack(spacing: 5) {
-                Text(session.currentFactoryName).lineLimit(1)
+                MarqueeContent { Text(session.currentFactoryName) }.frame(maxWidth: 170)
                 Image(systemName: "chevron.up.chevron.down").font(.caption)
             }.font(.subheadline)
         }
@@ -49,7 +49,7 @@ struct FactorySwitchView: View {
                 ForEach(factories, id: \.self) { factory in
                     Button { selection = factory["factoryId"].text } label: {
                         HStack(spacing: 10) {
-                            Text(factory["factoryName"].text).foregroundStyle(.primary)
+                            MarqueeContent { Text(factory["factoryName"].text).foregroundStyle(.primary) }
                             if factory["factoryId"].text == currentID { Text("当前").font(.caption).foregroundStyle(.secondary) }
                             Spacer(minLength: 12)
                             if selection == factory["factoryId"].text { Image(systemName: "checkmark").foregroundStyle(.tint) }
