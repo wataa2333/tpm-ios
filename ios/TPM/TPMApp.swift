@@ -5,8 +5,9 @@ import PhotosUI
 struct TPMApp: App {
     @StateObject private var store = DemoStore()
     @StateObject private var session = LiveSession()
+    @StateObject private var navigation = BottomNavigationModel()
     var body: some Scene {
-        WindowGroup { PreviewRouter().environmentObject(store).environmentObject(session) }
+        WindowGroup { PreviewRouter().environmentObject(store).environmentObject(session).environmentObject(navigation) }
     }
 }
 
@@ -130,6 +131,8 @@ struct MainTabs: View {
             Tab("故障报修", systemImage: "wrench.and.screwdriver", value: 2) { NavigationStack { FaultListView() } }
             Tab("我的", systemImage: "person.crop.circle", value: 3) { NavigationStack { ProfileView() } }
         }
+        .toolbar(.hidden, for: .tabBar)
+        .safeAreaInset(edge: .bottom, spacing: 0) { BottomNavigation(selection: $selection, preview: true) }
     }
 }
 
@@ -190,6 +193,7 @@ struct WorkspaceView: View {
 
 struct FaultListView: View {
     @EnvironmentObject private var store: DemoStore
+    @EnvironmentObject private var navigation: BottomNavigationModel
     @State private var state: FaultState
     @State private var query = ""
     @State private var creating = false
@@ -218,11 +222,8 @@ struct FaultListView: View {
         }
         .navigationTitle("故障报修")
         .searchable(text: $query, prompt: "搜索设备、编号或故障")
-        .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 12) {
-            Button("新建报修", systemImage: "plus") { creating = true }
-                .labelStyle(.iconOnly).font(.title2).buttonStyle(.glassProminent)
-                .buttonBorderShape(.circle).controlSize(.large).padding(.trailing, 20)
-        }
+        .onAppear { navigation.newDocument = .fault }
+        .onDisappear { if navigation.newDocument == .fault { navigation.newDocument = nil } }
         .sheet(isPresented: $creating) { NavigationStack { NewFaultView() } }
     }
 }
@@ -562,4 +563,4 @@ struct PreviewScreen: View {
     }
 }
 
-#Preview { MainTabs().environmentObject(DemoStore()).environmentObject(LiveSession()) }
+#Preview { MainTabs().environmentObject(DemoStore()).environmentObject(LiveSession()).environmentObject(BottomNavigationModel()) }

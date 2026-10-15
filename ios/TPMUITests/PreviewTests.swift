@@ -2,6 +2,23 @@ import XCTest
 
 @MainActor
 final class PreviewTests: XCTestCase {
+    func testRepairOpensLinkedERPWithMultipleMaterials() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "processing"]
+        app.launch()
+        XCTAssertTrue(app.buttons["新建出库单"].waitForExistence(timeout: 20))
+        capture(app, "Repair form top")
+        for _ in 0..<3 where !app.buttons["新建出库单"].isHittable { app.swipeUp() }
+        capture(app, "Repair ERP entry")
+        app.buttons["新建出库单"].tap()
+        XCTAssertTrue(app.navigationBars["ERP 出库"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["BX-DEMO-001"].exists)
+        capture(app, "Repair linked ERP form")
+        for _ in 0..<4 where !app.staticTexts["空气滤芯"].isHittable { app.swipeUp() }
+        XCTAssertTrue(app.staticTexts["申请数量：2 个"].exists)
+        XCTAssertTrue(app.staticTexts["申请数量：1 件"].exists)
+        capture(app, "Repair linked ERP materials")
+    }
     func testFactorySelectionRequiresDifferentFactory() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "factories"]
@@ -42,7 +59,9 @@ final class PreviewTests: XCTestCase {
         app.launch()
         let add = app.buttons["新建报修"]
         XCTAssertTrue(add.waitForExistence(timeout: 20))
-        XCTAssertLessThanOrEqual(add.frame.maxY, app.tabBars.firstMatch.frame.minY)
+        let mine = app.buttons["我的"].firstMatch
+        XCTAssertLessThan(abs(add.frame.midY - mine.frame.midY), 10)
+        XCTAssertGreaterThan(add.frame.minX, mine.frame.maxX)
     }
 
     func testERPFormRendersAndKeepsTwoMaterials() {

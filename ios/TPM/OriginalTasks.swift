@@ -31,17 +31,22 @@ struct OriginalRepairForm: View {
                 Button { choosingAssistants = true } label: { LabeledContent("辅助维修人", value: (data["repairUsers"]?.array ?? []).map { $0["realName"].text }.joined(separator: "、")) }
             } header: { RequiredFormHeader(title: "维修任务信息") }
             Section("ERP 出库") {
-                Button("新建出库单", systemImage: "plus") { creatingERP = true }.disabled(preview)
+                Button("新建出库单", systemImage: "plus") { creatingERP = true }
                 Button("添加出库物料", systemImage: "shippingbox") { choosing = true }.disabled(preview)
                 ForEach(Array((data["erpRepairMaterials"]?.array ?? []).enumerated()), id: \.offset) { index, row in
-                    DisclosureGroup(row["material"]["materialDesc"].text) {
+                    DisclosureGroup {
                         LabeledContent("出库单号", value: row["outbound"]["outNumber"].text)
                         LabeledContent("领用人", value: row["outbound"]["recipientUser"]["realName"].text)
-                        LabeledContent("申请数量", value: row["materialOutbound"]["entryQuantity"].text)
-                        LabeledContent("实发数量", value: row["materialOutbound"]["actualQuantity"].text)
-                        LabeledContent("剩余数量", value: String(row["materialOutbound"]["actualQuantity"].number - row["materialOutbound"]["usedQuantity"].number))
-                        HStack { RequiredLabel(title: "使用数量"); Spacer(); TextField("数量", value: useQuantity(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
+                        LabeledContent("申请数量", value: materialQuantity(row["materialOutbound"]["entryQuantity"].text, material: row["material"]))
+                        LabeledContent("实发数量", value: materialQuantity(row["materialOutbound"]["actualQuantity"].text, material: row["material"]))
+                        LabeledContent("剩余数量", value: materialQuantity(String(row["materialOutbound"]["actualQuantity"].number - row["materialOutbound"]["usedQuantity"].number), material: row["material"]))
+                        HStack { RequiredLabel(title: "使用数量"); Spacer(); TextField("数量", value: useQuantity(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text(materialUnit(row["material"])).foregroundStyle(.secondary) }
                         Button("删除明细", role: .destructive) { var rows = data["erpRepairMaterials"]?.array ?? []; rows.remove(at: index); data["erpRepairMaterials"] = .array(rows) }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(row["material"]["materialDesc"].text)
+                            Text("使用数量：\(materialQuantity(row["useNum"].text, material: row["material"]))").font(.subheadline).foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
@@ -72,18 +77,21 @@ struct OriginalRepairForm: View {
             } }
         }
         .sheet(isPresented: $creatingERP) {
-            NavigationStack { OriginalERPForm(referenceSn: data.text("assetFault.sn")) { result in Task {
+            NavigationStack { OriginalERPForm(referenceSn: data.text("assetFault.sn"), preview: preview) { result in Task {
                 do { let rows = try await session.request("erpOutbound/getErpMaterialOutboundsByOutboundId", query: ["outboundId": result["outboundId"].text]); for row in rows.array { addMaterial(row, allowUnissued: true) } }
                 catch { self.error = error.localizedDescription }
             } } }
         }
         .sheet(isPresented: $workflow, onDismiss: { Task { await load() } }) { NavigationStack { WorkflowTaskView(task: task, kind: .fault, onCompleted: { dismiss() }) } }
         .confirmationDialog(submitAfterSave ? "保存维修结果并继续提交审批？" : "保存维修结果到原系统？", isPresented: $confirming, titleVisibility: .visible) { Button(submitAfterSave ? "继续" : "保存") { Task { await save() } } }
-        .alert("请检查表单", isPresented: $showValidation) { Button("好", role: .cancel) {} } message: { Text(error ?? "") }
+        .alert("请检查表单", isPresented: $showValidation) { Button("好", role: .cancel) { error = nil } } message: { Text(error ?? "") }
     }
     private func load() async {
         loading = true; error = nil; defer { loading = false }
-        if preview { data = ["startTime": .string("2026-10-15 09:30"), "endTime": .string("2026-10-15 10:30"), "albums": .array([]), "erpRepairMaterials": .array([])]; return }
+        if preview {
+            data = ["startTime": .string("2026-10-15 09:30"), "endTime": .string("2026-10-15 10:30"), "albums": .array([]), "erpRepairMaterials": .array(PreviewBusinessData.repairMaterials), "assetFault": .object(["sn": .string("BX-DEMO-001")]), "faultType": .object(["typeName": .string("示例故障类型")])]
+            return
+        }
         do {
             let repair = try await session.request("fault/getLatestRepairByFaultId", query: ["faultId": faultID])
             data = repair.object
@@ -169,13 +177,13 @@ struct WorkflowTaskView: View {
                     ForEach(Array(materials.enumerated()), id: \.offset) { index, line in
                         DisclosureGroup(line["material"]["materialDesc"].text) {
                             MaterialFacts(material: line["material"])
-                            LabeledContent("申请数量", value: line["entryQuantity"].text)
-                            HStack { RequiredLabel(title: "实发数量"); Spacer(); TextField("数量", value: actual(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
+                            LabeledContent("申请数量", value: materialQuantity(line["entryQuantity"].text, material: line["material"]))
+                            HStack { RequiredLabel(title: "实发数量"); Spacer(); TextField("数量", value: actual(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text(materialUnit(line["material"])).foregroundStyle(.secondary) }
                         }
                     }
                 }
             }
-            if condition == "agree" { Section("审批人") {
+            if condition == "agree" && (assignmentsLoading || !assignments.assignees.isEmpty) { Section("审批人") {
                 if assignmentsLoading { ProgressView("正在加载审批人…") }
                 AssigneesFields(elements: assignments.assignees, selections: $assignments.selections)
             } }

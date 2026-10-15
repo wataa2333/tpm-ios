@@ -38,6 +38,9 @@ captures = [(f"{index:02d}-{screen}", "light", ["--screen", screen])
             for index, screen in enumerate(screens, 1)]
 captures += [("07-faults-dark", "dark", ["--screen", "faults"])]
 captures += [("11-factories", "light", ["--screen", "factories"])]
+for index, screen in enumerate(["home", "workspace", "profile", "assets", "asset-detail", "stock", "stock-detail", "fault-detail", "working", "verifying", "finished", "repair-pool", "maintenance-pool", "precision-pool"], 12):
+    captures.append((f"{index:02d}-{screen}", "light", ["--screen", screen]))
+captures += [("26-processing-dark", "dark", ["--screen", "processing"]), ("27-new-fault-dark", "dark", ["--screen", "new-fault"])]
 for name, appearance, arguments in captures:
     subprocess.run(["xcrun", "simctl", "terminate", udid, "com.personal.tpm"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

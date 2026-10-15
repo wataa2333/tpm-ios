@@ -15,9 +15,10 @@ struct AuthenticatedRoot: View {
 }
 struct LiveTabs: View {
     @EnvironmentObject private var session: LiveSession
+    @State private var selection = 0
     var body: some View {
-        TabView {
-            Tab("主页", systemImage: "house") {
+        TabView(selection: $selection) {
+            Tab("主页", systemImage: "house", value: 0) {
                 NavigationStack {
                     List {
                         NavigationLink("待受理") { LiveWorkflowList(kind: .fault, initialState: "REPORTED") }
@@ -30,7 +31,7 @@ struct LiveTabs: View {
                         .toolbar { ToolbarItem(placement: .topBarTrailing) { FactorySwitcherButton() } }
                 }
             }
-            Tab("工作台", systemImage: "square.grid.2x2") {
+            Tab("工作台", systemImage: "square.grid.2x2", value: 1) {
                 NavigationStack {
                     List {
                         Section("资产管理") { NavigationLink("资产台账") { LiveCatalogView(source: .assets) } }
@@ -41,8 +42,8 @@ struct LiveTabs: View {
                     }.navigationTitle("工作台")
                 }
             }
-            Tab("故障报修", systemImage: "wrench.and.screwdriver") { NavigationStack { LiveWorkflowList(kind: .fault) } }
-            Tab("我的", systemImage: "person.crop.circle") {
+            Tab("故障报修", systemImage: "wrench.and.screwdriver", value: 2) { NavigationStack { LiveWorkflowList(kind: .fault) } }
+            Tab("我的", systemImage: "person.crop.circle", value: 3) {
                 NavigationStack {
                     List {
                         Section { LabeledContent("账号", value: session.authentication.text("name")); LabeledContent("姓名", value: session.authentication.text("fullName")) }
@@ -52,11 +53,14 @@ struct LiveTabs: View {
                 }
             }
         }
+        .toolbar(.hidden, for: .tabBar)
+        .safeAreaInset(edge: .bottom, spacing: 0) { BottomNavigation(selection: $selection) }
     }
 }
 
 struct LiveWorkflowList: View {
     @EnvironmentObject private var session: LiveSession
+    @EnvironmentObject private var navigation: BottomNavigationModel
     let kind: WorkflowKind
     @State private var state: String
     @State private var rows: [JSONValue] = []
@@ -109,7 +113,9 @@ struct LiveWorkflowList: View {
         .onSubmit(of: .search) { Task { await reload() } }
         .onChange(of: state) { Task { await reload() } }
         .refreshable { await reload() }
-        .task { await reload() }
+        .task(id: navigation.refresh) { await reload() }
+        .onAppear { navigation.newDocument = kind }
+        .onDisappear { if navigation.newDocument == kind { navigation.newDocument = nil } }
         .toolbar {
             if kind == .fault {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -118,12 +124,6 @@ struct LiveWorkflowList: View {
                     }
                 }
             }
-        }
-        .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 12) {
-            Button("新建", systemImage: "plus") { adding = true }
-                .labelStyle(.iconOnly).font(.title2).buttonStyle(.glassProminent)
-                .buttonBorderShape(.circle).controlSize(.large).padding(.trailing, 20)
-                .accessibilityLabel(kind == .fault ? "新建报修" : "新建领料单")
         }
         .sheet(isPresented: $adding, onDismiss: { Task { await reload() } }) {
             NavigationStack { if kind == .fault { OriginalFaultForm() } else { OriginalERPForm() } }
@@ -189,8 +189,8 @@ struct LiveWorkflowDetail: View {
                             ForEach(Array(materials.enumerated()), id: \.offset) { _, line in
                                 DisclosureGroup(line["material"]["materialDesc"].text) {
                                     MaterialFacts(material: line["material"])
-                                    LabeledContent("申请数量", value: line["entryQuantity"].text)
-                                    LabeledContent("实发数量", value: line["actualQuantity"].text)
+                                    LabeledContent("申请数量", value: materialQuantity(line["entryQuantity"].text, material: line["material"]))
+                                    LabeledContent("实发数量", value: materialQuantity(line["actualQuantity"].text, material: line["material"]))
                                 }
                             }
                         }
@@ -279,7 +279,7 @@ struct LiveCatalogView: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, record in
                 NavigationLink {
                     if source == .assets { LiveRecordFacts(record: record, title: "资产详情", fields: assetFields) }
-                    else { List { Section(record["materialDesc"].text) { MaterialFacts(material: record); LabeledContent("库存数量", value: record["onhandQty"].text) } }.navigationTitle("库存详情") }
+                    else { List { Section(record["materialDesc"].text) { MaterialFacts(material: record); LabeledContent("库存数量", value: materialQuantity(record["onhandQty"].text, material: record)) } }.navigationTitle("库存详情") }
                 } label: { VStack(alignment: .leading, spacing: 5) { Text(record.object.label).font(.headline); Text(record[source == .assets ? "assetCode" : "materialCode"].text).font(.subheadline).foregroundStyle(.secondary) } }
                 .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }

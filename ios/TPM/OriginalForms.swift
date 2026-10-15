@@ -199,8 +199,8 @@ struct ReferencePicker: View {
         source == .outboundMaterials ? value["material"].object.label : value.object.label
     }
     private func subtitle(_ v: JSONValue) -> String {
-        if source == .materials { return [v["materialCode"].text, "库存 \(v["onhandQty"].text)", v["lot"].text, v["subInv"].text, v["locatorCode"].text].filter { !$0.isEmpty }.joined(separator: " · ") }
-        if source == .outboundMaterials { return [v["outbound"]["outNumber"].text, v["material"]["materialCode"].text, "可用 \(v["actualQuantity"].number-v["usedQuantity"].number)"].joined(separator: " · ") }
+        if source == .materials { return [v["materialCode"].text, "库存 \(materialQuantity(v["onhandQty"].text, material: v))", v["lot"].text, v["subInv"].text, v["locatorCode"].text].filter { !$0.isEmpty }.joined(separator: " · ") }
+        if source == .outboundMaterials { return [v["outbound"]["outNumber"].text, v["material"]["materialCode"].text, "可用 \(materialQuantity(String(v["actualQuantity"].number-v["usedQuantity"].number), material: v["material"]))"].joined(separator: " · ") }
         return [v["assetCode"].text, v["addressCode"].text, v["userName"].text, v["projectCode"].text, v["divisionName"].text].filter { !$0.isEmpty }.joined(separator: " · ")
     }
     private func select(_ value: JSONValue) async {
@@ -279,10 +279,7 @@ struct RequiredFieldsNotice: View {
 struct RequiredFormHeader: View {
     let title: String
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            RequiredFieldsNotice().textCase(nil)
-            Text(title)
-        }
+        HStack { Text(title); Spacer(); RequiredFieldsNotice().textCase(nil) }
     }
 }
 
@@ -378,7 +375,9 @@ struct OriginalFaultForm: View {
                 ReferenceField(title: "维修班组", source: .groups, value: field("userGroup"), required: true)
                 ReferenceField(title: "ERP记账部门", source: .divisions, value: field("division"), required: true)
             }
-            Section("审批人") { AssigneesFields(elements: model.assignees, selections: $model.selections) }
+            if model.assignees.contains(where: { ["ASSIGN", "SUPERVISOR"].contains($0.text("assignType")) }) {
+                Section("审批人") { AssigneesFields(elements: model.assignees, selections: $model.selections) }
+            }
             Section("故障描述") { TextField("请输入故障描述", text: text("faultDesc"), axis: .vertical).lineLimit(3...6).onChange(of: model.data.text("faultDesc")) { _, value in if value.count > 255 { model.data["faultDesc"] = .string(String(value.prefix(255))) } } }
             Section("现场照片") { OriginalPhotosField(albums: field("albums"), directory: "asset_fault", preview: preview, uploading: $photoUploading) }
             if let error = model.error { Section { Text(error).foregroundStyle(.red); if !model.ready && !model.loading { Button("重新加载") { Task { await model.load(session, existing: existing) } } } } }
@@ -402,7 +401,7 @@ struct OriginalFaultForm: View {
         .confirmationDialog(confirming == true ? "提交报修单到原系统？" : "保存报修单到原系统？", isPresented: $showConfirmation, titleVisibility: .visible) {
             Button(confirming == true ? "提交" : "保存") { Task { await save() } }
         }
-        .alert("请检查表单", isPresented: $showValidation) { Button("好", role: .cancel) {} } message: { Text(model.error ?? "") }
+        .alert("请检查表单", isPresented: $showValidation) { Button("好", role: .cancel) { model.error = nil } } message: { Text(model.error ?? "") }
     }
     private func prepare(_ committed: Bool) {
         if let error = model.validationError() { model.error = error; showValidation = true; return }
@@ -494,16 +493,22 @@ struct OriginalERPForm: View {
                 ForEach(Array((model.data["erpMaterialOutbounds"]?.array ?? []).enumerated()), id: \.offset) { index, line in
                     DisclosureGroup {
                         MaterialFacts(material: line["material"])
-                        LabeledContent("库存数量", value: line["material"]["onhandQty"].text)
-                        HStack { RequiredLabel(title: "申请数量"); Spacer(); TextField("数量", value: quantity(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(minWidth: 70) }
+                        LabeledContent("库存数量", value: materialQuantity(line["material"]["onhandQty"].text, material: line["material"]))
+                        HStack { RequiredLabel(title: "申请数量"); Spacer(); TextField("数量", value: quantity(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(minWidth: 70); Text(materialUnit(line["material"])).foregroundStyle(.secondary) }
                         Button("删除明细", role: .destructive) { var rows = model.data["erpMaterialOutbounds"]?.array ?? []; rows.remove(at: index); model.data["erpMaterialOutbounds"] = .array(rows) }
                     } label: {
-                        VStack(alignment: .leading, spacing: 5) { Text(line["material"]["materialDesc"].text); Text("\(line["material"]["materialCode"].text) · \(line["entryQuantity"].text) \(line["material"]["uom"]["uomDesc"].text)").font(.caption).foregroundStyle(.secondary) }
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(line["material"]["materialDesc"].text)
+                            Text(line["material"]["materialCode"].text).font(.caption).foregroundStyle(.secondary)
+                            Text("申请数量：\(materialQuantity(line["entryQuantity"].text, material: line["material"]))").font(.subheadline).foregroundStyle(.secondary)
+                        }
                     }
                 }
             } header: { RequiredLabel(title: "出库物料 · \(model.data["erpMaterialOutbounds"]?.array.count ?? 0) 项") }
             Section { TextField("请输入用途", text: text("remark"), axis: .vertical).lineLimit(3...6) } header: { RequiredLabel(title: "用途") }
-            Section("审批人") { AssigneesFields(elements: model.assignees, selections: $model.selections) }
+            if model.assignees.contains(where: { ["ASSIGN", "SUPERVISOR"].contains($0.text("assignType")) }) {
+                Section("审批人") { AssigneesFields(elements: model.assignees, selections: $model.selections) }
+            }
             if let error = model.error { Section { Text(error).foregroundStyle(.red); if !model.ready && !model.loading { Button("重试") { Task { await model.load(session, existing: existing, referenceSn: referenceSn) } } } } }
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
         }
@@ -525,13 +530,15 @@ struct OriginalERPForm: View {
                 model.data = ["applyDate": .string("2026-10-15"), "outboundTime": .string("2026-10-15 09:30"), "erpMaterialOutbounds": .array([
                     .object(["material": .object(["id": .number(1), "materialCode": .string("WL-10028"), "materialDesc": .string("深沟球轴承"), "onhandQty": .number(24), "lot": .string("LOT-01"), "subInv": .string("备件仓")]), "entryQuantity": .number(2)]),
                     .object(["material": .object(["id": .number(2), "materialCode": .string("WL-10046"), "materialDesc": .string("空气滤芯"), "onhandQty": .number(8), "lot": .string("LOT-02"), "subInv": .string("备件仓")]), "entryQuantity": .number(1)])])]
+                model.data["erpMaterialOutbounds"] = .array(PreviewBusinessData.erpLines)
+                if let referenceSn { model.data["referenceSn"] = .string(referenceSn) }
             } else {
                 await model.load(session, existing: existing, referenceSn: referenceSn)
                 if let existing { model.data["project"] = .object(["projectCode": existing["projectCode"] ?? .null, "projectName": existing["projectDesc"] ?? .null]) }
             }
         }
         .confirmationDialog(committed ? "提交 ERP 领料单到原系统？" : "保存 ERP 领料单到原系统？", isPresented: $confirming, titleVisibility: .visible) { Button(committed ? "提交" : "保存") { Task { await save() } } }
-        .alert("请检查表单", isPresented: $showValidation) { Button("好", role: .cancel) {} } message: { Text(model.error ?? "") }
+        .alert("请检查表单", isPresented: $showValidation) { Button("好", role: .cancel) { model.error = nil } } message: { Text(model.error ?? "") }
     }
     private func prepare(_ value: Bool) { if let error = model.validationError() { model.error = error; showValidation = true; return }; committed = value; confirming = true }
     private func save() async {
@@ -571,7 +578,6 @@ struct DocumentActions: View {
         }
         .disabled(busy || disabled)
         .padding(.horizontal, 20).padding(.vertical, 12)
-        .background(.bar)
     }
 }
 
@@ -584,6 +590,33 @@ struct MaterialFacts: View {
         LabeledContent("子库", value: material["subInv"].text)
         LabeledContent("货位名称", value: material["locatorCode"].text)
         LabeledContent("货位描述", value: material["locatorDesc"].text)
-        LabeledContent("单位", value: material["uom"]["uomDesc"].text)
+        LabeledContent("单位", value: materialUnit(material))
+    }
+}
+
+func materialUnit(_ material: JSONValue) -> String {
+    for path in ["uom.uomDesc", "uom.uomCode", "uomDesc", "uomCode"] {
+        let unit = material.at(path).text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !unit.isEmpty { return unit }
+    }
+    return "PCS"
+}
+
+func materialQuantity(_ quantity: String, material: JSONValue) -> String {
+    quantity + " " + materialUnit(material)
+}
+
+enum PreviewBusinessData {
+    static let erpLines: [JSONValue] = [
+        .object(["material": .object(["id": .number(1), "materialCode": .string("WL-10028"), "materialDesc": .string("深沟球轴承"), "onhandQty": .number(24), "uom": .object(["uomDesc": .string("个")]), "lot": .string("LOT-01"), "subInv": .string("备件仓")]), "entryQuantity": .number(2)]),
+        .object(["material": .object(["id": .number(2), "materialCode": .string("WL-10046"), "materialDesc": .string("空气滤芯"), "onhandQty": .number(8), "uom": .object(["uomDesc": .string("件")]), "lot": .string("LOT-02"), "subInv": .string("备件仓")]), "entryQuantity": .number(1)])
+    ]
+    static var repairMaterials: [JSONValue] {
+        erpLines.map { line in
+            var outboundLine = line.object
+            outboundLine["actualQuantity"] = line["entryQuantity"]
+            outboundLine["usedQuantity"] = .number(0)
+            return .object(["material": line["material"], "materialOutbound": .object(outboundLine), "outbound": .object(["outNumber": .string("CK-DEMO-001"), "recipientUser": .object(["realName": .string("示例维修人")])]), "useNum": line["entryQuantity"]])
+        }
     }
 }

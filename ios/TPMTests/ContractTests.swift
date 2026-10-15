@@ -36,3 +36,9 @@ import Foundation
     #expect(roundTrip == record)
     #expect(roundTrip["material"]["id"].text == "12345")
 }
+
+@Test func missingMaterialUnitUsesPCSAndExistingUnitIsKept() {
+    #expect(materialUnit(.object([:])) == "PCS")
+    #expect(materialUnit(.object(["uom": .object(["uomDesc": .string("米")])])) == "米")
+    #expect(materialQuantity("2", material: .object([:])) == "2 PCS")
+}
