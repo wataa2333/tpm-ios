@@ -23,7 +23,7 @@ sim("bootstatus", udid, "-b")
 subprocess.run(["xcodebuild", "test", "-project", "ios/TPM.xcodeproj", "-scheme", "TPM",
                 "-configuration", "Debug", "-destination", f"platform=iOS Simulator,id={udid}",
                 "-derivedDataPath", "build/simulator", "CODE_SIGNING_ALLOWED=NO",
-                "-only-testing:TPMTests"], check=True)
+                "-resultBundlePath", "build/PreviewTests.xcresult"], check=True)
 sim("status_bar", udid, "override", "--time", "9:41", "--dataNetwork", "wifi",
     "--wifiMode", "active", "--wifiBars", "3", "--batteryState", "charged", "--batteryLevel", "100")
 sim("install", udid, "build/simulator/Build/Products/Debug-iphonesimulator/TPM.app")
@@ -41,7 +41,7 @@ for name, appearance, arguments in captures:
     sim("ui", udid, "appearance", appearance)
     sim("launch", udid, "com.personal.tpm", *arguments,
         "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN")
-    time.sleep(3)
+    time.sleep(5)
     sim("io", udid, "screenshot", str(output / f"{name}.png"))
 (output / "capture-info.json").write_text(json.dumps({
     "device": device["name"], "data": "fictional demo data",

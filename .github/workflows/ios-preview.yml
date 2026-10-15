@@ -49,4 +49,18 @@ jobs:
           name: iOS-native-screenshots
           path: build/screenshots/
           retention-days: 3
+      - name: Collect simulator diagnostics
+        if: failure()
+        run: |
+          mkdir -p build/diagnostics
+          cp ~/Library/Logs/DiagnosticReports/TPM* build/diagnostics/ 2>/dev/null || true
+          xcrun simctl spawn booted log show --last 10m --style compact --predicate 'process == "TPM"' > build/diagnostics/simulator.log || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iOS-test-results
+          path: |
+            build/PreviewTests.xcresult
+            build/diagnostics/
+          retention-days: 3
 

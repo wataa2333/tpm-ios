@@ -214,11 +214,10 @@ struct FaultListView: View {
         }
         .navigationTitle("故障报修")
         .searchable(text: $query, prompt: "搜索设备、编号或故障")
-        .toolbar {
-            ToolbarSpacer(.flexible, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) {
-                Button("新建报修", systemImage: "plus") { creating = true }.labelStyle(.iconOnly).buttonStyle(.glassProminent)
-            }
+        .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 12) {
+            Button("新建报修", systemImage: "plus") { creating = true }
+                .labelStyle(.iconOnly).font(.title2).buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle).controlSize(.large).padding(.trailing, 20)
         }
         .sheet(isPresented: $creating) { NavigationStack { NewFaultView() } }
     }

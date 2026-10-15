@@ -104,8 +104,12 @@ struct LiveWorkflowList: View {
                     }
                 }
             }
-            ToolbarSpacer(.flexible, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) { Button("新建", systemImage: "plus") { adding = true }.labelStyle(.iconOnly).buttonStyle(.glassProminent).accessibilityLabel(kind == .fault ? "新建报修" : "新建领料单") }
+        }
+        .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 12) {
+            Button("新建", systemImage: "plus") { adding = true }
+                .labelStyle(.iconOnly).font(.title2).buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle).controlSize(.large).padding(.trailing, 20)
+                .accessibilityLabel(kind == .fault ? "新建报修" : "新建领料单")
         }
         .sheet(isPresented: $adding, onDismiss: { Task { await reload() } }) {
             NavigationStack { if kind == .fault { OriginalFaultForm() } else { OriginalERPForm() } }
@@ -344,4 +348,3 @@ struct WorkflowNodesView: View {
         } catch { self.error = error.localizedDescription }
     }
 }
-

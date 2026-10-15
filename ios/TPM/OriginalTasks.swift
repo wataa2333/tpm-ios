@@ -100,7 +100,9 @@ struct OriginalRepairForm: View {
     private func prepare(_ submit: Bool) {
         guard data["faultType"] != nil, data["faultType"] != .null else { error = "请选择故障类型"; return }
         if data.text("content").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { error = "请输入说明"; return }
+        if (data["spend"]?.number ?? 0) < 0 || (data["spend"]?.number ?? 0) > 1e18 { error = "维修花费超出允许范围"; return }
         if parsedDate(data["startTime"] ?? .null) > parsedDate(data["endTime"] ?? .null) { error = "开始时间不能晚于结束时间"; return }
+        if parsedDate(data["startTime"] ?? .null) > Date() || parsedDate(data["endTime"] ?? .null) > Date() { error = "维修时间不能晚于当前时间"; return }
         for line in data["erpRepairMaterials"]?.array ?? [] {
             if line["useNum"].number < 1 || line["useNum"].number > line["materialOutbound"]["actualQuantity"].number - line["materialOutbound"]["usedQuantity"].number { error = "使用数量超出可用范围"; return }
         }
@@ -134,6 +136,10 @@ struct WorkflowTaskView: View {
     @State private var confirming = false
     @State private var error: String?
     @State private var handoff: String?
+    @State private var ready = false
+    @State private var assignmentsReady = false
+    @State private var assignmentsLoading = false
+    @State private var assignmentRequest = UUID()
     private var needsFaultData: Bool { kind == .fault && ["REPORTED", "RECEIVED"].contains(task["category"].text) }
     private var needsERPData: Bool { kind == .erp && ["EXECUTING", "CONFIRM"].contains(task["category"].text) }
     private func field(_ key: String) -> Binding<JSONValue> { Binding(get: { taskData[key] ?? .null }, set: { taskData[key] = $0 }) }
@@ -164,7 +170,10 @@ struct WorkflowTaskView: View {
                     }
                 }
             }
-            if condition == "agree" { Section("审批人") { AssigneesFields(elements: assignments.assignees, selections: $assignments.selections) } }
+            if condition == "agree" { Section("审批人") {
+                if assignmentsLoading { ProgressView("正在加载审批人…") }
+                AssigneesFields(elements: assignments.assignees, selections: $assignments.selections)
+            } }
             Section("意见") { TextField("请输入意见", text: $comment, axis: .vertical).lineLimit(3...8).onChange(of: comment) { _, value in if value.count > 255 { comment = String(value.prefix(255)) } } }
             if let error { Section { Text(error).foregroundStyle(.red); Button("重新加载") { Task { await load() } } } }
         }
@@ -182,17 +191,20 @@ struct WorkflowTaskView: View {
                 }
             }
             ToolbarSpacer(.flexible, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) { Button { confirming = true } label: { HStack { if submitting { ProgressView() }; Text("提交") } }.buttonStyle(.glassProminent).disabled(!state["canSubmit"].bool || loading || submitting || condition.isEmpty) }
+            ToolbarItem(placement: .bottomBar) { Button { confirming = true } label: { HStack { if submitting { ProgressView() }; Text("提交") } }.buttonStyle(.glassProminent).disabled(!state["canSubmit"].bool || !ready || !assignmentsReady || assignmentsLoading || loading || submitting || condition.isEmpty) }
         }
         .task { await load() }
-        .onChange(of: condition) { _, _ in Task { await loadAssignments() } }
+        .onChange(of: condition) { _, _ in
+            assignmentsReady = false
+            Task { await loadAssignments() }
+        }
         .confirmationDialog("提交当前流程节点？", isPresented: $confirming, titleVisibility: .visible) { Button("提交") { Task { await submit() } } }
         .sheet(isPresented: Binding(get: { handoff != nil }, set: { if !$0 { handoff = nil } })) {
             NavigationStack { TaskHandoffView(taskID: state["taskId"].text, operation: handoff ?? "transfer") { onCompleted?(); dismiss() } }
         }
     }
     private func load() async {
-        loading = true; error = nil; defer { loading = false }
+        loading = true; ready = false; assignmentsReady = false; error = nil; defer { loading = false }
         do {
             state = try await session.request("workflow/getWorkflowTaskState", query: ["processInstanceId": task["processInstanceId"].text])
             let form = try await session.request("workflow/getFormPropertiesConditionsByTaskId", query: ["taskId": task["id"].text])
@@ -204,17 +216,24 @@ struct WorkflowTaskView: View {
             }
             if needsERPData { materials = try await session.request("erpOutbound/getErpMaterialOutboundsByOutboundId", query: ["outboundId": task["businessKey"].text]).array }
             try await fetchAssignments()
+            ready = true
         } catch { self.error = error.localizedDescription }
     }
     private func fetchAssignments() async throws {
-        guard condition == "agree" else { assignments.assignees = []; assignments.selections = [:]; return }
+        let request = UUID(); assignmentRequest = request
+        assignmentsLoading = true; assignmentsReady = false
+        defer { if assignmentRequest == request { assignmentsLoading = false } }
+        guard condition == "agree" else { assignments.assignees = []; assignments.selections = [:]; assignmentsReady = true; return }
         let values = try await session.request("workflow/getAssigneeElementsByProcessCategory", query: ["processCategory": kind.rawValue, "processInstanceId": task["processInstanceId"].text, "taskKey": task["taskDefinitionKey"].text])
+        guard assignmentRequest == request, condition == "agree" else { return }
         assignments.assignees = values.array.map(\.object)
+        assignments.selections = [:]
         for node in assignments.assignees { assignments.selections[node.text("variableName")] = usernames(node["assignees"] ?? .null) }
+        assignmentsReady = true
     }
     private func loadAssignments() async { do { try await fetchAssignments() } catch { self.error = error.localizedDescription } }
     private func submit() async {
-        guard !submitting, state["canSubmit"].bool else { return }
+        guard !submitting, ready, assignmentsReady, !assignmentsLoading, state["canSubmit"].bool else { return }
         submitting = true; error = nil; defer { submitting = false }
         do {
             if condition == "agree" {
@@ -225,7 +244,7 @@ struct WorkflowTaskView: View {
             }
             var payload: Fields = ["taskId": task["id"], "processInstanceId": task["processInstanceId"], "condition": .string(condition), "comment": .string(comment), "taskData": .null]
             if condition == "agree" { payload["assignees"] = assignments.payload(committed: true)["assignees"] }
-            if needsFaultData {
+            if needsFaultData && ["agree", "assign", "appoint"].contains(condition) {
                 if ["assign", "appoint"].contains(condition) {
                     guard !taskData.text("assignUser.userName").isEmpty else { throw APIError(message: "请选择维修人员") }
                     taskData["assignUserName"] = taskData.value("assignUser.userName")
@@ -281,4 +300,3 @@ struct TaskHandoffView: View {
         } catch { self.error = error.localizedDescription }
     }
 }
-

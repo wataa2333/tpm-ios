@@ -5,8 +5,9 @@ schemes:
       targets:
         TPM: all
         TPMTests: [test]
+        TPMUITests: [test]
     test:
-      targets: [TPMTests]
+      targets: [TPMTests, TPMUITests]
 options:
   bundleIdPrefix: com.personal
   deploymentTarget:
@@ -39,6 +40,16 @@ targets:
     type: bundle.unit-test
     platform: iOS
     sources: [TPMTests]
+    dependencies:
+      - target: TPM
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: '6.0'
+  TPMUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [TPMUITests]
     dependencies:
       - target: TPM
     settings:
