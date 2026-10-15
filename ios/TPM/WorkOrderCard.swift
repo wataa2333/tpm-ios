@@ -15,21 +15,15 @@ struct WorkOrderCard<Destination: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             NavigationLink { destination().modifier(DetailTabVisibility()) } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(title).font(.headline).foregroundStyle(.primary).lineLimit(1).truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading)
+                HStack(alignment: .center, spacing: 12) {
+                    MarqueeContent { Text(title).font(.headline).foregroundStyle(.primary) }
                     if !status.isEmpty { Text(status).font(.subheadline.weight(.medium)).foregroundStyle(color).lineLimit(1) }
                 }
             }.buttonStyle(.plain).navigationLinkIndicatorVisibility(.hidden)
-            Text(reference.isEmpty ? "—" : reference)
-                .font(.subheadline).foregroundStyle(.secondary)
-                .lineLimit(1).truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            MarqueeContent { Text(reference.isEmpty ? "—" : reference).font(.subheadline).foregroundStyle(.secondary) }
                 .accessibilityLabel(referenceTitle + "：" + reference)
             ForEach(Array(summaryFacts.enumerated()), id: \.offset) { _, fact in
-                Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1))
-                    .font(.subheadline).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                MarqueeContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(.subheadline).foregroundStyle(.secondary) }
             }
             HStack(alignment: .center, spacing: 16) {
                 Text(time).font(.subheadline).foregroundStyle(.secondary)
@@ -70,10 +64,10 @@ struct ReadableFact: View {
     let value: String
     @State private var shown = false
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 16) {
+        HStack(alignment: .center, spacing: 16) {
             Text(title).foregroundStyle(.secondary).lineLimit(1)
             Spacer(minLength: 0)
-            Text(value.isEmpty ? "—" : value).lineLimit(1).truncationMode(.tail).multilineTextAlignment(.trailing)
+            MarqueeContent(alignment: .trailing) { Text(value.isEmpty ? "—" : value) }
         }.font(.subheadline).contentShape(.rect)
             .onTapGesture { shown = true }
             .accessibilityHint("轻点查看完整内容")
@@ -89,10 +83,10 @@ struct ReadableFact: View {
 
 struct SafeFactsStyle: LabeledContentStyle {
     func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 16) {
-            configuration.label.lineLimit(1)
+        HStack(alignment: .center, spacing: 16) {
+            configuration.label.lineLimit(1).fixedSize(horizontal: true, vertical: false)
             Spacer(minLength: 0)
-            configuration.content.lineLimit(1).truncationMode(.tail).multilineTextAlignment(.trailing)
+            MarqueeContent(alignment: .trailing) { configuration.content }
         }
     }
 }

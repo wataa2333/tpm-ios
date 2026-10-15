@@ -2,6 +2,18 @@ import Testing
 import Foundation
 @testable import TPM
 
+@Test func marqueePausesAtBothEndsAndStaysInsideTheField() {
+    #expect(marqueeOffset(elapsed: 0, distance: 52) == 0)
+    #expect(marqueeOffset(elapsed: 1, distance: 52) == 0)
+    #expect(abs(marqueeOffset(elapsed: 2.4, distance: 52) - 26) < 0.001)
+    #expect(marqueeOffset(elapsed: 4, distance: 52) == 52)
+    #expect(marqueeOffset(elapsed: 100, distance: 0) == 0)
+    for tick in 0...1000 {
+        let offset = marqueeOffset(elapsed: Double(tick) / 10, distance: 52)
+        #expect(offset >= 0 && offset <= 52)
+    }
+}
+
 @Test func statusCountUsesServerTotalRatherThanLoadedRows() {
     let page = JSONValue.object(["totalElements": .number(103), "content": .array([.object([:])])])
     #expect(serverPageCount(page) == 103)

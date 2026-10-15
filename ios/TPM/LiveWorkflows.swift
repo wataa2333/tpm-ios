@@ -275,7 +275,7 @@ struct LiveRecordFacts: View {
     let record: JSONValue
     let title: String
     let fields: [(String, String)]
-    var body: some View { List { ForEach(fields, id: \.0) { key, label in if record.at(key) != .null { LabeledContent(label, value: readableDate(record.at(key))) } } }.navigationTitle(title).navigationBarTitleDisplayMode(.inline) }
+    var body: some View { List { ForEach(fields, id: \.0) { key, label in if record.at(key) != .null { LabeledContent(label, value: readableDate(record.at(key))) } } }.navigationTitle(title).navigationBarTitleDisplayMode(.inline).modifier(DetailTabVisibility()) }
 }
 struct AttachmentRow: View {
     let photo: JSONValue
@@ -301,8 +301,11 @@ struct LiveCatalogView: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, record in
                 NavigationLink {
                     if source == .assets { AssetRecordDetail(record: record) }
-                    else { List { Section(record["materialDesc"].text) { MaterialFacts(material: record); LabeledContent("库存数量", value: materialQuantity(record["onhandQty"].text, material: record)) } }.navigationTitle("库存详情") }
-                } label: { VStack(alignment: .leading, spacing: 5) { Text(record.object.label).font(.headline); Text(record[source == .assets ? "assetCode" : "materialCode"].text).font(.subheadline).foregroundStyle(.secondary) } }
+                    else { List { Section(record["materialDesc"].text) { MaterialFacts(material: record); LabeledContent("库存数量", value: materialQuantity(record["onhandQty"].text, material: record)) } }.navigationTitle("库存详情").modifier(DetailTabVisibility()) }
+                } label: { VStack(alignment: .leading, spacing: 5) {
+                    MarqueeContent { Text(record.object.label).font(.headline) }
+                    MarqueeContent { Text(record[source == .assets ? "assetCode" : "materialCode"].text).font(.subheadline).foregroundStyle(.secondary) }
+                } }
                 .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
             }

@@ -52,8 +52,8 @@ struct AssetRecordDetail: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(asset["assetName"].text).font(.headline).lineLimit(2)
-                    Text(asset["assetCode"].text).font(.subheadline).foregroundStyle(.secondary)
+                    MarqueeContent { Text(asset["assetName"].text).font(.headline) }
+                    MarqueeContent { Text(asset["assetCode"].text).font(.subheadline).foregroundStyle(.secondary) }
                 }.padding(.vertical, 4)
             }
             if tab == 0 {

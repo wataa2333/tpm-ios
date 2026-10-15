@@ -335,9 +335,9 @@ struct AssetRow: View {
     let asset: Asset
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(asset.name).font(.headline)
-            Text("\(asset.id) · \(asset.model)").font(.subheadline).foregroundStyle(.secondary)
-            Text(asset.location).font(.subheadline).foregroundStyle(.secondary)
+            MarqueeContent { Text(asset.name).font(.headline) }
+            MarqueeContent { Text("\(asset.id) · \(asset.model)").font(.subheadline).foregroundStyle(.secondary) }
+            MarqueeContent { Text(asset.location).font(.subheadline).foregroundStyle(.secondary) }
         }.padding(.vertical, 4)
     }
 }
@@ -406,6 +406,7 @@ struct OrderDetailView: View {
             Section { DemoNotice() }
         }
         .navigationTitle("工单详情").navigationBarTitleDisplayMode(.inline)
+        .modifier(DetailTabVisibility())
         .safeAreaInset(edge: .bottom) { HStack { Spacer(); BottomAction(title: claimed ? "已领取" : "领取工单", symbol: "hand.raised") { confirming = true }.disabled(claimed) }.padding(.horizontal, 20).padding(.vertical, 8) }
         .confirmationDialog("领取这张模拟工单？", isPresented: $confirming, titleVisibility: .visible) { Button("领取模拟工单") { store.claimedOrders.insert(kind + asset.id) } }
     }
@@ -456,6 +457,7 @@ struct MaterialDetailView: View {
             Section { DemoNotice() }
         }
         .navigationTitle("库存详情").navigationBarTitleDisplayMode(.inline)
+        .modifier(DetailTabVisibility())
     }
 }
 

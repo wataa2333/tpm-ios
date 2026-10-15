@@ -2,6 +2,33 @@ import XCTest
 
 @MainActor
 final class PreviewTests: XCTestCase {
+    func testAssetERPAndInventoryDetailsRestoreTabsOnlyOnTheirLists() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "workspace"]
+        app.launch()
+        let ledger = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "资产台账")).firstMatch
+        XCTAssertTrue(ledger.waitForExistence(timeout: 10)); ledger.tap()
+        app.staticTexts["立式加工中心"].firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["资产详情"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["我的待办"].exists)
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(app.buttons["我的待办"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons.firstMatch.tap()
+        app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "ERP 出库")).firstMatch.tap()
+        app.staticTexts["深沟球轴承领料"].firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["出库详情"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["我的待办"].exists)
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(app.buttons["我的待办"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons.firstMatch.tap()
+        app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "ERP 库存")).firstMatch.tap()
+        app.staticTexts["深沟球轴承"].firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["库存详情"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["我的待办"].exists)
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(app.buttons["我的待办"].waitForExistence(timeout: 5))
+    }
+
     func testNestedDetailsNeverRestoreTabsOverTaskActions() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "faults"]

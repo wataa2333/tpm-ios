@@ -186,9 +186,9 @@ struct ReferencePicker: View {
                 Button { Task { await select(value) } } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(label(value)).foregroundStyle(.primary)
+                            MarqueeContent { Text(label(value)).foregroundStyle(.primary) }
                             let detail = subtitle(value)
-                            if !detail.isEmpty { Text(detail).font(.subheadline).foregroundStyle(.secondary) }
+                            if !detail.isEmpty { MarqueeContent { Text(detail).font(.subheadline).foregroundStyle(.secondary) } }
                         }
                         Spacer()
                         if picked.contains(identity(value)) { Image(systemName: "checkmark") }
