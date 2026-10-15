@@ -41,7 +41,9 @@ final class PreviewTests: XCTestCase {
         capture(app, "Repair ERP entry")
         app.buttons["新建出库单"].tap()
         XCTAssertTrue(app.navigationBars["ERP 出库"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["BX-DEMO-001"].waitForExistence(timeout: 10))
+        let reference = app.descendants(matching: .any)["erp-reference-sn"].firstMatch
+        XCTAssertTrue(reference.waitForExistence(timeout: 10))
+        XCTAssertEqual(reference.value as? String, "BX-DEMO-001")
         capture(app, "Repair linked ERP form")
         for _ in 0..<4 where !app.staticTexts["空气滤芯"].isHittable { app.swipeUp() }
         XCTAssertTrue(app.staticTexts["申请数量：2 个"].exists)

@@ -487,6 +487,10 @@ struct OriginalERPForm: View {
                 ServerDateField(title: "申请日期", value: field("applyDate"), dateOnly: true, required: true)
                 ReferenceField(title: "项目号", source: .projects, value: field("project"), required: true) { project in model.data["projectCode"] = project["projectCode"]; model.data["projectDesc"] = project["projectName"] }
                 LabeledContent("关联单号", value: model.data.text("referenceSn"))
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("关联单号")
+                    .accessibilityValue(model.data.text("referenceSn"))
+                    .accessibilityIdentifier("erp-reference-sn")
                 ReferenceField(title: "领用人", source: .users, value: field("recipientUser"), required: true)
                 ReferenceField(title: "领用部门", source: .departments, value: field("dept"), required: true)
                 ReferenceField(title: "ERP记账部门", source: .divisions, value: field("division"), required: true)
