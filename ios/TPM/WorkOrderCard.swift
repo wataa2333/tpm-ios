@@ -12,12 +12,12 @@ struct WorkOrderCard<Destination: View>: View {
     @State private var expanded = false
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            NavigationLink(destination: destination) {
+            NavigationLink { destination().modifier(DetailTabVisibility()) } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text(title).font(.headline).foregroundStyle(.primary).lineLimit(1).truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading)
                     if !status.isEmpty { Text(status).font(.subheadline.weight(.medium)).foregroundStyle(color).lineLimit(1) }
                 }
-            }.navigationLinkIndicatorVisibility(.hidden)
+            }.buttonStyle(.plain).navigationLinkIndicatorVisibility(.hidden)
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text(referenceTitle + "：" + (reference.isEmpty ? "—" : reference)).frame(maxWidth: .infinity, alignment: .leading)
                 Text(time).frame(maxWidth: .infinity, alignment: .trailing)
@@ -27,11 +27,11 @@ struct WorkOrderCard<Destination: View>: View {
                     ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
                         ReadableFact(title: fact.0, value: fact.1)
                     }
-                    NavigationLink("打开工单", destination: destination).font(.subheadline)
+                    NavigationLink { destination().modifier(DetailTabVisibility()) } label: { Text("打开工单") }.buttonStyle(.plain).font(.subheadline)
                 }.padding(.top, 12)
             } label: { Text(expanded ? "收起详情" : "展开详情").font(.subheadline) }
                 .accessibilityIdentifier("order-expand-" + reference)
-        }.padding(.vertical, 8)
+        }.buttonStyle(.plain).padding(.vertical, 8)
     }
 }
 
@@ -81,4 +81,12 @@ struct CharacterCount: View {
     let text: String
     let limit: Int
     var body: some View { Text("\(text.utf16.count)/\(limit) 字符").font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing) }
+}
+
+struct DetailTabVisibility: ViewModifier {
+    @EnvironmentObject private var navigation: BottomNavigationModel
+    func body(content: Content) -> some View {
+        content.onAppear { navigation.hideTabs = true }
+            .onDisappear { navigation.hideTabs = false }
+    }
 }

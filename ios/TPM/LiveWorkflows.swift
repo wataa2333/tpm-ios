@@ -14,6 +14,7 @@ struct AuthenticatedRoot: View {
     var body: some View { if session.signedIn { LiveTabs().id(session.scopeRevision) } else { NativeLoginView() } }
 }
 struct LiveTabs: View {
+    @EnvironmentObject private var navigation: BottomNavigationModel
     @EnvironmentObject private var session: LiveSession
     @State private var selection = 0
     var body: some View {
@@ -56,7 +57,7 @@ struct LiveTabs: View {
             }
         }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { BottomNavigation(selection: $selection) }
+        .safeAreaInset(edge: .bottom, spacing: 0) { if !navigation.hideTabs { BottomNavigation(selection: $selection) } }
     }
 }
 

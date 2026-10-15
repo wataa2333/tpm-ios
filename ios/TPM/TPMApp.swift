@@ -122,6 +122,7 @@ struct StatusLabel: View {
 }
 
 struct MainTabs: View {
+    @EnvironmentObject private var navigation: BottomNavigationModel
     @State private var selection: Int
     init(selection: Int = 0) { _selection = State(initialValue: selection) }
     var body: some View {
@@ -133,7 +134,7 @@ struct MainTabs: View {
             default: NavigationStack { ProfileView() }
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { BottomNavigation(selection: $selection, preview: true) }
+        .safeAreaInset(edge: .bottom, spacing: 0) { if !navigation.hideTabs { BottomNavigation(selection: $selection, preview: true) } }
     }
 }
 

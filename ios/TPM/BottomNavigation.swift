@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 final class BottomNavigationModel: ObservableObject {
     @Published var newDocument: WorkflowKind?
+    @Published var hideTabs = false
     @Published var refresh = UUID()
 }
 
