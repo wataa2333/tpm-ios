@@ -1,5 +1,6 @@
 """Run native UI regressions; do not run the screenshot capture pipeline."""
 import json
+import os
 import subprocess
 
 devices = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "devices", "available", "--json"], text=True))["devices"]
@@ -10,5 +11,8 @@ device = next((device for device in available if device["name"] == "iPhone 17"),
 if device["state"] != "Booted":
     subprocess.run(["xcrun", "simctl", "boot", device["udid"]], check=True)
 subprocess.run(["xcrun", "simctl", "bootstatus", device["udid"], "-b"], check=True)
-result = subprocess.run(["xcodebuild", "test", "-project", "ios/TPM.xcodeproj", "-scheme", "TPM", "-configuration", "Debug", "-destination", f"platform=iOS Simulator,id={device['udid']}", "-derivedDataPath", "build/simulator", "CODE_SIGNING_ALLOWED=NO", "-resultBundlePath", "build/NativeUIChecks.xcresult"])
+arguments = ["xcodebuild", "test", "-project", "ios/TPM.xcodeproj", "-scheme", "TPM", "-configuration", "Debug", "-destination", f"platform=iOS Simulator,id={device['udid']}", "-derivedDataPath", "build/simulator", "CODE_SIGNING_ALLOWED=NO", "-resultBundlePath", "build/NativeUIChecks.xcresult"]
+if os.environ.get("TPM_TEST_SCOPE") == "navigation":
+    arguments += ["-only-testing:TPMUITests/PreviewTests/testTodoFirstAndDashboardFactoryEntry", "-only-testing:TPMUITests/PreviewTests/testNewActionIsSeparateFromTabs", "-only-testing:TPMUITests/PreviewTests/testCompactSpacingAndRepeatedExpansion"]
+result = subprocess.run(arguments)
 raise SystemExit(result.returncode)
