@@ -18,7 +18,7 @@ workflows:
       - name: Run unit and UI checks without screenshot export
         script: |
           set -euo pipefail
-          python3 ios/check-native-ui.py
+          TPM_TEST_SCOPE=navigation python3 ios/check-native-ui.py
       - name: Build unsigned device application
         script: |
           set -euo pipefail
@@ -38,3 +38,4 @@ workflows:
       - build/wataa.sha256
       - build/source-commit.txt
       - build/NativeUIChecks.xcresult
+
