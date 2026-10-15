@@ -79,7 +79,7 @@ struct AssetRecordDetail: View {
         }
         .navigationTitle("资产详情").navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .top, spacing: 0) { HorizontalCategories(titles: tabs, selection: $tab) }
-        .overlay { if loading { LoadingOverlay(title: "正在加载" + tabs[tab] + "…") } }
+        .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载" + tabs[tab] + "…") }
         .onAppear { tab = tabs.firstIndex(of: initialTab) ?? 0 }
         .task(id: tab) { await load() }
     }
@@ -134,10 +134,11 @@ struct WarehouseStockView: View {
             if preview { DemoNotice() }
         }
         .navigationTitle("仓库库存").navigationBarTitleDisplayMode(.inline)
+        .searchPageChrome(isSearching: searching)
         .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索" + (searchField == "material.materialNum" ? "物料编号" : searchField == "material.materialModel" ? "规格型号" : "物料名称"))
         .task(id: searchField + query) { await load() }
         .refreshable { await load() }
-        .overlay { if loading { LoadingOverlay(title: "正在加载库存…") } }
+        .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载库存…") }
     }
     private func quantity(_ row: JSONValue) -> String { row["amount"].text + " " + (row["material"]["unit"].text.isEmpty ? "PCS" : row["material"]["unit"].text) }
     private func load(more: Bool = false) async {
@@ -187,7 +188,7 @@ struct WarehouseReceiptsView: View {
             if let error { Text(error).foregroundStyle(.red) }
             if preview { DemoNotice() }
         }.navigationTitle("入库记录").navigationBarTitleDisplayMode(.inline)
-            .overlay { if loading { LoadingOverlay(title: "正在加载入库记录…") } }
+            .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载入库记录…") }
             .task {
                 if preview { rows = [.object(["entryNumber": .string("RK-DEMO-001"), "warehousingTime": .string("2026-10-15 14:30"), "applyDate": .string("2026-10-15"), "warehouse": .object(["warehouseName": .string("备件仓")]), "user": PreviewIdentity.user])]; return }
                 loading = true; defer { loading = false }

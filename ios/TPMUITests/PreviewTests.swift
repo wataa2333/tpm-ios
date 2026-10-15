@@ -8,7 +8,7 @@ final class PreviewTests: XCTestCase {
         app.launch()
         XCTAssertFalse(app.staticTexts["搜索分类"].exists)
         XCTAssertFalse(app.staticTexts["受理组别"].exists)
-        let expand = app.descendants(matching: .any)["order-expand-FA-CNC-008"].firstMatch
+        let expand = app.buttons["order-expand-FA-CNC-008"].firstMatch
         XCTAssertTrue(expand.waitForExistence(timeout: 15))
         capture(app, "Compact work orders")
         expand.tap()
@@ -118,10 +118,48 @@ final class PreviewTests: XCTestCase {
         capture(app, "Factory selection")
     }
     private func capture(_ app: XCUIApplication, _ name: String) {
+        guard ProcessInfo.processInfo.environment["TPM_CAPTURE_SCREENSHOTS"] == "true" else { return }
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    func testTodoFirstAndDashboardFactoryEntry() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "todo"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["我的待办"].waitForExistence(timeout: 15))
+        XCTAssertLessThan(app.buttons["我的待办"].firstMatch.frame.minX, app.buttons["主页"].firstMatch.frame.minX)
+        app.buttons["主页"].firstMatch.tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "维修工单池")).firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "精密度检查工单池")).firstMatch.exists)
+        app.buttons["工作台"].firstMatch.tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "资产台账")).firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "ERP 出库")).firstMatch.exists)
+        app.buttons["我的"].firstMatch.tap()
+        XCTAssertFalse(app.buttons["切换厂区"].exists)
+    }
+
+    func testCompactSpacingAndRepeatedExpansion() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "faults"]
+        app.launch()
+        let expand = app.buttons["order-expand-FA-CNC-008"]
+        XCTAssertTrue(expand.waitForExistence(timeout: 15))
+        let title = app.staticTexts["立式加工中心异常报修"].firstMatch
+        XCTAssertLessThan(expand.frame.maxY - title.frame.minY, 140)
+        for _ in 0..<2 {
+            expand.tap()
+            XCTAssertEqual(expand.value as? String, "已展开")
+            expand.tap()
+            XCTAssertEqual(expand.value as? String, "已收起")
+        }
+        app.buttons["新建报修"].tap()
+        XCTAssertTrue(app.buttons["取消"].waitForExistence(timeout: 10))
+        app.buttons["取消"].tap()
+        XCTAssertTrue(expand.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["新建报修"].exists)
     }
 
     func testFaultRequiredValidationAndSideBySideActions() {

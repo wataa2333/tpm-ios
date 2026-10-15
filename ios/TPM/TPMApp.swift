@@ -7,7 +7,7 @@ struct TPMApp: App {
     @StateObject private var session = LiveSession()
     @StateObject private var navigation = BottomNavigationModel()
     var body: some Scene {
-        WindowGroup { PreviewRouter().environmentObject(store).environmentObject(session).environmentObject(navigation).labeledContentStyle(SafeFactsStyle()).lineLimit(1).truncationMode(.tail) }
+        WindowGroup { PreviewRouter().modifier(KeyboardTabVisibility()).environmentObject(store).environmentObject(session).environmentObject(navigation).labeledContentStyle(SafeFactsStyle()).lineLimit(1).truncationMode(.tail) }
     }
 }
 
@@ -124,42 +124,23 @@ struct StatusLabel: View {
 struct MainTabs: View {
     @EnvironmentObject private var navigation: BottomNavigationModel
     @State private var selection: Int
-    init(selection: Int = 0) { _selection = State(initialValue: selection) }
+    var previewFaultList = false
+    init(selection: Int = 2, previewFaultList: Bool = false) { _selection = State(initialValue: selection); self.previewFaultList = previewFaultList }
     var body: some View {
         Group {
             switch selection {
             case 0: NavigationStack { HomeView() }
             case 1: NavigationStack { WorkspaceView() }
-            case 2: NavigationStack { FaultListView() }
+            case 2: NavigationStack { if previewFaultList { FaultListView() } else { TodoInboxView(preview: true) } }
             default: NavigationStack { ProfileView() }
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { if !navigation.hideTabs { BottomNavigation(selection: $selection, preview: true) } }
+        .safeAreaInset(edge: .bottom, spacing: 0) { NativeTabBar(selection: $selection, preview: true) }
     }
 }
 
 struct HomeView: View {
-    @EnvironmentObject private var store: DemoStore
-    var body: some View {
-        List {
-            Section {
-                NavigationLink { FaultListView(initialState: .reported) } label: {
-                    HStack {
-                        Label("待受理", systemImage: "tray").foregroundStyle(.primary)
-                        Spacer()
-                        Text("\(store.faults.filter { $0.state == .reported }.count)").monospacedDigit().foregroundStyle(.secondary)
-                    }
-                }
-            } footer: { DemoNotice() }
-            Section("工单池") {
-                NavigationLink { OrderPoolView(kind: "维修") } label: { PoolEntry(title: "维修工单池", symbol: "wrench.and.screwdriver", subtitle: "待接单的维修任务") }
-                NavigationLink { OrderPoolView(kind: "保养") } label: { PoolEntry(title: "保养工单池", symbol: "oilcan", subtitle: "计划保养与维护任务") }
-                NavigationLink { OrderPoolView(kind: "精密度检查") } label: { PoolEntry(title: "精密度检查工单池", symbol: "ruler", subtitle: "设备精度检查任务") }
-            }
-        }
-        .navigationTitle("主页").navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { PreviewFactoryButton() } }
-    }
+    var body: some View { DashboardHome(preview: true) }
 }
 
 struct PoolEntry: View {
@@ -177,22 +158,7 @@ struct PoolEntry: View {
 }
 
 struct WorkspaceView: View {
-    var body: some View {
-        List {
-            Section("资产管理") {
-                NavigationLink { AssetListView() } label: {
-                    PoolEntry(title: "资产台账", symbol: "list.clipboard", subtitle: "搜索编号、名称、型号，查看资产详情")
-                }
-            }
-            Section("备品备件") {
-                NavigationLink { OutboundListView() } label: { PoolEntry(title: "ERP 出库", symbol: "shippingbox", subtitle: "出库单查询与明细") }
-                NavigationLink { StockListView() } label: { PoolEntry(title: "ERP 库存", symbol: "shippingbox.circle", subtitle: "ERP 物料、库存数量及库位") }
-                NavigationLink { WarehouseStockView(preview: true) } label: { PoolEntry(title: "仓库库存", symbol: "archivebox", subtitle: "仓库明细、物料数量与入库记录") }
-            }
-            Section { DemoNotice() }
-        }
-        .navigationTitle("工作台").navigationBarTitleDisplayMode(.inline)
-    }
+    var body: some View { DashboardWorkspace(preview: true) }
 }
 
 struct FaultListView: View {
@@ -222,6 +188,8 @@ struct FaultListView: View {
         }
     }
     var body: some View {
+        VStack(spacing: 0) {
+            WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex(of: state)! }, set: { state = FaultState.allCases[$0] }))
         List {
             if searching { Section {
                 Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }
@@ -238,15 +206,14 @@ struct FaultListView: View {
                 HStack { Text(state.rawValue); Spacer(); Text("\(rows.count) 单").monospacedDigit() }
             }
         }
-        .navigationTitle("故障报修").navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            HorizontalCategories(titles: FaultState.allCases.map(\.rawValue), selection: Binding(get: { FaultState.allCases.firstIndex(of: state)! }, set: { state = FaultState.allCases[$0] }))
-        }
         .simultaneousGesture(DragGesture(minimumDistance: 45).onEnded { value in
             guard abs(value.translation.width) > abs(value.translation.height) * 1.5 else { return }
             let index = FaultState.allCases.firstIndex(of: state)!
             state = FaultState.allCases[min(max(index + (value.translation.width < 0 ? 1 : -1), 0), FaultState.allCases.count - 1)]
         })
+        }
+        .navigationTitle("故障报修").navigationBarTitleDisplayMode(.inline)
+        .searchPageChrome(isSearching: searching)
         .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索" + searchField.rawValue)
         .onAppear { navigation.newDocument = .fault }
         .onDisappear { if navigation.newDocument == .fault { navigation.newDocument = nil } }
@@ -346,7 +313,8 @@ struct AssetListView: View {
                 }
             } footer: { DemoNotice() }
         }
-        .navigationTitle("资产台账").searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "资产编号、名称、型号或位置")
+        .navigationTitle("资产台账").searchPageChrome()
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "资产编号、名称、型号或位置")
         .overlay { if !query.isEmpty && !Asset.samples.contains(where: { ($0.id + $0.name + $0.model + $0.location).localizedCaseInsensitiveContains(query) }) { ContentUnavailableView.search(text: query) } }
     }
 }
@@ -373,6 +341,7 @@ struct AssetPickerView: View {
             }
         }
         .navigationTitle("选择设备").navigationBarTitleDisplayMode(.inline)
+        .searchPageChrome()
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索设备名称或编号")
     }
 }
@@ -399,6 +368,7 @@ struct OrderPoolView: View {
             } footer: { DemoNotice() }
         }
         .navigationTitle("\(kind)工单池").navigationBarTitleDisplayMode(.inline)
+        .searchPageChrome()
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索设备或资产编号")
     }
 }
@@ -450,7 +420,8 @@ struct StockListView: View {
                 if rows.isEmpty { ContentUnavailableView.search(text: query) }
             } footer: { DemoNotice() }
         }
-        .navigationTitle("库存").searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "物料编号、名称、规格或库位")
+        .navigationTitle("库存").searchPageChrome()
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "物料编号、名称、规格或库位")
     }
 }
 
@@ -486,13 +457,14 @@ struct OutboundListView: View {
             }
             Section {
                 ForEach(rows) { outbound in
-                    WorkOrderCard(title: outbound.id, status: outbound.completed ? "已出库" : "待出库", reference: outbound.id, referenceTitle: "出库单号", time: outbound.date, facts: [("领用部门", outbound.department), ("领用人", outbound.applicant), ("物料名称", outbound.material.name), ("申请数量", "\(outbound.quantity) \(outbound.material.unit)")]) { OutboundDetailView(id: outbound.id) }
+                    WorkOrderCard(title: outbound.material.name + "领料", status: outbound.completed ? "已出库" : "待出库", reference: outbound.id, referenceTitle: "出库单号", time: outbound.date, summaryFacts: [("领用人", outbound.applicant), ("领用部门", outbound.department)], facts: [("物料名称", outbound.material.name), ("申请数量", "\(outbound.quantity) \(outbound.material.unit)")]) { OutboundDetailView(id: outbound.id) }
 
                 }
                 if rows.isEmpty { ContentUnavailableView("暂无出库单", systemImage: "shippingbox") }
             } footer: { DemoNotice() }
         }
-        .navigationTitle("ERP 出库").searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索出库单、物料或部门")
+        .navigationTitle("ERP 出库").searchPageChrome()
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索出库单、物料或部门")
     }
 }
 
@@ -534,8 +506,8 @@ struct ProfileView: View {
     var body: some View {
         List {
             Section { Label("个人演示", systemImage: "person.crop.circle"); LabeledContent("当前环境", value: "界面预览") }
-            Section { NavigationLink { FactorySwitchView(preview: true) } label: { LabeledContent("切换厂区", value: "示例一厂") } }
-            Section("应用") { LabeledContent("版本", value: "0.2.0"); LabeledContent("数据来源", value: "模拟数据") }
+            Section { LabeledContent("当前厂区", value: "示例一厂") }
+            Section("应用") { LabeledContent("版本", value: "0.5.0"); LabeledContent("数据来源", value: "模拟数据") }
             Section { Text("账号、工厂和业务权限将在对接原服务器后显示。").foregroundStyle(.secondary) }
         }
         .navigationTitle("我的").navigationBarTitleDisplayMode(.inline)
@@ -548,7 +520,8 @@ struct PreviewScreen: View {
         switch name {
         case "home": MainTabs(selection: 0)
         case "workspace": MainTabs(selection: 1)
-        case "faults": MainTabs(selection: 2)
+        case "faults": MainTabs(selection: 2, previewFaultList: true)
+        case "todo": MainTabs()
         case "profile": MainTabs(selection: 3)
         case "draft": NavigationStack { FaultListView(initialState: .draft) }
         case "reported": NavigationStack { FaultListView(initialState: .reported) }

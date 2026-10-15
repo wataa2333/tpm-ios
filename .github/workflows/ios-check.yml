@@ -1,0 +1,24 @@
+name: Check native UI
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: xcode-27
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          cd ios
+          xcodegen generate
+      - name: Run simulator checks without screenshot export
+        run: python3 ios/check-native-ui.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-ui-check-results
+          path: build/NativeUIChecks.xcresult
+          retention-days: 3

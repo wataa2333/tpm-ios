@@ -202,8 +202,9 @@ struct ReferencePicker: View {
             if let error { Section { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } } }
             if !loading && visible.isEmpty && error == nil { ContentUnavailableView("暂无匹配内容", systemImage: "magnifyingglass") }
         }
-        .overlay { if loading || selecting { LoadingOverlay(title: "正在加载…") } }
+        .overlay { AnimatedLoadingOverlay(isPresented: loading || selecting, title: "正在加载…") }
         .navigationTitle(source.title).navigationBarTitleDisplayMode(.inline)
+        .searchPageChrome(isSearching: searching)
         .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索")
         .task { picked = Set(selected); await load() }
         .onSubmit(of: .search) { Task { await load() } }
@@ -399,7 +400,7 @@ struct OriginalFaultForm: View {
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(model.loading || model.saving)
-        .overlay { if model.loading || model.saving { LoadingOverlay(title: model.saving ? "正在提交报修…" : "正在加载表单…") } }
+        .overlay { AnimatedLoadingOverlay(isPresented: model.loading || model.saving, title: model.saving ? "正在提交报修…" : "正在加载表单…") }
         .navigationTitle(existing == nil ? "故障报修" : "编辑报修").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(model.saving || photoUploading) }
@@ -532,7 +533,7 @@ struct OriginalERPForm: View {
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(model.loading || model.saving)
-        .overlay { if model.loading || model.saving { LoadingOverlay(title: model.saving ? "正在提交领料申请…" : "正在加载领料申请…") } }
+        .overlay { AnimatedLoadingOverlay(isPresented: model.loading || model.saving, title: model.saving ? "正在提交领料申请…" : "正在加载领料申请…") }
         .navigationTitle("ERP 出库").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(model.saving) }

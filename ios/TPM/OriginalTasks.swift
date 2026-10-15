@@ -57,7 +57,7 @@ struct OriginalRepairForm: View {
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(loading || saving)
-        .overlay { if loading || saving { LoadingOverlay(title: saving ? "正在保存维修结果…" : "正在加载维修任务…") } }
+        .overlay { AnimatedLoadingOverlay(isPresented: loading || saving, title: saving ? "正在保存维修结果…" : "正在加载维修任务…") }
         .navigationTitle(task["name"].text.isEmpty ? "处理故障维修" : task["name"].text).navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving || photoUploading) }
@@ -206,7 +206,7 @@ struct WorkflowTaskView: View {
             if preview { Section { Text("流程页面预览，使用示例数据，不执行真实提交。").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(loading || submitting)
-        .overlay { if loading || submitting { LoadingOverlay(title: submitting ? "正在提交…" : "正在加载当前节点…") } }
+        .overlay { AnimatedLoadingOverlay(isPresented: loading || submitting, title: submitting ? "正在提交…" : "正在加载当前节点…") }
         .navigationTitle(task["name"].text).navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(submitting) }
@@ -346,7 +346,7 @@ struct TaskHandoffView: View {
         .safeAreaInset(edge: .bottom) {
             DocumentActions(busy: saving, submitting: true, disabled: reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (operation != "resolve" && user["userName"].text.isEmpty), submit: { confirming = true })
         }
-        .overlay { if saving { LoadingOverlay(title: "正在提交…") } }
+        .overlay { AnimatedLoadingOverlay(isPresented: saving, title: "正在提交…") }
         .confirmationDialog("确认\(title)？", isPresented: $confirming, titleVisibility: .visible) { Button("提交") { Task { await save() } } }
     }
     private func save() async {

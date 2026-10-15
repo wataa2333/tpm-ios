@@ -7,12 +7,13 @@ struct WorkOrderCard<Destination: View>: View {
     let reference: String
     var referenceTitle = "资产编码"
     let time: String
+    var summaryFacts: [(String, String)] = []
     let facts: [(String, String)]
     @ViewBuilder let destination: () -> Destination
     @State private var expanded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 6) {
             NavigationLink { destination().modifier(DetailTabVisibility()) } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text(title).font(.headline).foregroundStyle(.primary).lineLimit(1).truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading)
@@ -24,12 +25,18 @@ struct WorkOrderCard<Destination: View>: View {
                 .lineLimit(1).truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel(referenceTitle + "：" + reference)
+            ForEach(Array(summaryFacts.enumerated()), id: \.offset) { _, fact in
+                Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1))
+                    .font(.subheadline).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             HStack(alignment: .center, spacing: 16) {
                 Text(time).font(.subheadline).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Button {
-                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.24)) { expanded.toggle() }
+                    withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.24)) { expanded.toggle() }
                 } label: {
                     HStack(spacing: 6) {
                         Text(expanded ? "收起详情" : "展开详情")
@@ -53,7 +60,8 @@ struct WorkOrderCard<Destination: View>: View {
                 }.padding(.top, 4)
                     .transition(.opacity)
             }
-        }.buttonStyle(.plain).padding(.vertical, 8)
+        }.buttonStyle(.plain).padding(.vertical, 2)
+            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
     }
 }
 

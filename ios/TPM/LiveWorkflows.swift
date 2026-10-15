@@ -16,51 +16,28 @@ struct AuthenticatedRoot: View {
 struct LiveTabs: View {
     @EnvironmentObject private var navigation: BottomNavigationModel
     @EnvironmentObject private var session: LiveSession
-    @State private var selection = 0
+    @State private var selection = 2
     var body: some View {
         Group {
             switch selection {
-            case 0: Group {
-                NavigationStack {
-                    List {
-                        NavigationLink("待受理") { LiveWorkflowList(kind: .fault, initialState: "REPORTED") }
-                        Section("工单池") {
-                            NavigationLink("维修工单池") { LiveWorkflowList(kind: .fault, initialState: "RECEIVED") }
-                            NavigationLink("保养工单池") { OrderPoolView(kind: "保养") }
-                            NavigationLink("精密度检查工单池") { OrderPoolView(kind: "精密度检查") }
-                        }
-                    }.navigationTitle("主页")
-                        .toolbar { ToolbarItem(placement: .topBarTrailing) { FactorySwitcherButton() } }
-                }
-            }
-            case 1: Group {
-                NavigationStack {
-                    List {
-                        Section("资产管理") { NavigationLink("资产台账") { LiveCatalogView(source: .assets) } }
-                        Section("备品备件") {
-                            NavigationLink("ERP 出库") { LiveWorkflowList(kind: .erp) }
-                            NavigationLink("ERP 库存") { LiveCatalogView(source: .materials) }
-                            NavigationLink("仓库库存") { WarehouseStockView() }
-                        }
-                    }.navigationTitle("工作台")
-                }
-            }
-            case 2: Group { NavigationStack { LiveWorkflowList(kind: .fault) } }
-            default: Group {
+            case 0: NavigationStack { DashboardHome() }
+            case 1: NavigationStack { DashboardWorkspace() }
+            case 2: NavigationStack { TodoInboxView() }
+            default:
                 NavigationStack {
                     List {
                         Section { LabeledContent("账号", value: session.authentication.text("name")); LabeledContent("姓名", value: session.authentication.text("fullName")) }
-                        Section { NavigationLink { FactorySwitchView() } label: { LabeledContent("厂区", value: session.currentFactoryName) } }
+                        Section { LabeledContent("当前厂区", value: session.currentFactoryName) }
                         Section { Button("退出登录", role: .destructive) { session.signOut() } }
                     }.navigationTitle("我的")
                 }
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            NativeTabBar(selection: $selection)
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { if !navigation.hideTabs { BottomNavigation(selection: $selection) } }
     }
 }
-
 struct LiveWorkflowList: View {
     @EnvironmentObject private var session: LiveSession
     @EnvironmentObject private var navigation: BottomNavigationModel
@@ -77,15 +54,18 @@ struct LiveWorkflowList: View {
     @State private var loadingMore = false
     init(kind: WorkflowKind, initialState: String = "RECEIVED") { self.kind = kind; _state = State(initialValue: initialState) }
     var body: some View {
+        VStack(spacing: 0) {
+            if kind == .fault { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? 2 }, set: { state = FaultState.allCases[$0].code })) }
         List {
             if kind == .fault && searching { Section { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } } } }
             ForEach(Array(rows.enumerated()), id: \.offset) { _, item in
-                WorkOrderCard(title: kind == .fault ? item["faultName"].text : item["outNumber"].text,
-                    status: kind == .fault ? faultStateName(item["faultState"].text) : item["approvalState"].text,
-                    reference: kind == .fault ? item["asset"]["assetCode"].text : item["sn"].text,
-                    referenceTitle: kind == .fault ? "资产编码" : "单号",
+                WorkOrderCard(title: kind == .fault ? item["faultName"].text : erpCardTitle(item),
+                    status: kind == .fault ? faultStateName(item["faultState"].text) : approvalStateName(item["approvalState"].text),
+                    reference: kind == .fault ? item["asset"]["assetCode"].text : item["outNumber"].text,
+                    referenceTitle: kind == .fault ? "资产编码" : "出库单号",
                     time: readableDate(item[kind == .fault ? "faultTime" : "applyDate"]),
-                    facts: kind == .fault ? faultCardFacts(item) : [("出库单号", item["outNumber"].text), ("领用人", item["recipientUser"]["realName"].text), ("领用部门", item["dept"]["deptName"].text), ("用途", item["remark"].text)]) {
+                    summaryFacts: kind == .fault ? [] : [("领用人", item["recipientUser"]["realName"].text), ("领用部门", item["dept"]["deptName"].text)],
+                    facts: kind == .fault ? faultCardFacts(item) : erpCardFacts(item)) {
                     LiveWorkflowDetail(kind: kind, id: item[kind.idKey].text)
                 }
 
@@ -96,16 +76,15 @@ struct LiveWorkflowList: View {
             if let error { Section { Text(error).foregroundStyle(.red); Button("重试") { Task { await reload() } } } }
             if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无相关单据") }
         }
-        .overlay { if loading { LoadingOverlay(title: "正在加载工单…") } }
-        .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if kind == .fault { HorizontalCategories(titles: FaultState.allCases.map(\.rawValue), selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? 2 }, set: { state = FaultState.allCases[$0].code })) }
-        }
         .simultaneousGesture(DragGesture(minimumDistance: 45).onEnded { value in
             guard kind == .fault, abs(value.translation.width) > abs(value.translation.height) * 1.5 else { return }
             let index = FaultState.allCases.firstIndex { $0.code == state } ?? 2
             state = FaultState.allCases[min(max(index + (value.translation.width < 0 ? 1 : -1), 0), 7)].code
         })
+        }
+        .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载工单…") }
+        .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline)
+        .searchPageChrome(isSearching: searching)
         .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号")
         .onSubmit(of: .search) { Task { await reload() } }
         
@@ -134,6 +113,21 @@ struct LiveWorkflowList: View {
 }
 func faultStateName(_ state: String) -> String {
     ["UNTREATED": "报修", "REPORTED": "待受理", "RECEIVED": "待抢单", "SIGNED": "待签到", "REPAIRED": "待完成", "VERIFIED": "待确认", "RESOLVED": "待复线", "FINISHED": "已完结", "": "全部"][state] ?? state
+}
+
+// Labels from the original app's abstractApprove.approvalState dictionary.
+func approvalStateName(_ state: String) -> String {
+    ["PENDING": "待审批", "EXECUTING": "审批中", "REFUSE": "拒绝", "AGREE": "同意", "FINISHED": "完成", "SUBMIT": "待提交", "APPROVED": "待审批", "CONFIRM": "待确认"][state] ?? "状态待核对"
+}
+
+func erpCardTitle(_ item: JSONValue) -> String {
+    let purpose = item["remark"].text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return purpose.isEmpty ? "ERP 领料申请" : purpose
+}
+
+func erpCardFacts(_ item: JSONValue) -> [(String, String)] {
+    [("申请人", item["user"]["realName"].text), ("项目号", item["projectCode"].text), ("项目名称", item["projectDesc"].text), ("关联单号", item["referenceSn"].text), ("ERP记账部门", item["division"]["divisionDesc"].text), ("出库时间", readableDate(item["outboundTime"]))]
+        .filter { !$0.1.isEmpty }
 }
 
 struct LiveWorkflowDetail: View {
@@ -200,7 +194,7 @@ struct LiveWorkflowDetail: View {
                     if let error { Section { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } } }
                 }
                 .refreshable { await load() }
-                .overlay { if loading { LoadingOverlay(title: "正在刷新…") } }
+                .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在刷新…") }
             }
         }
         .navigationTitle(kind == .fault ? "报修详情" : "出库详情").navigationBarTitleDisplayMode(.inline)
@@ -289,8 +283,9 @@ struct LiveCatalogView: View {
             if !last { Button("加载更多") { Task { await load(more: true) } }.disabled(loading) }
             if let error { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } }
         }
-        .overlay { if loading { LoadingOverlay(title: "正在加载…") } }
+        .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载…") }
         .navigationTitle(source == .assets ? "资产台账" : "库存")
+        .searchPageChrome(isSearching: searching)
         .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: byCode ? "搜索编号" : "搜索名称")
         .onSubmit(of: .search) { Task { await load() } }
         .onChange(of: byCode) { Task { await load() } }
@@ -349,7 +344,7 @@ struct WorkflowNodesView: View {
             if let error { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } }
             if preview { Text("流程结构演示，不是真实工单记录").font(.footnote).foregroundStyle(.secondary) }
         }
-        .overlay { if loading { LoadingOverlay(title: "正在加载流程…") } }
+        .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载流程…") }
         .navigationTitle("处理流程").navigationBarTitleDisplayMode(.inline)
         .task { await load() }.refreshable { await load() }
     }
