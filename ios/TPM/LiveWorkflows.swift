@@ -78,12 +78,24 @@ struct LiveWorkflowList: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, item in
                 NavigationLink { LiveWorkflowDetail(kind: kind, id: item[kind.idKey].text) } label: {
                     VStack(alignment: .leading, spacing: 7) {
-                        Text(kind == .fault ? item["faultName"].text : item["outNumber"].text).font(.headline)
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(kind == .fault ? item["faultName"].text : item["outNumber"].text).font(.headline)
+                            Spacer(minLength: 12)
+                            if kind == .fault {
+                                HStack(spacing: 5) {
+                                    Image(systemName: item["faultState"].text == "REPORTED" ? "tray" : "wrench.and.screwdriver")
+                                    Text(faultStateName(item["faultState"].text))
+                                }.font(.caption).foregroundStyle(item["faultState"].text == "REPORTED" ? Color.orange : Color.accentColor).fixedSize()
+                            }
+                        }
                         if kind == .fault { Text("\(item["asset"]["assetName"].text) · \(item["asset"]["assetCode"].text)").font(.subheadline) }
-                        Text(kind == .fault ? faultStateName(item["faultState"].text) : item["approvalState"].text).font(.caption).foregroundStyle(.secondary)
+                        if kind == .erp { Text(item["approvalState"].text).font(.caption).foregroundStyle(.secondary) }
                         Text(item["sn"].text).font(.caption).foregroundStyle(.secondary)
                     }.padding(.vertical, 4)
                 }
+                .navigationLinkIndicatorVisibility(.hidden)
+                .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+                .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
             }
             if !last { Button { Task { await reload(more: true) } } label: { HStack { Text("加载更多"); if loadingMore { ProgressView() } } }.disabled(loadingMore) }
             if let error { Section { Text(error).foregroundStyle(.red); Button("重试") { Task { await reload() } } } }
@@ -267,6 +279,8 @@ struct LiveCatalogView: View {
                     if source == .assets { LiveRecordFacts(record: record, title: "资产详情", fields: assetFields) }
                     else { List { Section(record["materialDesc"].text) { MaterialFacts(material: record); LabeledContent("库存数量", value: record["onhandQty"].text) } }.navigationTitle("库存详情") }
                 } label: { VStack(alignment: .leading, spacing: 5) { Text(record.object.label).font(.headline); Text(record[source == .assets ? "assetCode" : "materialCode"].text).font(.subheadline).foregroundStyle(.secondary) } }
+                .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+                .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
             }
             if !last { Button("加载更多") { Task { await load(more: true) } }.disabled(loading) }
             if let error { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } }

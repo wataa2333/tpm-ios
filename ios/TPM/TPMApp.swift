@@ -115,7 +115,8 @@ struct DemoNotice: View {
 struct StatusLabel: View {
     let state: FaultState
     var body: some View {
-        Label(state.rawValue, systemImage: state.symbol).font(.caption).foregroundStyle(state.color)
+        HStack(spacing: 5) { Image(systemName: state.symbol); Text(state.rawValue) }
+            .font(.caption).foregroundStyle(state.color).fixedSize()
     }
 }
 
@@ -206,6 +207,9 @@ struct FaultListView: View {
             Section {
                 ForEach(rows) { fault in
                     NavigationLink { FaultDetailView(id: fault.id) } label: { FaultRow(fault: fault) }
+                        .navigationLinkIndicatorVisibility(.hidden)
+                        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+                        .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
                 }
                 if rows.isEmpty { ContentUnavailableView("暂无相关报修", systemImage: state.symbol, description: Text("可以切换状态或调整搜索内容。")) }
             } header: {
@@ -235,7 +239,7 @@ struct FaultRow: View {
             Text(fault.description).font(.subheadline).lineLimit(2)
             Text("\(fault.asset.id) · \(fault.asset.location)").font(.caption).foregroundStyle(.secondary)
             HStack { Text(fault.reporter); Spacer(); Text(fault.time) }.font(.caption).foregroundStyle(.secondary)
-        }.padding(.vertical, 6)
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 6)
     }
 }
 

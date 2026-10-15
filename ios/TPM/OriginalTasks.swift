@@ -17,16 +17,18 @@ struct OriginalRepairForm: View {
     @State private var workflow = false
     @State private var confirming = false
     @State private var submitAfterSave = false
+    @State private var showValidation = false
     private func field(_ key: String) -> Binding<JSONValue> { Binding(get: { data[key] ?? .null }, set: { data[key] = $0 }) }
     private func text(_ key: String) -> Binding<String> { Binding(get: { data.text(key) }, set: { data[key] = .string($0) }) }
     private func useQuantity(_ index: Int) -> Binding<Double> { Binding(get: { data["erpRepairMaterials"]!.array[index]["useNum"].number }, set: { quantity in var rows = data["erpRepairMaterials"]!.array; var row = rows[index].object; row["useNum"] = .number(quantity); rows[index] = .object(row); data["erpRepairMaterials"] = .array(rows) }) }
     var body: some View {
         Form {
+            Section { RequiredFieldsNotice() }.listRowBackground(Color.clear)
             Section("维修任务信息") {
-                ReferenceField(title: "维修故障类型", source: .faultTypes, value: field("faultType"))
+                ReferenceField(title: "维修故障类型", source: .faultTypes, value: field("faultType"), required: true)
                 HStack { Text("维修花费"); Spacer(); TextField("0", value: Binding(get: { data["spend"]?.number ?? 0 }, set: { data["spend"] = .number($0) }), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
-                ServerDateField(title: "维修开始时间", value: field("startTime"))
-                ServerDateField(title: "维修结束时间", value: field("endTime"))
+                ServerDateField(title: "维修开始时间", value: field("startTime"), required: true)
+                ServerDateField(title: "维修结束时间", value: field("endTime"), required: true)
                 Button { choosingAssistants = true } label: { LabeledContent("辅助维修人", value: (data["repairUsers"]?.array ?? []).map { $0["realName"].text }.joined(separator: "、")) }
             }
             Section("ERP 出库") {
@@ -39,12 +41,12 @@ struct OriginalRepairForm: View {
                         LabeledContent("申请数量", value: row["materialOutbound"]["entryQuantity"].text)
                         LabeledContent("实发数量", value: row["materialOutbound"]["actualQuantity"].text)
                         LabeledContent("剩余数量", value: String(row["materialOutbound"]["actualQuantity"].number - row["materialOutbound"]["usedQuantity"].number))
-                        HStack { Text("使用数量"); Spacer(); TextField("数量", value: useQuantity(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
+                        HStack { RequiredLabel(title: "使用数量"); Spacer(); TextField("数量", value: useQuantity(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
                         Button("删除明细", role: .destructive) { var rows = data["erpRepairMaterials"]?.array ?? []; rows.remove(at: index); data["erpRepairMaterials"] = .array(rows) }
                     }
                 }
             }
-            Section("工作说明") { TextField("请输入说明", text: text("content"), axis: .vertical).lineLimit(3...8).onChange(of: data.text("content")) { _, value in if value.count > 255 { data["content"] = .string(String(value.prefix(255))) } } }
+            Section { TextField("请输入说明", text: text("content"), axis: .vertical).lineLimit(3...8).onChange(of: data.text("content")) { _, value in if value.count > 255 { data["content"] = .string(String(value.prefix(255))) } } } header: { RequiredLabel(title: "工作说明") }
             Section("图片") { OriginalPhotosField(albums: field("albums"), directory: "asset_fault", preview: preview, uploading: $photoUploading) }
             if let error { Section { Text(error).foregroundStyle(.red); if data.isEmpty { Button("重试") { Task { await load() } } } } }
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
@@ -54,9 +56,11 @@ struct OriginalRepairForm: View {
         .navigationTitle(task["name"].text.isEmpty ? "处理故障维修" : task["name"].text).navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving || photoUploading) }
-            ToolbarItem(placement: .bottomBar) { Button("保存") { prepare(false) }.disabled(loading || saving || photoUploading || preview || data.isEmpty) }
-            ToolbarSpacer(.flexible, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) { Button { prepare(true) } label: { HStack { if saving { ProgressView() }; Text("提交") } }.buttonStyle(.glassProminent).disabled(loading || saving || photoUploading || preview || data.isEmpty) }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            DocumentActions(busy: saving, submitting: submitAfterSave,
+                            disabled: loading || photoUploading || data.isEmpty,
+                            save: { prepare(false) }, submit: { prepare(true) })
         }
         .task { await load() }
         .sheet(isPresented: $choosing) { NavigationStack { ReferencePicker(source: .outboundMaterials, multiple: true) { addMaterial($0) } } }
@@ -76,6 +80,7 @@ struct OriginalRepairForm: View {
         }
         .sheet(isPresented: $workflow, onDismiss: { Task { await load() } }) { NavigationStack { WorkflowTaskView(task: task, kind: .fault, onCompleted: { dismiss() }) } }
         .confirmationDialog(submitAfterSave ? "保存维修结果并继续提交审批？" : "保存维修结果到原系统？", isPresented: $confirming, titleVisibility: .visible) { Button(submitAfterSave ? "继续" : "保存") { Task { await save() } } }
+        .alert("请检查表单", isPresented: $showValidation) { Button("好", role: .cancel) {} } message: { Text(error ?? "") }
     }
     private func load() async {
         loading = true; error = nil; defer { loading = false }
@@ -98,6 +103,7 @@ struct OriginalRepairForm: View {
         data["erpRepairMaterials"] = .array(rows)
     }
     private func prepare(_ submit: Bool) {
+        showValidation = true
         guard data["faultType"] != nil, data["faultType"] != .null else { error = "请选择故障类型"; return }
         if data.text("content").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { error = "请输入说明"; return }
         if (data["spend"]?.number ?? 0) < 0 || (data["spend"]?.number ?? 0) > 1e18 { error = "维修花费超出允许范围"; return }
@@ -106,7 +112,7 @@ struct OriginalRepairForm: View {
         for line in data["erpRepairMaterials"]?.array ?? [] {
             if line["useNum"].number < 1 || line["useNum"].number > line["materialOutbound"]["actualQuantity"].number - line["materialOutbound"]["usedQuantity"].number { error = "使用数量超出可用范围"; return }
         }
-        submitAfterSave = submit; confirming = true
+        showValidation = false; submitAfterSave = submit; confirming = true
     }
     private func save() async {
         guard !preview, !saving else { return }
@@ -146,16 +152,17 @@ struct WorkflowTaskView: View {
     private func actual(_ i: Int) -> Binding<Double> { Binding(get: { materials[i]["actualQuantity"].number }, set: { number in var line = materials[i].object; line["actualQuantity"] = .number(number); materials[i] = .object(line) }) }
     var body: some View {
         Form {
+            Section { RequiredFieldsNotice() }.listRowBackground(Color.clear)
             Section {
-                Picker("操作类型", selection: $condition) { ForEach(Array(conditions.enumerated()), id: \.offset) { _, value in Text(value["name"].text).tag(value["value"].text) } }
+                Picker(selection: $condition) { ForEach(Array(conditions.enumerated()), id: \.offset) { _, value in Text(value["name"].text).tag(value["value"].text) } } label: { RequiredLabel(title: "操作类型") }
             }
             if needsFaultData && ["agree", "assign", "appoint"].contains(condition) {
                 Section("维修安排") {
-                    if ["assign", "appoint"].contains(condition) { ReferenceField(title: "维修人员", source: .users, value: field("assignUser")) }
+                    if ["assign", "appoint"].contains(condition) { ReferenceField(title: "维修人员", source: .users, value: field("assignUser"), required: true) }
                     if task["category"].text == "REPORTED" {
                         LabeledContent("维修途径", value: "自修")
-                        ReferenceField(title: "维修班组", source: .groups, value: field("userGroup")) { group in taskData["groupId"] = group["groupId"] }
-                        ServerDateField(title: "预计完成时间", value: field("estimatedCompleteTime"))
+                        ReferenceField(title: "维修班组", source: .groups, value: field("userGroup"), required: true) { group in taskData["groupId"] = group["groupId"] }
+                        ServerDateField(title: "预计完成时间", value: field("estimatedCompleteTime"), required: true)
                     }
                 }
             }
@@ -165,7 +172,7 @@ struct WorkflowTaskView: View {
                         DisclosureGroup(line["material"]["materialDesc"].text) {
                             MaterialFacts(material: line["material"])
                             LabeledContent("申请数量", value: line["entryQuantity"].text)
-                            HStack { Text("实发数量"); Spacer(); TextField("数量", value: actual(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
+                            HStack { RequiredLabel(title: "实发数量"); Spacer(); TextField("数量", value: actual(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
                         }
                     }
                 }
@@ -190,8 +197,11 @@ struct WorkflowTaskView: View {
                     }.disabled(submitting || loading)
                 }
             }
-            ToolbarSpacer(.flexible, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) { Button { confirming = true } label: { HStack { if submitting { ProgressView() }; Text("提交") } }.buttonStyle(.glassProminent).disabled(!state["canSubmit"].bool || !ready || !assignmentsReady || assignmentsLoading || loading || submitting || condition.isEmpty) }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            DocumentActions(busy: submitting, submitting: true,
+                            disabled: !state["canSubmit"].bool || !ready || !assignmentsReady || assignmentsLoading || loading || condition.isEmpty,
+                            submit: { confirming = true })
         }
         .task { await load() }
         .onChange(of: condition) { _, _ in

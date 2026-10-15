@@ -29,6 +29,8 @@ sim("status_bar", udid, "override", "--time", "9:41", "--dataNetwork", "wifi",
 sim("install", udid, "build/simulator/Build/Products/Debug-iphonesimulator/TPM.app")
 output = Path("build/screenshots")
 output.mkdir(parents=True, exist_ok=True)
+subprocess.run(["xcrun", "xcresulttool", "export", "attachments",
+                "--path", "build/PreviewTests.xcresult", "--output-path", str(output / "ui-tests")], check=True)
 screens = [
     "faults", "new-fault", "processing", "erp-form", "workflow", "loading",
 ]

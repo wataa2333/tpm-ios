@@ -261,15 +261,36 @@ struct ReferencePicker: View {
     }
 }
 
+struct RequiredLabel: View {
+    let title: String
+    var body: some View {
+        HStack(spacing: 3) { Text(title); Text("＊").foregroundStyle(.red) }
+            .accessibilityElement(children: .ignore).accessibilityLabel(title + "，必填")
+    }
+}
+
+struct RequiredFieldsNotice: View {
+    var body: some View {
+        HStack(spacing: 3) { Text("＊").foregroundStyle(.red); Text("为必填项") }
+            .font(.footnote).foregroundStyle(.secondary)
+    }
+}
+
 struct ReferenceField: View {
     let title: String
     let source: ReferenceSource
     @Binding var value: JSONValue
+    var required = false
     var selected: ((JSONValue) -> Void)? = nil
     var body: some View {
         NavigationLink {
             ReferencePicker(source: source) { result in value = result; selected?(result) }
-        } label: { LabeledContent(title, value: value.object.isEmpty ? "请选择" : value.object.label) }
+        } label: {
+            LabeledContent { Text(value.object.isEmpty ? "请选择" : value.object.label) }
+            label: { if required { RequiredLabel(title: title) } else { Text(title) } }
+        }
+        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+        .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
     }
 }
 
@@ -277,8 +298,13 @@ struct ServerDateField: View {
     let title: String
     @Binding var value: JSONValue
     var dateOnly = false
+    var required = false
     var body: some View {
-        DatePicker(title, selection: Binding(get: { parsedDate(value) }, set: { value = .string(serverDate($0, dateOnly: dateOnly)) }), displayedComponents: dateOnly ? [.date] : [.date, .hourAndMinute])
+        DatePicker(selection: Binding(get: { parsedDate(value) }, set: { value = .string(serverDate($0, dateOnly: dateOnly)) }), displayedComponents: dateOnly ? [.date] : [.date, .hourAndMinute]) {
+            if required { RequiredLabel(title: title) } else { Text(title) }
+        }
+        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+        .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
     }
 }
 
@@ -298,8 +324,11 @@ struct AssigneesFields: View {
                         } else { selections[key] = [name] }
                     }
                 } label: {
-                    LabeledContent(element.text("taskName"), value: selections[key, default: []].isEmpty ? "请选择审批人" : selections[key, default: []].joined(separator: "、"))
+                    LabeledContent { Text(selections[key, default: []].isEmpty ? "请选择审批人" : selections[key, default: []].joined(separator: "、")) }
+                    label: { RequiredLabel(title: element.text("taskName")) }
                 }
+                .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+                .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
             }
         }
     }
@@ -311,6 +340,7 @@ struct OriginalFaultForm: View {
     @StateObject private var model = OriginalFormModel(kind: "ASSET_FAULT")
     @State private var confirming: Bool? = nil
     @State private var showConfirmation = false
+    @State private var showValidation = false
     @State private var photoUploading = false
     var existing: Fields? = nil
     var preview = false
@@ -319,21 +349,25 @@ struct OriginalFaultForm: View {
     private func text(_ key: String) -> Binding<String> { Binding(get: { model.data.text(key) }, set: { model.data[key] = .string($0) }) }
     var body: some View {
         Form {
+            Section { RequiredFieldsNotice() }.listRowBackground(Color.clear)
             Section("故障报修") {
-                TextField("报修名称", text: text("faultName")).onChange(of: model.data.text("faultName")) { _, value in if value.count > 64 { model.data["faultName"] = .string(String(value.prefix(64))) } }
-                ReferenceField(title: "报修资产", source: .assets, value: field("asset"))
-                ServerDateField(title: "故障时间", value: field("faultTime"))
+                VStack(alignment: .leading, spacing: 8) {
+                    RequiredLabel(title: "报修名称")
+                    TextField("请输入报修名称", text: text("faultName")).onChange(of: model.data.text("faultName")) { _, value in if value.count > 64 { model.data["faultName"] = .string(String(value.prefix(64))) } }
+                }
+                ReferenceField(title: "报修资产", source: .assets, value: field("asset"), required: true)
+                ServerDateField(title: "故障时间", value: field("faultTime"), required: true)
             }
             Section("申请与受理") {
-                ReferenceField(title: "故障申请人", source: .users, value: field("applyUser")) { user in
+                ReferenceField(title: "故障申请人", source: .users, value: field("applyUser"), required: true) { user in
                     model.data["applyDept"] = user["depts"].array.first ?? .null
                 }
-                ReferenceField(title: "申请部门", source: .departments, value: field("applyDept"))
-                ReferenceField(title: "受理部门", source: .departments, value: field("dept")) { dept in model.data["user"] = dept["acceptUser"] }
-                ReferenceField(title: "维修受理人", source: .users, value: field("user"))
-                TextField("报修人联系电话", text: text("userPhone")).keyboardType(.phonePad)
-                ReferenceField(title: "维修班组", source: .groups, value: field("userGroup"))
-                ReferenceField(title: "ERP记账部门", source: .divisions, value: field("division"))
+                ReferenceField(title: "申请部门", source: .departments, value: field("applyDept"), required: true)
+                ReferenceField(title: "受理部门", source: .departments, value: field("dept"), required: true) { dept in model.data["user"] = dept["acceptUser"] }
+                ReferenceField(title: "维修受理人", source: .users, value: field("user"), required: true)
+                VStack(alignment: .leading, spacing: 8) { RequiredLabel(title: "报修人联系电话"); TextField("请输入联系电话", text: text("userPhone")).keyboardType(.phonePad) }
+                ReferenceField(title: "维修班组", source: .groups, value: field("userGroup"), required: true)
+                ReferenceField(title: "ERP记账部门", source: .divisions, value: field("division"), required: true)
             }
             Section("审批人") { AssigneesFields(elements: model.assignees, selections: $model.selections) }
             Section("故障描述") { TextField("请输入故障描述", text: text("faultDesc"), axis: .vertical).lineLimit(3...6).onChange(of: model.data.text("faultDesc")) { _, value in if value.count > 255 { model.data["faultDesc"] = .string(String(value.prefix(255))) } } }
@@ -345,12 +379,12 @@ struct OriginalFaultForm: View {
         .overlay { if model.loading { ProgressView("正在加载表单…") } }
         .navigationTitle(existing == nil ? "故障报修" : "编辑报修").navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(model.saving) }
-            ToolbarItem(placement: .bottomBar) { Button("保存") { prepare(false) }.disabled(!model.ready || model.saving || photoUploading || preview) }
-            ToolbarSpacer(.flexible, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) {
-                Button { prepare(true) } label: { HStack { if model.saving { ProgressView() }; Text("提交") } }.buttonStyle(.glassProminent).disabled(!model.ready || model.saving || photoUploading || preview)
-            }
+            ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(model.saving || photoUploading) }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            DocumentActions(busy: model.saving, submitting: confirming == true,
+                            disabled: !model.ready || photoUploading,
+                            save: { prepare(false) }, submit: { prepare(true) })
         }
         .task {
             if preview { model.loading = false; model.ready = true; model.data = ["faultTime": .string("2026-10-15 09:30"), "albums": .array([])] }
@@ -359,9 +393,10 @@ struct OriginalFaultForm: View {
         .confirmationDialog(confirming == true ? "提交报修单到原系统？" : "保存报修单到原系统？", isPresented: $showConfirmation, titleVisibility: .visible) {
             Button(confirming == true ? "提交" : "保存") { Task { await save() } }
         }
+        .alert("请检查表单", isPresented: $showValidation) { Button("好", role: .cancel) {} } message: { Text(model.error ?? "") }
     }
     private func prepare(_ committed: Bool) {
-        if let error = model.validationError() { model.error = error; return }
+        if let error = model.validationError() { model.error = error; showValidation = true; return }
         confirming = committed; showConfirmation = true
     }
     private func save() async {
@@ -420,6 +455,7 @@ struct OriginalERPForm: View {
     @State private var selecting = false
     @State private var committed = false
     @State private var confirming = false
+    @State private var showValidation = false
     var existing: Fields? = nil
     var referenceSn: String? = nil
     var preview = false
@@ -434,15 +470,16 @@ struct OriginalERPForm: View {
     }
     var body: some View {
         Form {
+            Section { RequiredFieldsNotice() }.listRowBackground(Color.clear)
             Section("领料申请") {
-                ReferenceField(title: "申请人", source: .users, value: field("user"))
-                ServerDateField(title: "申请日期", value: field("applyDate"), dateOnly: true)
-                ReferenceField(title: "项目号", source: .projects, value: field("project")) { project in model.data["projectCode"] = project["projectCode"]; model.data["projectDesc"] = project["projectName"] }
+                ReferenceField(title: "申请人", source: .users, value: field("user"), required: true)
+                ServerDateField(title: "申请日期", value: field("applyDate"), dateOnly: true, required: true)
+                ReferenceField(title: "项目号", source: .projects, value: field("project"), required: true) { project in model.data["projectCode"] = project["projectCode"]; model.data["projectDesc"] = project["projectName"] }
                 LabeledContent("关联单号", value: model.data.text("referenceSn"))
-                ReferenceField(title: "领用人", source: .users, value: field("recipientUser"))
-                ReferenceField(title: "领用部门", source: .departments, value: field("dept"))
-                ReferenceField(title: "ERP记账部门", source: .divisions, value: field("division"))
-                ServerDateField(title: "出库时间", value: field("outboundTime"))
+                ReferenceField(title: "领用人", source: .users, value: field("recipientUser"), required: true)
+                ReferenceField(title: "领用部门", source: .departments, value: field("dept"), required: true)
+                ReferenceField(title: "ERP记账部门", source: .divisions, value: field("division"), required: true)
+                ServerDateField(title: "出库时间", value: field("outboundTime"), required: true)
             }
             Section {
                 Button("添加出库物料", systemImage: "plus") { selecting = true }.disabled(preview)
@@ -450,14 +487,14 @@ struct OriginalERPForm: View {
                     DisclosureGroup {
                         MaterialFacts(material: line["material"])
                         LabeledContent("库存数量", value: line["material"]["onhandQty"].text)
-                        HStack { Text("申请数量"); Spacer(); TextField("数量", value: quantity(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(minWidth: 70) }
+                        HStack { RequiredLabel(title: "申请数量"); Spacer(); TextField("数量", value: quantity(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(minWidth: 70) }
                         Button("删除明细", role: .destructive) { var rows = model.data["erpMaterialOutbounds"]?.array ?? []; rows.remove(at: index); model.data["erpMaterialOutbounds"] = .array(rows) }
                     } label: {
                         VStack(alignment: .leading, spacing: 5) { Text(line["material"]["materialDesc"].text); Text("\(line["material"]["materialCode"].text) · \(line["entryQuantity"].text) \(line["material"]["uom"]["uomDesc"].text)").font(.caption).foregroundStyle(.secondary) }
                     }
                 }
-            } header: { Text("出库物料 · \(model.data["erpMaterialOutbounds"]?.array.count ?? 0) 项") }
-            Section("用途") { TextField("请输入用途", text: text("remark"), axis: .vertical).lineLimit(3...6) }
+            } header: { RequiredLabel(title: "出库物料 · \(model.data["erpMaterialOutbounds"]?.array.count ?? 0) 项") }
+            Section { TextField("请输入用途", text: text("remark"), axis: .vertical).lineLimit(3...6) } header: { RequiredLabel(title: "用途") }
             Section("审批人") { AssigneesFields(elements: model.assignees, selections: $model.selections) }
             if let error = model.error { Section { Text(error).foregroundStyle(.red); if !model.ready && !model.loading { Button("重试") { Task { await model.load(session, existing: existing, referenceSn: referenceSn) } } } } }
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
@@ -467,9 +504,11 @@ struct OriginalERPForm: View {
         .navigationTitle("ERP 出库").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(model.saving) }
-            ToolbarItem(placement: .bottomBar) { Button("保存") { prepare(false) }.disabled(!model.ready || model.saving || preview) }
-            ToolbarSpacer(.flexible, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) { Button { prepare(true) } label: { HStack { if model.saving { ProgressView() }; Text("提交") } }.buttonStyle(.glassProminent).disabled(!model.ready || model.saving || preview) }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            DocumentActions(busy: model.saving, submitting: committed,
+                            disabled: !model.ready,
+                            save: { prepare(false) }, submit: { prepare(true) })
         }
         .sheet(isPresented: $selecting) { NavigationStack { ReferencePicker(source: .materials, multiple: true) { model.addMaterial($0) } } }
         .task {
@@ -484,8 +523,9 @@ struct OriginalERPForm: View {
             }
         }
         .confirmationDialog(committed ? "提交 ERP 领料单到原系统？" : "保存 ERP 领料单到原系统？", isPresented: $confirming, titleVisibility: .visible) { Button(committed ? "提交" : "保存") { Task { await save() } } }
+        .alert("请检查表单", isPresented: $showValidation) { Button("好", role: .cancel) {} } message: { Text(model.error ?? "") }
     }
-    private func prepare(_ value: Bool) { if let error = model.validationError() { model.error = error; return }; committed = value; confirming = true }
+    private func prepare(_ value: Bool) { if let error = model.validationError() { model.error = error; showValidation = true; return }; committed = value; confirming = true }
     private func save() async {
         guard !preview, !model.saving else { return }
         model.saving = true; model.error = nil
@@ -495,6 +535,35 @@ struct OriginalERPForm: View {
             let result = try await session.request(existing == nil ? "erpOutbound/addErpOutbound" : "erpOutbound/updateErpOutbound", body: .object(payload))
             onSaved?(result); dismiss()
         } catch { model.error = error.localizedDescription }
+    }
+}
+
+struct DocumentActions: View {
+    let busy: Bool
+    let submitting: Bool
+    let disabled: Bool
+    var save: (() -> Void)? = nil
+    let submit: () -> Void
+    var body: some View {
+        VStack(spacing: 10) {
+            Button(action: submit) {
+                HStack(spacing: 8) {
+                    if busy && submitting { ProgressView() }
+                    Label("提交", systemImage: "checkmark")
+                }.font(.headline).frame(maxWidth: .infinity, minHeight: 30)
+            }.buttonStyle(.glassProminent).controlSize(.large)
+            if let save {
+                Button(action: save) {
+                    HStack(spacing: 8) {
+                        if busy && !submitting { ProgressView() }
+                        Label("保存", systemImage: "tray.and.arrow.down")
+                    }.font(.headline).frame(maxWidth: .infinity, minHeight: 24)
+                }.buttonStyle(.glass).controlSize(.large)
+            }
+        }
+        .disabled(busy || disabled)
+        .padding(.horizontal, 20).padding(.vertical, 12)
+        .background(.bar)
     }
 }
 
