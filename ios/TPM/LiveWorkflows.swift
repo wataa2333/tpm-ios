@@ -179,7 +179,11 @@ struct LiveWorkflowDetail: View {
                         Section("用途") { Text(detail["remark"].text) }
                     }
                     if !detail["processInstanceId"].text.isEmpty {
-                        Section { NavigationLink("处理流程", systemImage: "point.3.connected.trianglepath.dotted") { WorkflowNodesView(processID: detail["processInstanceId"].text) } }
+                        Section {
+                            NavigationLink { WorkflowNodesView(processID: detail["processInstanceId"].text) } label: {
+                                Label("处理流程", systemImage: "point.3.connected.trianglepath.dotted")
+                            }
+                        }
                     }
                     if let error { Section { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } } }
                 }
@@ -340,3 +344,4 @@ struct WorkflowNodesView: View {
         } catch { self.error = error.localizedDescription }
     }
 }
+
