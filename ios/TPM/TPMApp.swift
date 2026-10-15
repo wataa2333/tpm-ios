@@ -7,7 +7,14 @@ struct TPMApp: App {
     @StateObject private var session = LiveSession()
     @StateObject private var navigation = BottomNavigationModel()
     var body: some Scene {
-        WindowGroup { PreviewRouter().modifier(KeyboardTabVisibility()).environmentObject(store).environmentObject(session).environmentObject(navigation).labeledContentStyle(SafeFactsStyle()).lineLimit(1).truncationMode(.tail) }
+        WindowGroup {
+            GeometryReader { geometry in
+                PreviewRouter().modifier(KeyboardTabVisibility())
+                    .environment(\.loadingViewport, geometry.frame(in: .global))
+                    .environmentObject(store).environmentObject(session).environmentObject(navigation)
+                    .labeledContentStyle(SafeFactsStyle()).lineLimit(1).truncationMode(.tail)
+            }
+        }
     }
 }
 

@@ -51,14 +51,17 @@ struct AssetRecordDetail: View {
             HorizontalCategories(titles: tabs, selection: $tab)
         List {
             Section {
-                Text(asset["assetName"].text).font(.headline)
-                Text(asset["assetCode"].text).font(.subheadline).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(asset["assetName"].text).font(.headline).lineLimit(2)
+                    Text(asset["assetCode"].text).font(.subheadline).foregroundStyle(.secondary)
+                }.padding(.vertical, 4)
             }
             if tab == 0 {
                 Section("基本信息") { ForEach(assetFields, id: \.0) { key, label in LabeledContent(label, value: assetDisplayValue(asset.at(key), key: key)) } }
             } else if tab == 6 {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                    WorkOrderCard(title: row["faultName"].text, status: faultStateName(row["faultState"].text), reference: row["asset"]["assetCode"].text, time: readableDate(row["faultTime"]), facts: faultCardFacts(row)) {
+                    let repair = assetRepairRecord(row, asset: asset)
+                    WorkOrderCard(title: repair["faultName"].text, status: faultStateName(repair["faultState"].text), reference: repair["asset"]["assetCode"].text, time: readableDate(repair["faultTime"]), facts: faultCardFacts(repair)) {
                         if preview { FaultDetailView(id: "BX-20261015-001") }
                         else { LiveWorkflowDetail(kind: .fault, id: row["faultId"].text) }
                     }
@@ -80,6 +83,7 @@ struct AssetRecordDetail: View {
             if preview { Section { DemoNotice() } }
         }
         }
+        .searchPageChrome()
         .navigationTitle("资产详情").navigationBarTitleDisplayMode(.inline)
         .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载" + tabs[tab] + "…") }
         .onAppear { tab = tabs.firstIndex(of: initialTab) ?? 0 }

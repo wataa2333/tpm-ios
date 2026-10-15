@@ -311,6 +311,7 @@ struct ReferenceField: View {
             LabeledContent { Text(value.object.isEmpty ? "请选择" : value.object.label) }
             label: { if required { RequiredLabel(title: title) } else { Text(title) } }
         }
+        .accessibilityIdentifier("reference-" + title)
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
     }
@@ -386,7 +387,9 @@ struct OriginalFaultForm: View {
                 }
                 ReferenceField(title: "申请部门", source: .departments, value: field("applyDept"), required: true)
                 ReferenceField(title: "受理部门", source: .departments, value: field("dept"), required: true) { dept in model.data["user"] = dept["acceptUser"] }
-                ReferenceField(title: "维修受理人", source: .users, value: field("user"), required: true)
+                ReferenceField(title: "维修受理人", source: .users, value: field("user"), required: true) { user in
+                    if let department = user["depts"].array.first { model.data["dept"] = department }
+                }
                 VStack(alignment: .leading, spacing: 8) { RequiredLabel(title: "报修人联系电话"); TextField("请输入联系电话", text: text("userPhone")).keyboardType(.phonePad).onChange(of: model.data.text("userPhone")) { _, value in model.data["userPhone"] = .string(limitedText(value, limit: 32)) }; CharacterCount(text: model.data.text("userPhone"), limit: 32) }
                 ReferenceField(title: "维修班组", source: .groups, value: field("userGroup"), required: true)
                 ReferenceField(title: "ERP记账部门", source: .divisions, value: field("division"), required: true)
@@ -412,6 +415,7 @@ struct OriginalFaultForm: View {
                             save: { prepare(false) }, submit: { prepare(true) })
         }
         .task {
+            guard !model.ready else { return }
             if preview { model.loading = false; model.ready = true; model.data = ["faultTime": .string("2026-10-16 09:30"), "albums": .array([]), "applyUser": PreviewIdentity.user, "applyDept": PreviewIdentity.department, "userPhone": .string("13800000000")] }
             else { await model.load(session, existing: existing) }
         }
@@ -547,6 +551,7 @@ struct OriginalERPForm: View {
         }
         .sheet(isPresented: $selecting) { NavigationStack { ReferencePicker(source: .materials, multiple: true) { model.addMaterial($0) } } }
         .task {
+            guard !model.ready else { return }
             if preview {
                 model.loading = false; model.ready = true
                 model.data = ["applyDate": .string("2026-10-15"), "outboundTime": .string("2026-10-15 09:30"), "erpMaterialOutbounds": .array([

@@ -68,7 +68,7 @@ struct OriginalRepairForm: View {
                             disabled: loading || photoUploading || data.isEmpty,
                             save: { prepare(false) }, submit: { prepare(true) })
         }
-        .task { await load() }
+        .task { if data.isEmpty { await load() } }
         .sheet(isPresented: $choosing) { NavigationStack { ReferencePicker(source: .outboundMaterials, multiple: true) { addMaterial($0) } } }
         .sheet(isPresented: $choosingAssistants) {
             NavigationStack { ReferencePicker(source: .users, multiple: true, selected: (data["repairUsers"]?.array ?? []).map { $0["userName"].text }) { user in
@@ -227,7 +227,7 @@ struct WorkflowTaskView: View {
                             submitTitle: task["category"].text == "SIGNED" && condition == "agree" ? "签到" : "提交",
                             submit: { if task["category"].text == "SIGNED" && condition == "agree" { Task { await submit() } } else { confirming = true } })
         }
-        .task { await load() }
+        .task { if !ready { await load() } }
         .onChange(of: condition) { _, _ in
             assignmentsReady = false
             Task { await loadAssignments() }

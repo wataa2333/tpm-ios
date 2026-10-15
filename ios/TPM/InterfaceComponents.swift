@@ -54,6 +54,7 @@ struct KeyboardTabVisibility: ViewModifier {
 
 extension EnvironmentValues {
     @Entry var previewReferences = false
+    @Entry var loadingViewport = CGRect.zero
 }
 
 struct BottomAction: View {
@@ -80,15 +81,25 @@ struct BottomAction: View {
 
 struct LoadingOverlay: View {
     let title: String
+    @Environment(\.loadingViewport) private var viewport
     var body: some View {
-        ZStack {
+        GeometryReader { geometry in
+        ZStack(alignment: .topLeading) {
             Color.black.opacity(0.22).ignoresSafeArea()
             VStack(spacing: 12) {
                 ProgressView().controlSize(.large)
                 Text(title).font(.subheadline)
             }.padding(24).background(.regularMaterial, in: .rect(cornerRadius: 22))
+                .position(loadingIndicatorCenter(container: geometry.frame(in: .global), viewport: viewport))
         }.accessibilityAddTraits(.updatesFrequently)
+        }
     }
+}
+
+func loadingIndicatorCenter(container: CGRect, viewport: CGRect) -> CGPoint {
+    let center = viewport.isEmpty ? container.midY : viewport.midY
+    let localY = center - container.minY
+    return CGPoint(x: container.width / 2, y: localY > 0 && localY < container.height ? localY : container.height / 2)
 }
 
 struct AnimatedLoadingOverlay: View {

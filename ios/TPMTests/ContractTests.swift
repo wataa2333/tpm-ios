@@ -15,6 +15,20 @@ import Foundation
     #expect(assetDisplayValue(.string("EWPT-01"), key: "assetCode") == "EWPT-01")
 }
 
+@Test func assetRepairSummaryUsesItsKnownAssetCode() {
+    let repair = JSONValue.object(["faultName": .string("维修记录")])
+    let asset = JSONValue.object(["assetCode": .string("EWPT-01")])
+    #expect(assetRepairRecord(repair, asset: asset)["asset"]["assetCode"].text == "EWPT-01")
+}
+
+@Test func loadingUsesWindowCenterRatherThanInsetListCenter() {
+    let center = loadingIndicatorCenter(container: CGRect(x: 0, y: 200, width: 393, height: 600), viewport: CGRect(x: 0, y: 60, width: 393, height: 760))
+    #expect(center.y == 240)
+    #expect(center.x == 196.5)
+    let sheet = loadingIndicatorCenter(container: CGRect(x: 0, y: 550, width: 393, height: 260), viewport: CGRect(x: 0, y: 60, width: 393, height: 760))
+    #expect(sheet.y == 130)
+}
+
 @Test @MainActor func erpKeepsMultipleMaterialLinesAndSaveMode() {
     let form = OriginalFormModel(kind: "ERP_OUTBOUND")
     form.addMaterial(.object(["id": .number(11), "onhandQty": .number(8)]))

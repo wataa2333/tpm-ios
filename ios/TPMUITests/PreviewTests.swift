@@ -2,6 +2,29 @@ import XCTest
 
 @MainActor
 final class PreviewTests: XCTestCase {
+    func testReferenceSelectionsSurviveReturningToForm() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "new-fault"]
+        app.launch()
+        let department = app.buttons["reference-受理部门"]
+        for _ in 0..<4 where !department.isHittable { app.swipeUp() }
+        XCTAssertTrue(department.isHittable)
+        department.tap()
+        app.buttons["示例厂区"].tap()
+        app.buttons["示例生产部"].tap()
+        XCTAssertTrue(app.staticTexts["示例生产部"].waitForExistence(timeout: 5))
+        let user = app.buttons["reference-维修受理人"]
+        for _ in 0..<3 where !user.isHittable { app.swipeUp() }
+        user.tap()
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "示例维修人")).firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["示例维修人"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["示例生产部"].exists)
+        user.tap()
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "示例申请人")).firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["示例申请人"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["示例生产部"].exists)
+    }
+
     func testCompactCardsExpandAndSearchFiltersAreContextual() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "faults"]

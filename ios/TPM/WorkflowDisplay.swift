@@ -23,3 +23,13 @@ func assetDisplayValue(_ value: JSONValue, key: String) -> String {
     }
     return text
 }
+
+func assetRepairRecord(_ repair: JSONValue, asset: JSONValue) -> JSONValue {
+    var record = repair.object
+    var fields = asset.object
+    for (key, value) in repair["asset"].object where value != .null && !value.text.isEmpty {
+        fields[key] = value
+    }
+    record["asset"] = .object(fields)
+    return .object(record)
+}
