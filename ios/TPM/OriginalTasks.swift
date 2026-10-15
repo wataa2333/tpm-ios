@@ -6,6 +6,7 @@ struct OriginalRepairForm: View {
     let faultID: String
     let task: JSONValue
     var preview = false
+    var onCompleted: (() -> Void)? = nil
     @State private var data: Fields = [:]
     @State private var loading = true
     @State private var saving = false
@@ -50,7 +51,7 @@ struct OriginalRepairForm: View {
                     }
                 }
             }
-            Section { TextField("请输入说明", text: text("content"), axis: .vertical).lineLimit(3...8).onChange(of: data.text("content")) { _, value in if value.count > 255 { data["content"] = .string(String(value.prefix(255))) } } } header: { RequiredLabel(title: "工作说明") }
+            Section { VStack(alignment: .leading, spacing: 8) { TextField("请输入说明", text: text("content"), axis: .vertical).lineLimit(3...8).onChange(of: data.text("content")) { _, value in data["content"] = .string(limitedText(value, limit: 255)) }; CharacterCount(text: data.text("content"), limit: 255) } } header: { RequiredLabel(title: "工作说明") }
             Section("图片") { OriginalPhotosField(albums: field("albums"), directory: "asset_fault", preview: preview, uploading: $photoUploading) }
             if let error { Section { Text(error).foregroundStyle(.red); if data.isEmpty { Button("重试") { Task { await load() } } } } }
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
@@ -82,7 +83,7 @@ struct OriginalRepairForm: View {
                 catch { self.error = error.localizedDescription }
             } } }
         }
-        .sheet(isPresented: $workflow, onDismiss: { Task { await load() } }) { NavigationStack { WorkflowTaskView(task: task, kind: .fault, onCompleted: { dismiss() }) } }
+        .sheet(isPresented: $workflow, onDismiss: { Task { await load() } }) { NavigationStack { WorkflowTaskView(task: task, kind: .fault, onCompleted: { onCompleted?(); dismiss() }) } }
         .confirmationDialog(submitAfterSave ? "保存维修结果并继续提交审批？" : "保存维修结果到原系统？", isPresented: $confirming, titleVisibility: .visible) { Button(submitAfterSave ? "继续" : "保存") { Task { await save() } } }
         .alert("请检查表单", isPresented: $showValidation) { Button("好", role: .cancel) { error = nil } } message: { Text(error ?? "") }
     }
@@ -126,7 +127,7 @@ struct OriginalRepairForm: View {
         saving = true; error = nil; defer { saving = false }
         do {
             _ = try await session.request("repair/handleRepair", body: .object(data))
-            if submitAfterSave { workflow = true } else { dismiss() }
+            if submitAfterSave { workflow = true } else { onCompleted?(); dismiss() }
         } catch { self.error = error.localizedDescription }
     }
 }
@@ -200,7 +201,7 @@ struct WorkflowTaskView: View {
                 if assignmentsLoading { ProgressView("正在加载审批人…") }
                 AssigneesFields(elements: assignments.assignees, selections: $assignments.selections)
             } }
-            Section(isReturning ? "退单原因" : isRejecting ? "驳回意见" : "意见") { TextField(isReturning ? "请输入退单原因" : isRejecting ? "请输入驳回意见" : "请输入意见", text: $comment, axis: .vertical).lineLimit(3...8).onChange(of: comment) { _, value in if value.count > 255 { comment = String(value.prefix(255)) } } }
+            Section(isReturning ? "退单原因" : isRejecting ? "驳回意见" : "意见") { VStack(alignment: .leading, spacing: 8) { TextField(isReturning ? "请输入退单原因" : isRejecting ? "请输入驳回意见" : "请输入意见", text: $comment, axis: .vertical).lineLimit(3...8).onChange(of: comment) { _, value in comment = limitedText(value, limit: 255) }; CharacterCount(text: comment, limit: 255) } }
             if let error { Section { Text(error).foregroundStyle(.red); Button("重新加载") { Task { await load() } } } }
             if preview { Section { Text("流程页面预览，使用示例数据，不执行真实提交。").font(.footnote).foregroundStyle(.secondary) } }
         }
@@ -221,7 +222,8 @@ struct WorkflowTaskView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             DocumentActions(busy: submitting, submitting: true,
                             disabled: !state["canSubmit"].bool || !ready || !assignmentsReady || assignmentsLoading || loading || condition.isEmpty,
-                            submit: { confirming = true })
+                            submitTitle: task["category"].text == "SIGNED" && condition == "agree" ? "签到" : "提交",
+                            submit: { if task["category"].text == "SIGNED" && condition == "agree" { Task { await submit() } } else { confirming = true } })
         }
         .task { await load() }
         .onChange(of: condition) { _, _ in
@@ -285,7 +287,8 @@ struct WorkflowTaskView: View {
     }
     private func loadAssignments() async { do { try await fetchAssignments() } catch { self.error = error.localizedDescription } }
     private func submit() async {
-        guard !preview, !submitting, ready, assignmentsReady, !assignmentsLoading, state["canSubmit"].bool else { return }
+        if preview { onCompleted?(); dismiss(); return }
+        guard !submitting, ready, assignmentsReady, !assignmentsLoading, state["canSubmit"].bool else { return }
         submitting = true; error = nil; defer { submitting = false }
         do {
             if condition == "agree" {

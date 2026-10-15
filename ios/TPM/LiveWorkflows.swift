@@ -68,6 +68,7 @@ struct LiveWorkflowList: View {
     @State private var rows: [JSONValue] = []
     @State private var query = ""
     @State private var searchField: FaultSearchField = .name
+    @State private var searching = false
     @State private var loading = true
     @State private var error: String?
     @State private var last = true
@@ -76,31 +77,17 @@ struct LiveWorkflowList: View {
     init(kind: WorkflowKind, initialState: String = "RECEIVED") { self.kind = kind; _state = State(initialValue: initialState) }
     var body: some View {
         List {
-            if kind == .fault { Section { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } } } }
+            if kind == .fault && searching { Section { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } } } }
             ForEach(Array(rows.enumerated()), id: \.offset) { _, item in
-                NavigationLink { LiveWorkflowDetail(kind: kind, id: item[kind.idKey].text) } label: {
-                    VStack(alignment: .leading, spacing: 7) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(kind == .fault ? item["faultName"].text : item["outNumber"].text).font(.headline)
-                            Spacer(minLength: 12)
-                            if kind == .fault {
-                                HStack(spacing: 5) {
-                                    Image(systemName: item["faultState"].text == "REPORTED" ? "tray" : "wrench.and.screwdriver")
-                                    Text(faultStateName(item["faultState"].text))
-                                }.font(.subheadline.weight(.medium)).foregroundStyle(item["faultState"].text == "REPORTED" ? Color.orange : Color.accentColor).fixedSize()
-                            }
-                        }
-                        if kind == .fault {
-                            Text("机台号：\(item["asset"]["addressCode"].text) · 资产编码：\(item["asset"]["assetCode"].text)").font(.subheadline).foregroundStyle(.secondary)
-                            Text("地址：" + item["asset"]["address"].text).font(.subheadline).foregroundStyle(.secondary)
-                            HStack { Text("报修人：" + item["applyUser"]["realName"].text); Spacer(); Text(readableDate(item["faultTime"])) }.font(.subheadline).foregroundStyle(.secondary)
-                            if item["returnOrder"].bool { Label(state == "UNTREATED" ? "已驳回" : "退单", systemImage: "arrow.uturn.backward").font(.subheadline).foregroundStyle(.orange) }
-                        }
-                        if kind == .erp { Text(item["approvalState"].text).font(.subheadline).foregroundStyle(.secondary) }
-                        Text(item["sn"].text).font(.subheadline).foregroundStyle(.secondary)
-                    }.padding(.vertical, 4)
+                WorkOrderCard(title: kind == .fault ? item["faultName"].text : item["outNumber"].text,
+                    status: kind == .fault ? faultStateName(item["faultState"].text) : item["approvalState"].text,
+                    reference: kind == .fault ? item["asset"]["assetCode"].text : item["sn"].text,
+                    referenceTitle: kind == .fault ? "资产编码" : "单号",
+                    time: readableDate(item[kind == .fault ? "faultTime" : "applyDate"]),
+                    facts: kind == .fault ? faultCardFacts(item) : [("出库单号", item["outNumber"].text), ("领用人", item["recipientUser"]["realName"].text), ("领用部门", item["dept"]["deptName"].text), ("用途", item["remark"].text)]) {
+                    LiveWorkflowDetail(kind: kind, id: item[kind.idKey].text)
                 }
-                .navigationLinkIndicatorVisibility(.hidden)
+
                 .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
             }
@@ -118,7 +105,7 @@ struct LiveWorkflowList: View {
             let index = FaultState.allCases.firstIndex { $0.code == state } ?? 2
             state = FaultState.allCases[min(max(index + (value.translation.width < 0 ? 1 : -1), 0), 7)].code
         })
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号")
+        .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号")
         .onSubmit(of: .search) { Task { await reload() } }
         
         .refreshable { await reload() }
@@ -149,6 +136,9 @@ func faultStateName(_ state: String) -> String {
 }
 
 struct LiveWorkflowDetail: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var navigation: BottomNavigationModel
+    private func completed() { processing = false; returning = false; editing = false; navigation.refresh = UUID(); dismiss() }
     @EnvironmentObject private var session: LiveSession
     let kind: WorkflowKind
     let id: String
@@ -224,14 +214,14 @@ struct LiveWorkflowDetail: View {
                 HStack { if returnAvailable { BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) { returning = true }.disabled(loading) }; Spacer(); BottomAction(title: task["name"].text, symbol: "arrow.right.circle") { processing = true }.disabled(loading) }.padding(.horizontal, 20).padding(.vertical, 8)
             }
         }
-        .sheet(isPresented: $returning, onDismiss: { Task { await load() } }) { NavigationStack { WorkflowTaskView(task: task, kind: kind, previewReturn: true) } }
+        .sheet(isPresented: $returning, onDismiss: { Task { await load() } }) { NavigationStack { WorkflowTaskView(task: task, kind: kind, previewReturn: true, onCompleted: completed) } }
         .sheet(isPresented: $editing, onDismiss: { Task { await load() } }) {
-            NavigationStack { if kind == .fault { OriginalFaultForm(existing: detail.object) } else { OriginalERPForm(existing: detail.object) } }
+            NavigationStack { if kind == .fault { OriginalFaultForm(existing: detail.object, onSaved: completed) } else { OriginalERPForm(existing: detail.object, onSaved: { _ in completed() }) } }
         }
         .sheet(isPresented: $processing, onDismiss: { Task { await load() } }) {
             NavigationStack {
-                if kind == .fault && task["category"].text == "REPAIRED" { OriginalRepairForm(faultID: id, task: task) }
-                else { WorkflowTaskView(task: task, kind: kind) }
+                if kind == .fault && task["category"].text == "REPAIRED" { OriginalRepairForm(faultID: id, task: task, onCompleted: completed) }
+                else { WorkflowTaskView(task: task, kind: kind, onCompleted: completed) }
             }
         }
     }
@@ -279,13 +269,14 @@ struct LiveCatalogView: View {
     let source: ReferenceSource
     @State private var query = ""
     @State private var byCode = false
+    @State private var searching = false
     @State private var rows: [JSONValue] = []
     @State private var loading = true
     @State private var error: String?
     @State private var last = true
     var body: some View {
         List {
-            Section { Toggle("按编号搜索", isOn: $byCode) }
+            if searching { Section { Toggle("按编号搜索", isOn: $byCode) } }
             ForEach(Array(rows.enumerated()), id: \.offset) { _, record in
                 NavigationLink {
                     if source == .assets { AssetRecordDetail(record: record) }
@@ -299,7 +290,7 @@ struct LiveCatalogView: View {
         }
         .overlay { if loading { LoadingOverlay(title: "正在加载…") } }
         .navigationTitle(source == .assets ? "资产台账" : "库存")
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: byCode ? "搜索编号" : "搜索名称")
+        .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: byCode ? "搜索编号" : "搜索名称")
         .onSubmit(of: .search) { Task { await load() } }
         .onChange(of: byCode) { Task { await load() } }
         .task { await load() }.refreshable { await load() }
@@ -373,4 +364,8 @@ struct WorkflowNodesView: View {
             definition = try await session.request("workflow/getAssigneeElementsByProcessInstanceId", query: ["processInstanceId": processID]).array
         } catch { self.error = error.localizedDescription }
     }
+}
+
+func faultCardFacts(_ item: JSONValue) -> [(String, String)] {
+    [("报修名称", item["faultName"].text), ("资产编码", item["asset"]["assetCode"].text), ("资产名称", item["asset"]["assetName"].text), ("机台号", item["asset"]["addressCode"].text), ("地址", item["asset"]["address"].text), ("报修人", item["applyUser"]["realName"].text), ("报修时间", readableDate(item["faultTime"])), ("受理组别", item["userGroup"]["groupName"].text), ("受理部门", item["dept"]["deptName"].text), ("受理人", item["user"]["realName"].text), ("故障描述", item["faultDesc"].text)]
 }

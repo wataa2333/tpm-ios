@@ -7,6 +7,9 @@ enum PreviewIdentity {
 
 struct SignInPreview: View {
     let asset: Asset
+    var onCompleted: (() -> Void)? = nil
+    @State private var signed = false
+    @Environment(\.dismiss) private var dismiss
     var body: some View {
         List {
             Section("待签到设备") {
@@ -15,18 +18,18 @@ struct SignInPreview: View {
                 LabeledContent("资产编码", value: "FA-" + asset.id)
                 LabeledContent("地址", value: asset.location)
                 LabeledContent("维修人", value: "示例用户")
-                LabeledContent("签到时间", value: "未签到")
+                LabeledContent("签到状态", value: signed ? "已签到" : "待签到")
             }
             Section { NavigationLink { WorkflowNodesView(processID: "", preview: true) } label: { Label("处理流程", systemImage: "point.3.connected.trianglepath.dotted") } }
-            Section { Text("原 App 提供二维码及 RFID 签到。当前仅展示页面，未执行签到。").font(.footnote).foregroundStyle(.secondary) }
+            Section { DemoNotice() }
         }
         .navigationTitle("任务签到").navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
             HStack {
-                BottomAction(title: "RFID 签到", symbol: "wave.3.right", color: .orange) { }
                 Spacer()
-                BottomAction(title: "二维码签到", symbol: "qrcode.viewfinder") { }
-            }.padding(.horizontal, 20).padding(.vertical, 8).disabled(true)
+                BottomAction(title: signed ? "已签到" : "签到", symbol: "checkmark.circle") { signed = true; onCompleted?(); if onCompleted != nil { dismiss() } }.disabled(signed)
+            }.padding(.horizontal, 20).padding(.vertical, 8)
+
         }
     }
 }
@@ -53,17 +56,11 @@ struct AssetRecordDetail: View {
                 Section("基本信息") { ForEach(assetFields, id: \.0) { key, label in LabeledContent(label, value: readableDate(asset.at(key)).isEmpty ? "—" : readableDate(asset.at(key))) } }
             } else if tab == 6 {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                    NavigationLink {
+                    WorkOrderCard(title: row["faultName"].text, status: faultStateName(row["faultState"].text), reference: row["asset"]["assetCode"].text, time: readableDate(row["faultTime"]), facts: faultCardFacts(row)) {
                         if preview { FaultDetailView(id: "BX-20261015-001") }
                         else { LiveWorkflowDetail(kind: .fault, id: row["faultId"].text) }
-                    } label: {
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(alignment: .top) { Text(row["faultName"].text).font(.headline); Spacer(); Text(faultStateName(row["faultState"].text)).font(.subheadline.weight(.medium)).foregroundStyle(.orange) }
-                            ForEach([("asset.assetCode", "资产编号"), ("asset.assetName", "资产名称"), ("asset.addressCode", "机台号"), ("asset.address", "地址"), ("faultTime", "故障时间"), ("applyUser.realName", "故障申请人"), ("userGroup.groupName", "维修班组"), ("user.realName", "维修受理人"), ("dept.deptName", "受理部门")], id: \.0) { key, title in
-                                HStack(alignment: .top) { Text(title).foregroundStyle(.secondary); Spacer(minLength: 16); Text(readableDate(row.at(key))).multilineTextAlignment(.trailing) }.font(.subheadline)
-                            }
-                        }.padding(.vertical, 8)
                     }
+
                 }
             } else if tab == 2 {
                 ForEach(Array(asset["albums"].array.enumerated()), id: \.offset) { _, photo in AttachmentRow(photo: photo) }
@@ -113,11 +110,12 @@ struct WarehouseStockView: View {
     @State private var error: String?
     @State private var query = ""
     @State private var searchField = "material.materialName"
+    @State private var searching = false
     @State private var last = true
     var body: some View {
         List {
             Section {
-                Picker("搜索分类", selection: $searchField) { Text("物料名称").tag("material.materialName"); Text("物料编号").tag("material.materialNum"); Text("规格型号").tag("material.materialModel") }
+                if searching { Picker("搜索分类", selection: $searchField) { Text("物料名称").tag("material.materialName"); Text("物料编号").tag("material.materialNum"); Text("规格型号").tag("material.materialModel") } }
                 NavigationLink { WarehouseReceiptsView(preview: preview) } label: { Label("入库记录", systemImage: "tray.and.arrow.down") }
             }
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
@@ -136,7 +134,7 @@ struct WarehouseStockView: View {
             if preview { DemoNotice() }
         }
         .navigationTitle("仓库库存").navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索" + (searchField == "material.materialNum" ? "物料编号" : searchField == "material.materialModel" ? "规格型号" : "物料名称"))
+        .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索" + (searchField == "material.materialNum" ? "物料编号" : searchField == "material.materialModel" ? "规格型号" : "物料名称"))
         .task(id: searchField + query) { await load() }
         .refreshable { await load() }
         .overlay { if loading { LoadingOverlay(title: "正在加载库存…") } }

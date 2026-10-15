@@ -54,3 +54,17 @@ import Foundation
     #expect(isReturnCondition(.object(["name": .string("退单"), "value": .string("reject")])))
     #expect(!isReturnCondition(.object(["name": .string("不同意"), "value": .string("reject")])))
 }
+
+@Test func textLimitPreservesUnicodeAndOriginalUTF16Limit() {
+    #expect(limitedText(String(repeating: "中", count: 65), limit: 64).utf16.count == 64)
+    #expect(limitedText("A😀B", limit: 2) == "A")
+    #expect(limitedText("A😀B", limit: 3) == "A😀")
+}
+
+@Test func filteringHierarchicalChoicesKeepsTheParent() {
+    let values = PreviewReferenceData.values(.faultTypes)
+    let result = matchingFaultTypes(values, query: "轴承")
+    #expect(result.count == 1)
+    #expect(result[0]["children"].array.count == 1)
+    #expect(result[0]["children"].array[0]["typeName"].text == "轴承磨损")
+}

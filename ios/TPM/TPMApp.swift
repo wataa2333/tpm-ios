@@ -7,7 +7,7 @@ struct TPMApp: App {
     @StateObject private var session = LiveSession()
     @StateObject private var navigation = BottomNavigationModel()
     var body: some Scene {
-        WindowGroup { PreviewRouter().environmentObject(store).environmentObject(session).environmentObject(navigation) }
+        WindowGroup { PreviewRouter().environmentObject(store).environmentObject(session).environmentObject(navigation).labeledContentStyle(SafeFactsStyle()).lineLimit(1).truncationMode(.tail) }
     }
 }
 
@@ -199,6 +199,7 @@ struct FaultListView: View {
     @EnvironmentObject private var navigation: BottomNavigationModel
     @State private var state: FaultState
     @State private var searchField: FaultSearchField = .name
+    @State private var searching = false
     @State private var query = ""
     @State private var creating = false
     init(initialState: FaultState = .received) { _state = State(initialValue: initialState) }
@@ -221,12 +222,12 @@ struct FaultListView: View {
     }
     var body: some View {
         List {
-            Section {
+            if searching { Section {
                 Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }
-            } footer: { DemoNotice() }
+            } }
             Section {
                 ForEach(rows) { fault in
-                    NavigationLink { FaultDetailView(id: fault.id) } label: { FaultRow(fault: fault) }
+                    FaultRow(fault: fault)
                         .navigationLinkIndicatorVisibility(.hidden)
                         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
@@ -245,7 +246,7 @@ struct FaultListView: View {
             let index = FaultState.allCases.firstIndex(of: state)!
             state = FaultState.allCases[min(max(index + (value.translation.width < 0 ? 1 : -1), 0), FaultState.allCases.count - 1)]
         })
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索" + searchField.rawValue)
+        .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索" + searchField.rawValue)
         .onAppear { navigation.newDocument = .fault }
         .onDisappear { if navigation.newDocument == .fault { navigation.newDocument = nil } }
         .sheet(isPresented: $creating) { NavigationStack { NewFaultView() } }
@@ -255,17 +256,10 @@ struct FaultListView: View {
 struct FaultRow: View {
     let fault: Fault
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(fault.name).font(.headline)
-                Spacer()
-                StatusLabel(state: fault.state)
-            }
-            Text(fault.description).font(.subheadline).lineLimit(2)
-            Text("机台号：\(fault.asset.id) · 资产编码：FA-\(fault.asset.id)").font(.subheadline).foregroundStyle(.secondary)
-            Text("地址：\(fault.asset.location)").font(.subheadline).foregroundStyle(.secondary)
-            HStack { Text("报修人：" + fault.reporter); Spacer(); Text(fault.time) }.font(.subheadline).foregroundStyle(.secondary)
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 6)
+        WorkOrderCard(title: fault.name, status: fault.state.rawValue, color: fault.state.color, reference: "FA-" + fault.asset.id, time: fault.time,
+            facts: [("报修名称", fault.name), ("资产编码", "FA-" + fault.asset.id), ("资产名称", fault.asset.name), ("机台号", fault.asset.id), ("地址", fault.asset.location), ("报修人", fault.reporter), ("报修时间", fault.time), ("受理组别", "设备维修二组"), ("受理部门", "示例设备部"), ("受理人", "示例用户"), ("故障描述", fault.description)]) {
+            FaultDetailView(id: fault.id)
+        }
     }
 }
 
@@ -274,6 +268,9 @@ struct FaultDetailView: View {
     let id: String
     @State private var processing = false
     @State private var returning = false
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var navigation: BottomNavigationModel
+    private func completed() { processing = false; returning = false; navigation.refresh = UUID(); dismiss() }
     private var fault: Fault? { store.faults.first { $0.id == id } }
     var body: some View {
         Group {
@@ -315,12 +312,12 @@ struct FaultDetailView: View {
                 }
                 .sheet(isPresented: $processing) {
                     NavigationStack {
-                        if fault.state == .signed { SignInPreview(asset: fault.asset) }
-                        else if fault.state == .working { FaultProcessingView(id: id) }
-                        else { WorkflowTaskView(task: .object(["name": .string(fault.state.actionTitle), "category": .string(fault.state.code)]), kind: .fault, preview: true) }
+                        if fault.state == .signed { SignInPreview(asset: fault.asset, onCompleted: completed) }
+                        else if fault.state == .working { OriginalRepairForm(faultID: id, task: .object(["name": .string("维修处理")]), preview: true, onCompleted: completed) }
+                        else { WorkflowTaskView(task: .object(["name": .string(fault.state.actionTitle), "category": .string(fault.state.code)]), kind: .fault, preview: true, onCompleted: completed) }
                     }
                 }
-                .sheet(isPresented: $returning) { NavigationStack { WorkflowTaskView(task: .object(["name": .string("退单"), "category": .string(fault.state.code)]), kind: .fault, preview: true, previewReturn: true) } }
+                .sheet(isPresented: $returning) { NavigationStack { WorkflowTaskView(task: .object(["name": .string("退单"), "category": .string(fault.state.code)]), kind: .fault, preview: true, previewReturn: true, onCompleted: completed) } }
 
             } else { ContentUnavailableView("单据不存在", systemImage: "doc.questionmark") }
         }
@@ -395,13 +392,8 @@ struct OrderPoolView: View {
         List {
             Section {
                 ForEach(Asset.samples.prefix(3).filter { query.isEmpty || ($0.name + $0.id).localizedCaseInsensitiveContains(query) }) { asset in
-                    NavigationLink { OrderDetailView(kind: kind, asset: asset) } label: {
-                        VStack(alignment: .leading, spacing: 7) {
-                            Text("\(asset.name)\(kind)").font(.headline)
-                            Text("\(asset.id) · \(asset.location)").font(.subheadline).foregroundStyle(.secondary)
-                            Text(store.claimedOrders.contains(kind + asset.id) ? "已领取（模拟）" : "待接单 · 今天 10:00").font(.subheadline).foregroundStyle(.secondary)
-                        }.padding(.vertical, 5)
-                    }
+                    WorkOrderCard(title: "\(asset.name)\(kind)", status: store.claimedOrders.contains(kind + asset.id) ? "已领取" : "待接单", reference: "FA-" + asset.id, time: "今天 10:00", facts: [("任务类型", kind), ("机台号", asset.id), ("地址", asset.location), ("受理组别", "设备维修组"), ("受理部门", asset.department)]) { OrderDetailView(kind: kind, asset: asset) }
+
                 }
             } footer: { DemoNotice() }
         }
@@ -493,13 +485,8 @@ struct OutboundListView: View {
             }
             Section {
                 ForEach(rows) { outbound in
-                    NavigationLink { OutboundDetailView(id: outbound.id) } label: {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(outbound.material.name).font(.headline)
-                            Text("\(outbound.id) · \(outbound.quantity) \(outbound.material.unit)").font(.subheadline).foregroundStyle(.secondary)
-                            Text("\(outbound.department) · \(outbound.applicant) · \(outbound.date)").font(.subheadline).foregroundStyle(.secondary)
-                        }.padding(.vertical, 5)
-                    }
+                    WorkOrderCard(title: outbound.id, status: outbound.completed ? "已出库" : "待出库", reference: outbound.id, referenceTitle: "出库单号", time: outbound.date, facts: [("领用部门", outbound.department), ("领用人", outbound.applicant), ("物料名称", outbound.material.name), ("申请数量", "\(outbound.quantity) \(outbound.material.unit)")]) { OutboundDetailView(id: outbound.id) }
+
                 }
                 if rows.isEmpty { ContentUnavailableView("暂无出库单", systemImage: "shippingbox") }
             } footer: { DemoNotice() }

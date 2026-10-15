@@ -154,6 +154,9 @@ struct ReferencePicker: View {
     @State private var values: [JSONValue] = []
     @State private var query = ""
     @State private var searchByCode = false
+    @State private var searching = false
+    @State private var userMode = 0
+    @State private var userGroups: [JSONValue] = []
     @State private var loading = true
     @State private var loadingMore = false
     @State private var selecting = false
@@ -162,14 +165,24 @@ struct ReferencePicker: View {
     @State private var picked = Set<String>()
     private func identity(_ v: JSONValue) -> String { [.users, .workflowUsers].contains(source) ? v["userName"].text : v["id"].text }
     private var visible: [JSONValue] {
-        (!preview && source.pagePath != nil) || query.isEmpty ? values : values.filter { $0.encodedString.localizedCaseInsensitiveContains(query) }
+        (!preview && source.pagePath != nil) || query.isEmpty ? values : [.faultTypes, .departments].contains(source) ? matchingFaultTypes(values, query: query) : values.filter { $0.encodedString.localizedCaseInsensitiveContains(query) }
     }
     var body: some View {
         List {
-            if source.pagePath != nil {
+            if source == .users { Picker("人员分类", selection: $userMode) { Text("按姓名").tag(0); Text("按班组").tag(1) }.pickerStyle(.segmented) }
+            if source.pagePath != nil && searching {
                 Section { Toggle("按编号搜索", isOn: $searchByCode) }
             }
-            ForEach(Array(visible.enumerated()), id: \.offset) { _, value in
+            if source == .faultTypes {
+                FaultTypeTree(nodes: visible) { value in Task { await select(value) } }
+            } else if source == .departments {
+                DepartmentTree(nodes: visible) { value in Task { await select(value) } }
+            } else if source == .users && userMode == 1 {
+                ForEach(Array(userGroups.enumerated()), id: \.offset) { _, group in
+                    let users = group["users"].array.filter { $0["enabled"] != .bool(false) && (query.isEmpty || group["groupName"].text.localizedCaseInsensitiveContains(query) || ($0["realName"].text + $0["userName"].text).localizedCaseInsensitiveContains(query)) }
+                    if !users.isEmpty { DisclosureGroup(group["groupName"].text) { ForEach(Array(users.enumerated()), id: \.offset) { _, user in Button(user.object.label) { Task { await select(user) } }.lineLimit(1) } } }
+                }
+            } else { ForEach(Array(visible.enumerated()), id: \.offset) { _, value in
                 Button { Task { await select(value) } } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 5) {
@@ -182,6 +195,7 @@ struct ReferencePicker: View {
                     }
                 }
             }
+            }
             if !last && source.pagePath != nil {
                 Button { Task { await load(more: true) } } label: { HStack { Text("加载更多"); if loadingMore { ProgressView() } } }.disabled(loadingMore)
             }
@@ -190,7 +204,7 @@ struct ReferencePicker: View {
         }
         .overlay { if loading || selecting { LoadingOverlay(title: "正在加载…") } }
         .navigationTitle(source.title).navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索")
+        .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索")
         .task { picked = Set(selected); await load() }
         .onSubmit(of: .search) { Task { await load() } }
         .onChange(of: searchByCode) { Task { await load() } }
@@ -227,7 +241,7 @@ struct ReferencePicker: View {
         if more { loadingMore = true } else { loading = true }
         error = nil
         defer { loading = false; loadingMore = false }
-        if preview { values = PreviewReferenceData.values(source); last = true; return }
+        if preview { values = PreviewReferenceData.values(source); userGroups = [.object(["groupName": .string("设备维修组"), "users": .array(PreviewReferenceData.values(.users))])]; last = true; return }
         do {
             let response: JSONValue
             if let path = source.pagePath {
@@ -243,7 +257,9 @@ struct ReferencePicker: View {
                 last = response["last"].bool
             } else {
                 switch source {
-                case .users: response = try await session.request("user/getEnabledUsers")
+                case .users:
+                    response = try await session.request("security/getSelectableUsersByFactory")
+                    userGroups = try await session.request("user/getUserGroupsByFactoryId").array
                 case .workflowUsers: response = try await session.request("workflow/searchTransferUsers", query: ["keyword": query, "size": "20"])
                 case .departments: response = try await session.request("dept/getDeptSimpleTree")
                 case .divisions: response = try await session.request("erp/getAllDivisionByFactoryId")
@@ -252,13 +268,7 @@ struct ReferencePicker: View {
                 case .faultTypes: response = try await session.request("faultType/getFaultTypeTree", query: ["enabled": "true"])
                 default: response = .array([])
                 }
-                func flatten(_ rows: [JSONValue]) -> [JSONValue] {
-                    rows.flatMap { item -> [JSONValue] in
-                        let children = flatten(item["children"].array)
-                        return (item["disabled"].bool || item["value"].text == "root" || (source == .faultTypes && item["type"].text != "FaultType") ? [] : [item]) + children
-                    }
-                }
-                values = [.departments, .faultTypes].contains(source) ? flatten(response.array) : response.array
+                values = response.array.filter { source != .users || $0["enabled"] != .bool(false) }
             }
         } catch { self.error = error.localizedDescription }
     }
@@ -363,7 +373,8 @@ struct OriginalFaultForm: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     RequiredLabel(title: "报修名称")
-                    TextField("请输入报修名称", text: text("faultName")).onChange(of: model.data.text("faultName")) { _, value in if value.count > 64 { model.data["faultName"] = .string(String(value.prefix(64))) } }
+                    TextField("请输入报修名称", text: text("faultName")).onChange(of: model.data.text("faultName")) { _, value in model.data["faultName"] = .string(limitedText(value, limit: 64)) }
+                    CharacterCount(text: model.data.text("faultName"), limit: 64)
                 }
                 ReferenceField(title: "报修资产", source: .assets, value: field("asset"), required: true)
                 ServerDateField(title: "故障时间", value: field("faultTime"), required: true)
@@ -375,14 +386,14 @@ struct OriginalFaultForm: View {
                 ReferenceField(title: "申请部门", source: .departments, value: field("applyDept"), required: true)
                 ReferenceField(title: "受理部门", source: .departments, value: field("dept"), required: true) { dept in model.data["user"] = dept["acceptUser"] }
                 ReferenceField(title: "维修受理人", source: .users, value: field("user"), required: true)
-                VStack(alignment: .leading, spacing: 8) { RequiredLabel(title: "报修人联系电话"); TextField("请输入联系电话", text: text("userPhone")).keyboardType(.phonePad) }
+                VStack(alignment: .leading, spacing: 8) { RequiredLabel(title: "报修人联系电话"); TextField("请输入联系电话", text: text("userPhone")).keyboardType(.phonePad).onChange(of: model.data.text("userPhone")) { _, value in model.data["userPhone"] = .string(limitedText(value, limit: 32)) }; CharacterCount(text: model.data.text("userPhone"), limit: 32) }
                 ReferenceField(title: "维修班组", source: .groups, value: field("userGroup"), required: true)
                 ReferenceField(title: "ERP记账部门", source: .divisions, value: field("division"), required: true)
             }
             if model.assignees.contains(where: { ["ASSIGN", "SUPERVISOR"].contains($0.text("assignType")) }) {
                 Section("审批人") { AssigneesFields(elements: model.assignees, selections: $model.selections) }
             }
-            Section("故障描述") { TextField("请输入故障描述", text: text("faultDesc"), axis: .vertical).lineLimit(3...6).onChange(of: model.data.text("faultDesc")) { _, value in if value.count > 255 { model.data["faultDesc"] = .string(String(value.prefix(255))) } } }
+            Section("故障描述") { VStack(alignment: .leading, spacing: 8) { TextField("请输入故障描述", text: text("faultDesc"), axis: .vertical).lineLimit(3...6).onChange(of: model.data.text("faultDesc")) { _, value in model.data["faultDesc"] = .string(limitedText(value, limit: 255)) }; CharacterCount(text: model.data.text("faultDesc"), limit: 255) } }
             Section("现场照片") { OriginalPhotosField(albums: field("albums"), directory: "asset_fault", preview: preview, uploading: $photoUploading) }
             if let error = model.error { Section { Text(error).foregroundStyle(.red); if !model.ready && !model.loading { Button("重新加载") { Task { await model.load(session, existing: existing) } } } } }
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
@@ -513,7 +524,7 @@ struct OriginalERPForm: View {
                     }
                 }
             } header: { RequiredLabel(title: "出库物料 · \(model.data["erpMaterialOutbounds"]?.array.count ?? 0) 项") }
-            Section { TextField("请输入用途", text: text("remark"), axis: .vertical).lineLimit(3...6) } header: { RequiredLabel(title: "用途") }
+            Section { VStack(alignment: .leading, spacing: 8) { TextField("请输入用途", text: text("remark"), axis: .vertical).lineLimit(3...6).onChange(of: model.data.text("remark")) { _, value in model.data["remark"] = .string(limitedText(value, limit: 140)) }; CharacterCount(text: model.data.text("remark"), limit: 140) } } header: { RequiredLabel(title: "用途") }
             if model.assignees.contains(where: { ["ASSIGN", "SUPERVISOR"].contains($0.text("assignType")) }) {
                 Section("审批人") { AssigneesFields(elements: model.assignees, selections: $model.selections) }
             }
@@ -567,12 +578,13 @@ struct DocumentActions: View {
     let submitting: Bool
     let disabled: Bool
     var save: (() -> Void)? = nil
+    var submitTitle = "提交"
     let submit: () -> Void
     var body: some View {
         HStack(alignment: .center) {
             if let save { BottomAction(title: "保存", symbol: "tray.and.arrow.down", color: Color(red: 0.92, green: 0.73, blue: 0.24), busy: busy && !submitting, action: save) }
             Spacer()
-            BottomAction(title: "提交", symbol: "checkmark.circle", color: .blue, busy: busy && submitting, action: submit)
+            BottomAction(title: submitTitle, symbol: "checkmark.circle", color: .blue, busy: busy && submitting, action: submit)
         }
         .disabled(busy || disabled)
         .padding(.horizontal, 20).padding(.vertical, 8)
@@ -612,7 +624,7 @@ enum PreviewReferenceData {
         case .users, .workflowUsers:
             return ["示例维修人", "示例申请人", "示例审批人"].enumerated().map { .object(["userId": .number(Double($0.offset+1)), "userName": .string("demo\($0.offset+1)"), "realName": .string($0.element)]) }
         case .departments:
-            return ["示例设备部", "示例生产部"].enumerated().map { .object(["value": .number(Double($0.offset+1)), "deptName": .string($0.element)]) }
+            return [.object(["value": .string("root"), "label": .string("示例厂区"), "children": .array([.object(["value": .number(1), "label": .string("设备部"), "children": .array([.object(["value": .number(2), "deptName": .string("示例设备维修科")])])]), .object(["value": .number(3), "deptName": .string("示例生产部")])])])]
         case .groups:
             return [.object(["groupId": .number(1), "groupName": .string("示例维修班组")])]
         case .divisions:
@@ -622,7 +634,7 @@ enum PreviewReferenceData {
         case .materials:
             return PreviewBusinessData.erpLines.map { $0["material"] }
         case .faultTypes:
-            return ["机械故障", "电气故障"].enumerated().map { .object(["key": .string(String($0.offset+1)), "typeName": .string($0.element)]) }
+            return [.object(["key": .string("category-1"), "label": .string("机械故障"), "type": .string("FaultTypeCategory"), "children": .array([.object(["key": .string("1"), "typeName": .string("轴承磨损"), "type": .string("FaultType")]), .object(["key": .string("2"), "typeName": .string("传动异常"), "type": .string("FaultType")])])]), .object(["key": .string("category-2"), "label": .string("电气故障"), "type": .string("FaultTypeCategory"), "children": .array([.object(["key": .string("3"), "typeName": .string("驱动器报警"), "type": .string("FaultType")])])])]
         case .outboundMaterials:
             return PreviewBusinessData.repairMaterials.map { var line = $0["materialOutbound"].object; line["outbound"] = $0["outbound"]; return .object(line) }
         }

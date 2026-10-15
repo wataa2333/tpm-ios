@@ -2,6 +2,62 @@ import XCTest
 
 @MainActor
 final class PreviewTests: XCTestCase {
+    func testCompactCardsExpandAndSearchFiltersAreContextual() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "faults"]
+        app.launch()
+        XCTAssertFalse(app.staticTexts["搜索分类"].exists)
+        XCTAssertFalse(app.staticTexts["受理组别"].exists)
+        let expand = app.descendants(matching: .any)["order-expand-FA-CNC-008"].firstMatch
+        XCTAssertTrue(expand.waitForExistence(timeout: 15))
+        capture(app, "Compact work orders")
+        expand.tap()
+        for _ in 0..<3 where !app.staticTexts["受理组别"].isHittable { app.swipeUp() }
+        XCTAssertTrue(app.staticTexts["受理组别"].exists)
+        XCTAssertTrue(app.staticTexts["受理部门"].exists)
+        capture(app, "Expanded work order")
+        app.terminate(); app.launch()
+        app.searchFields.firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["搜索分类"].waitForExistence(timeout: 5))
+        capture(app, "Active search categories")
+    }
+
+    func testHierarchyAndDirectSignIn() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "fault-type-picker"]
+        app.launch()
+        XCTAssertFalse(app.staticTexts["轴承磨损"].exists)
+        app.buttons["机械故障"].tap()
+        XCTAssertTrue(app.buttons["轴承磨损"].waitForExistence(timeout: 5))
+        capture(app, "Fault type hierarchy")
+        app.terminate(); app.launchArguments = ["--screen", "user-picker"]; app.launch()
+        app.buttons["按班组"].tap()
+        app.buttons["设备维修组"].tap()
+        XCTAssertTrue(app.buttons["示例维修人"].exists)
+        capture(app, "User group hierarchy")
+        app.terminate(); app.launchArguments = ["--screen", "sign-in"]; app.launch()
+        app.buttons["签到"].tap()
+        XCTAssertTrue(app.buttons["已签到"].exists)
+        XCTAssertFalse(app.buttons["二维码签到"].exists)
+        capture(app, "Direct sign in")
+    }
+
+    func testCompletedTaskReturnsToItsListRepeatedly() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "faults"]
+        app.launch()
+        for _ in 0..<2 {
+            app.staticTexts["立式加工中心异常报修"].firstMatch.tap()
+            XCTAssertTrue(app.buttons["领取工单"].waitForExistence(timeout: 10))
+            app.buttons["领取工单"].tap()
+            XCTAssertTrue(app.buttons["提交"].waitForExistence(timeout: 10))
+            app.buttons["提交"].tap()
+            app.sheets.buttons["提交"].tap()
+            XCTAssertTrue(app.navigationBars["故障报修"].waitForExistence(timeout: 10))
+            XCTAssertFalse(app.navigationBars["报修详情"].exists)
+        }
+        capture(app, "Returned to order list")
+    }
     func testVisibleFaultSearchPreviewStates() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "faults"]
