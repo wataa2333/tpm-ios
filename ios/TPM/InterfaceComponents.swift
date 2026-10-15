@@ -1,5 +1,9 @@
 import SwiftUI
 
+extension EnvironmentValues {
+    @Entry var previewReferences = false
+}
+
 struct BottomAction: View {
     let title: String
     let symbol: String

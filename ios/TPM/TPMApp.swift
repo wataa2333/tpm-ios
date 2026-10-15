@@ -16,7 +16,7 @@ struct PreviewRouter: View {
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
         if let index = args.firstIndex(of: "--screen"), args.indices.contains(index + 1) {
-            PreviewScreen(name: args[index + 1])
+            PreviewScreen(name: args[index + 1]).environment(\.previewReferences, true)
         } else { AuthenticatedRoot() }
         #else
         AuthenticatedRoot()
@@ -302,7 +302,7 @@ struct FaultDetailView: View {
                 }
                 .safeAreaInset(edge: .bottom) {
                     HStack {
-                        if [.signed, .working].contains(fault.state) { BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) { returning = true } }
+                        if [.received, .signed, .working].contains(fault.state) { BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) { returning = true } }
                         Spacer()
                         if fault.state != .finished {
                             BottomAction(title: fault.state == .received ? "领取工单" : fault.state == .signed ? "签到" : fault.state == .reported ? "受理报修" : fault.state == .verifying ? "确认完成" : "维修处理", symbol: fault.state.symbol) { processing = true }
@@ -525,12 +525,12 @@ struct OutboundDetailView: View {
                     LabeledContent("申请数量", value: "\(item.quantity) \(item.material.unit)")
                     LabeledContent("出库库位", value: item.material.shelf)
                 }
-                if !item.completed {
-                    Section { Button("确认出库（模拟）") { confirming = true } } footer: { Text("仅改变演示单据状态，不扣减库存，不连接 ERP。") }
-                }
                 Section { DemoNotice() }
             }
             .navigationTitle("出库详情").navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .bottom) {
+                if !item.completed { HStack { Spacer(); BottomAction(title: "确认出库", symbol: "checkmark.circle") { confirming = true } }.padding(.horizontal, 20).padding(.vertical, 8) }
+            }
             .confirmationDialog("确认本地模拟出库？", isPresented: $confirming, titleVisibility: .visible) {
                 Button("确认模拟出库") { if let i = store.outbounds.firstIndex(where: { $0.id == id }) { store.outbounds[i].completed = true } }
             }
@@ -566,6 +566,14 @@ struct PreviewScreen: View {
         case "return-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("退单"), "category": .string("SIGNED")]), kind: .fault, preview: true, previewReturn: true) }
         case "claim-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("领取工单"), "category": .string("RECEIVED")]), kind: .fault, preview: true) }
         case "accept-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("受理报修"), "category": .string("REPORTED")]), kind: .fault, preview: true) }
+        case "reject-accept": NavigationStack { WorkflowTaskView(task: .object(["name": .string("受理报修"), "category": .string("REPORTED")]), kind: .fault, preview: true, previewCondition: "reject") }
+        case "confirm-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("确认完成"), "category": .string("VERIFIED")]), kind: .fault, preview: true) }
+        case "reject-confirm": NavigationStack { WorkflowTaskView(task: .object(["name": .string("确认完成"), "category": .string("VERIFIED")]), kind: .fault, preview: true, previewCondition: "reject") }
+        case "resolve-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("复线确认"), "category": .string("RESOLVED")]), kind: .fault, preview: true) }
+        case "reject-resolve": NavigationStack { WorkflowTaskView(task: .object(["name": .string("复线确认"), "category": .string("RESOLVED")]), kind: .fault, preview: true, previewCondition: "reject") }
+        case "draft-task": NavigationStack { WorkflowTaskView(task: .object(["name": .string("报修提交"), "category": .string("UNTREATED")]), kind: .fault, preview: true) }
+        case "erp-approval": NavigationStack { WorkflowTaskView(task: .object(["name": .string("ERP 出库审批"), "category": .string("APPROVED")]), kind: .erp, preview: true) }
+        case "erp-confirm": NavigationStack { WorkflowTaskView(task: .object(["name": .string("ERP 出库确认"), "category": .string("CONFIRM")]), kind: .erp, preview: true) }
         case "asset-repairs": NavigationStack { AssetDetailView(asset: Asset.samples[0], initialTab: "维修") }
         case "working": NavigationStack { FaultListView(initialState: .working) }
         case "verifying": NavigationStack { FaultListView(initialState: .verifying) }

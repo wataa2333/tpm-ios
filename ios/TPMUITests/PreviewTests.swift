@@ -92,6 +92,21 @@ final class PreviewTests: XCTestCase {
         let mine = app.buttons["我的"].firstMatch
         XCTAssertLessThan(abs(add.frame.midY - mine.frame.midY), 10)
         XCTAssertGreaterThan(add.frame.minX, mine.frame.maxX)
+        XCTAssertEqual(app.buttons.matching(identifier: "我的").count, 1)
+    }
+
+    func testAcceptanceRejectAndReturnScreens() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "reject-accept"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["驳回意见"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.staticTexts["维修安排"].exists)
+        capture(app, "Acceptance reject")
+        app.terminate()
+        app.launchArguments = ["--screen", "return-order"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["退单原因"].waitForExistence(timeout: 15))
+        capture(app, "Return order")
     }
 
     func testERPFormRendersAndKeepsTwoMaterials() {

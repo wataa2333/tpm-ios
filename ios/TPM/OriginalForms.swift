@@ -287,6 +287,7 @@ struct RequiredFormHeader: View {
 }
 
 struct ReferenceField: View {
+    @Environment(\.previewReferences) private var preview
     let title: String
     let source: ReferenceSource
     @Binding var value: JSONValue
@@ -294,7 +295,7 @@ struct ReferenceField: View {
     var selected: ((JSONValue) -> Void)? = nil
     var body: some View {
         NavigationLink {
-            ReferencePicker(source: source) { result in value = result; selected?(result) }
+            ReferencePicker(source: source, preview: preview) { result in value = result; selected?(result) }
         } label: {
             LabeledContent { Text(value.object.isEmpty ? "请选择" : value.object.label) }
             label: { if required { RequiredLabel(title: title) } else { Text(title) } }

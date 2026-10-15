@@ -138,6 +138,7 @@ struct WorkflowTaskView: View {
     let kind: WorkflowKind
     var preview = false
     var previewReturn = false
+    var previewCondition = ""
     var onCompleted: (() -> Void)? = nil
     @StateObject private var assignments = OriginalFormModel(kind: "ASSET_FAULT")
     @State private var state: JSONValue = .null
@@ -201,6 +202,7 @@ struct WorkflowTaskView: View {
             } }
             Section(isReturning ? "退单原因" : isRejecting ? "驳回意见" : "意见") { TextField(isReturning ? "请输入退单原因" : isRejecting ? "请输入驳回意见" : "请输入意见", text: $comment, axis: .vertical).lineLimit(3...8).onChange(of: comment) { _, value in if value.count > 255 { comment = String(value.prefix(255)) } } }
             if let error { Section { Text(error).foregroundStyle(.red); Button("重新加载") { Task { await load() } } } }
+            if preview { Section { Text("流程页面预览，使用示例数据，不执行真实提交。").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(loading || submitting)
         .overlay { if loading || submitting { LoadingOverlay(title: submitting ? "正在提交…" : "正在加载当前节点…") } }
@@ -235,12 +237,22 @@ struct WorkflowTaskView: View {
         loading = true; ready = false; assignmentsReady = false; error = nil; defer { loading = false }
         if preview {
             state = .object(["canSubmit": .bool(true)])
-            conditions = [.object(["name": .string(previewReturn ? "退单" : task["name"].text), "value": .string(previewReturn ? "reject" : "agree")])]
-            if !previewReturn && task["category"].text == "REPORTED" {
-                conditions = [.object(["name": .string("受理"), "value": .string("agree")]), .object(["name": .string("驳回"), "value": .string("reject")])]
+            let category = task["category"].text
+            let choices: [(String, String)]
+            switch category {
+            case "UNTREATED", "SUBMIT": choices = [("提交", "agree"), ("关单", "close")]
+            case "REPORTED": choices = [("派单", "agree"), ("驳回", "reject"), ("关单", "close"), ("指派", "assign")]
+            case "RECEIVED": choices = [("抢单", "agree"), ("退单", "reject")]
+            case "SIGNED": choices = [("签到", "agree"), ("退单", "reject")]
+            case "REPAIRED": choices = [("提交任务", "agree"), ("退单", "reject")]
+            case "VERIFIED": choices = [("确认通过", "agree"), ("驳回", "reject")]
+            case "RESOLVED": choices = [("复线通过", "agree"), ("驳回", "reject")]
+            default: choices = [("通过", "agree"), ("驳回", "reject")]
             }
-            condition = previewReturn ? "reject" : "agree"
-            taskData = ["userGroup": .object(["groupName": .string("设备维修组")]), "estimatedCompleteTime": .string("2026-10-16 23:59")]
+            conditions = choices.map { .object(["name": .string($0.0), "value": .string($0.1)]) }
+            condition = !previewCondition.isEmpty ? previewCondition : previewReturn ? "reject" : "agree"
+            taskData = ["asset": .object(["assetName": .string("立式加工中心"), "assetCode": .string("FA-CNC-008"), "address": .string("一车间 A 区")]), "userGroup": .object(["groupName": .string("设备维修组")]), "groupId": .number(1), "estimatedCompleteTime": .string("2026-10-16 23:59")]
+            if kind == .erp { materials = PreviewBusinessData.erpLines }
             ready = true; assignmentsReady = true
             return
         }
@@ -327,8 +339,11 @@ struct TaskHandoffView: View {
         .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving) }
-            ToolbarItem(placement: .confirmationAction) { Button { confirming = true } label: { HStack { if saving { ProgressView() }; Text("提交") } }.disabled(saving || reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (operation != "resolve" && user["userName"].text.isEmpty)) }
         }
+        .safeAreaInset(edge: .bottom) {
+            DocumentActions(busy: saving, submitting: true, disabled: reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (operation != "resolve" && user["userName"].text.isEmpty), submit: { confirming = true })
+        }
+        .overlay { if saving { LoadingOverlay(title: "正在提交…") } }
         .confirmationDialog("确认\(title)？", isPresented: $confirming, titleVisibility: .visible) { Button("提交") { Task { await save() } } }
     }
     private func save() async {

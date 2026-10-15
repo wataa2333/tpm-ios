@@ -46,6 +46,8 @@ for index, screen in enumerate(["login", "asset-picker", "user-picker", "dept-pi
 captures += [("52-home-dark", "dark", ["--screen", "home"]), ("53-workspace-dark", "dark", ["--screen", "workspace"]), ("54-erp-form-dark", "dark", ["--screen", "erp-form"])]
 for index, screen in enumerate(["draft", "reported", "signed", "resolved", "sign-in", "return-order", "claim-order", "accept-order", "asset-repairs", "warehouse-receipts"], 55):
     captures.append((f"{index:02d}-{screen}", "light", ["--screen", screen]))
+for index, screen in enumerate(["reject-accept", "confirm-order", "reject-confirm", "resolve-order", "reject-resolve", "draft-task", "erp-approval", "erp-confirm"], 65):
+    captures.append((f"{index:02d}-{screen}", "light", ["--screen", screen]))
 for name, appearance, arguments in captures:
     subprocess.run(["xcrun", "simctl", "terminate", udid, "com.personal.tpm"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
