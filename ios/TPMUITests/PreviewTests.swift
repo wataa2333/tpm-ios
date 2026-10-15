@@ -63,6 +63,8 @@ final class PreviewTests: XCTestCase {
         app.buttons["示例厂区"].tap()
         app.buttons["示例生产部"].tap()
         XCTAssertTrue(app.staticTexts["示例生产部"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["示例默认受理人"].exists)
+        XCTAssertEqual(app.searchFields.count, 0)
         let user = app.buttons["reference-维修受理人"]
         for _ in 0..<3 where !user.isHittable { app.swipeUp() }
         user.tap()
@@ -200,12 +202,12 @@ final class PreviewTests: XCTestCase {
         add(attachment)
     }
 
-    func testTodoFirstAndDashboardFactoryEntry() {
+    func testHomeFirstAndDashboardFactoryEntry() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "todo"]
         app.launch()
         XCTAssertTrue(app.navigationBars["我的待办"].waitForExistence(timeout: 15))
-        XCTAssertLessThan(app.buttons["我的待办"].firstMatch.frame.minX, app.buttons["主页"].firstMatch.frame.minX)
+        XCTAssertLessThan(app.buttons["主页"].firstMatch.frame.minX, app.buttons["我的待办"].firstMatch.frame.minX)
         app.buttons["主页"].firstMatch.tap()
         XCTAssertTrue(app.buttons["新建报修"].exists)
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "维修工单池")).firstMatch.waitForExistence(timeout: 10))
@@ -295,5 +297,45 @@ final class PreviewTests: XCTestCase {
         capture(app, "ERP multiple materials")
         let material = app.staticTexts["深沟球轴承"].firstMatch
         if material.isHittable { material.tap(); app.swipeUp(); capture(app, "ERP expanded material") }
+    }
+
+    func testExpandedOpenOrderCanScrollAboveBottomBar() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "faults"]
+        app.launch()
+        let expand = app.buttons["order-expand-FA-CNC-008"].firstMatch
+        XCTAssertTrue(expand.waitForExistence(timeout: 15)); expand.tap()
+        let open = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "打开工单")).firstMatch
+        let bar = app.buttons["主页"].firstMatch
+        for _ in 0..<8 {
+            if open.exists && open.isHittable && open.frame.maxY < bar.frame.minY { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(open.isHittable)
+        XCTAssertLessThan(open.frame.maxY, bar.frame.minY)
+        open.tap()
+        XCTAssertTrue(app.navigationBars["报修详情"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.searchFields.count, 0)
+        XCTAssertFalse(app.buttons["主页"].exists)
+    }
+
+    func testSearchDoesNotFollowNewSheetAndDateUsesItsOwnPicker() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "faults"]
+        app.launch()
+        XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 15))
+        app.searchFields.firstMatch.tap()
+        XCTAssertTrue(app.buttons["取消搜索"].waitForExistence(timeout: 5))
+        app.buttons["取消搜索"].tap()
+        app.buttons["新建报修"].tap()
+        XCTAssertTrue(app.buttons["取消"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.searchFields.count, 0)
+        let date = app.buttons["date-故障时间"]
+        for _ in 0..<4 where !date.isHittable { app.swipeUp() }
+        XCTAssertTrue(date.isHittable); date.tap()
+        XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.datePickers.firstMatch.exists)
+        app.buttons["完成"].tap()
+        XCTAssertEqual(app.searchFields.count, 0)
     }
 }

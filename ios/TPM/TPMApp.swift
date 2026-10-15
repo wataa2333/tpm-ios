@@ -38,7 +38,8 @@ enum FaultState: String, CaseIterable, Identifiable {
         switch self { case .draft: "提交报修"; case .reported: "受理报修"; case .received: "领取工单"; case .signed: "签到"; case .working: "维修处理"; case .verifying: "确认完成"; case .resolved: "复线确认"; case .finished: "已完结" }
     }
     var code: String { ["UNTREATED", "REPORTED", "RECEIVED", "SIGNED", "REPAIRED", "VERIFIED", "RESOLVED", "FINISHED"][FaultState.allCases.firstIndex(of: self)!] }
-    var color: Color { switch self { case .draft: .purple; case .reported: .orange; case .received, .signed: .blue; case .working: .teal; case .verifying, .resolved: .indigo; case .finished: .green } }
+    var color: Color { switch self { case .draft: .purple; case .reported: .orange; case .received: .blue; case .signed: .indigo; case .working: .teal; case .verifying: .pink; case .resolved: .mint; case .finished: .green } }
+    var selectedForeground: Color { switch self { case .reported, .working, .resolved, .finished: .black; default: .white } }
     var symbol: String { switch self { case .draft: "square.and.pencil"; case .reported: "tray"; case .received: "hand.raised"; case .signed: "location"; case .working: "wrench.and.screwdriver"; case .verifying: "checkmark.bubble"; case .resolved: "arrow.triangle.2.circlepath"; case .finished: "checkmark.circle" } }
 }
 
@@ -132,7 +133,7 @@ struct MainTabs: View {
     @EnvironmentObject private var navigation: BottomNavigationModel
     @State private var selection: Int
     var previewFaultList = false
-    init(selection: Int = 2, previewFaultList: Bool = false) { _selection = State(initialValue: selection); self.previewFaultList = previewFaultList }
+    init(selection: Int = 0, previewFaultList: Bool = false) { _selection = State(initialValue: selection); self.previewFaultList = previewFaultList }
     var body: some View {
         Group {
             switch selection {
@@ -222,9 +223,9 @@ struct FaultListView: View {
             state = FaultState.allCases[min(max(index + (value.translation.width < 0 ? 1 : -1), 0), FaultState.allCases.count - 1)]
         })
         }
-        .navigationTitle("故障报修").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("故障报修").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .searchPageChrome(isSearching: searching)
-        .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索" + searchField.rawValue)
+        .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索" + searchField.rawValue)
         .onAppear { navigation.newDocument = .fault; navigation.hideTabs = false }
         .onDisappear { if navigation.newDocument == .fault { navigation.newDocument = nil } }
         .sheet(isPresented: $creating) { NavigationStack { NewFaultView() } }
@@ -299,7 +300,7 @@ struct FaultDetailView: View {
 
             } else { ContentUnavailableView("单据不存在", systemImage: "doc.questionmark") }
         }
-        .navigationTitle("报修详情").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("报修详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility())
     }
 }
@@ -326,7 +327,7 @@ struct AssetListView: View {
         }
         .navigationTitle("资产台账").searchPageChrome()
         .modifier(ListTabVisibility())
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "资产编号、名称、型号或位置")
+        .nativeSearchable(text: $query, prompt: "资产编号、名称、型号或位置")
         .overlay { if !query.isEmpty && !Asset.samples.contains(where: { ($0.id + $0.name + $0.model + $0.location).localizedCaseInsensitiveContains(query) }) { ContentUnavailableView.search(text: query) } }
     }
 }
@@ -335,9 +336,9 @@ struct AssetRow: View {
     let asset: Asset
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            MarqueeContent { Text(asset.name).font(.headline) }
-            MarqueeContent { Text("\(asset.id) · \(asset.model)").font(.subheadline).foregroundStyle(.secondary) }
-            MarqueeContent { Text(asset.location).font(.subheadline).foregroundStyle(.secondary) }
+            WrappingContent { Text(asset.name).font(.headline) }
+            WrappingContent { Text("\(asset.id) · \(asset.model)").font(.subheadline).foregroundStyle(.secondary) }
+            WrappingContent { Text(asset.location).font(.subheadline).foregroundStyle(.secondary) }
         }.padding(.vertical, 4)
     }
 }
@@ -352,9 +353,9 @@ struct AssetPickerView: View {
                 HStack { AssetRow(asset: asset).foregroundStyle(.primary); Spacer(); if selection == asset { Image(systemName: "checkmark") } }
             }
         }
-        .navigationTitle("选择设备").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("选择设备").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .searchPageChrome()
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索设备名称或编号")
+        .nativeSearchable(text: $query, prompt: "搜索设备名称或编号")
     }
 }
 
@@ -379,10 +380,10 @@ struct OrderPoolView: View {
                 }
             } footer: { DemoNotice() }
         }
-        .navigationTitle("\(kind)工单池").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("\(kind)工单池").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(ListTabVisibility())
         .searchPageChrome()
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索设备或资产编号")
+        .nativeSearchable(text: $query, prompt: "搜索设备或资产编号")
     }
 }
 
@@ -405,7 +406,7 @@ struct OrderDetailView: View {
             }
             Section { DemoNotice() }
         }
-        .navigationTitle("工单详情").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("工单详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility())
         .safeAreaInset(edge: .bottom) { HStack { Spacer(); BottomAction(title: claimed ? "已领取" : "领取工单", symbol: "hand.raised") { confirming = true }.disabled(claimed) }.padding(.horizontal, 20).padding(.vertical, 8) }
         .confirmationDialog("领取这张模拟工单？", isPresented: $confirming, titleVisibility: .visible) { Button("领取模拟工单") { store.claimedOrders.insert(kind + asset.id) } }
@@ -436,7 +437,7 @@ struct StockListView: View {
         }
         .navigationTitle("库存").searchPageChrome()
         .modifier(ListTabVisibility())
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "物料编号、名称、规格或库位")
+        .nativeSearchable(text: $query, prompt: "物料编号、名称、规格或库位")
     }
 }
 
@@ -456,7 +457,7 @@ struct MaterialDetailView: View {
             }
             Section { DemoNotice() }
         }
-        .navigationTitle("库存详情").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("库存详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility())
     }
 }
@@ -481,7 +482,7 @@ struct OutboundListView: View {
         }
         .navigationTitle("ERP 出库").searchPageChrome()
         .modifier(ListTabVisibility())
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索出库单、物料或部门")
+        .nativeSearchable(text: $query, prompt: "搜索出库单、物料或部门")
     }
 }
 
@@ -508,7 +509,7 @@ struct OutboundDetailView: View {
                 }
                 Section { DemoNotice() }
             }
-            .navigationTitle("出库详情").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("出库详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
             .modifier(DetailTabVisibility())
             .safeAreaInset(edge: .bottom) {
                 if !item.completed { HStack { Spacer(); BottomAction(title: "确认出库", symbol: "checkmark.circle") { confirming = true } }.padding(.horizontal, 20).padding(.vertical, 8) }
@@ -528,7 +529,7 @@ struct ProfileView: View {
             Section("应用") { LabeledContent("版本", value: "0.5.0"); LabeledContent("数据来源", value: "模拟数据") }
             Section { Text("账号、工厂和业务权限将在对接原服务器后显示。").foregroundStyle(.secondary) }
         }
-        .navigationTitle("我的").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("我的").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
     }
 }
 
@@ -539,7 +540,7 @@ struct PreviewScreen: View {
         case "home": MainTabs(selection: 0)
         case "workspace": MainTabs(selection: 1)
         case "faults": MainTabs(selection: 2, previewFaultList: true)
-        case "todo": MainTabs()
+        case "todo": MainTabs(selection: 2)
         case "profile": MainTabs(selection: 3)
         case "draft": NavigationStack { FaultListView(initialState: .draft) }
         case "reported": NavigationStack { FaultListView(initialState: .reported) }

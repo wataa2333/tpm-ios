@@ -3,16 +3,17 @@ import SwiftUI
 struct SearchPageChrome: ViewModifier {
     var isSearching = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @EnvironmentObject private var navigation: BottomNavigationModel
     func body(content: Content) -> some View {
         content
             .contentMargins(.top, 8, for: .scrollContent)
+            .contentMargins(.bottom, navigation.hideTabs || navigation.keyboardVisible ? 16 : 104, for: .scrollContent)
             .listSectionSpacing(.compact)
             .scrollContentBackground(.hidden)
             .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Color(uiColor: .systemGroupedBackground), for: .navigationBar)
+            .navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+            .toolbarBackground(.regularMaterial, for: .navigationBar)
             .toolbarBackgroundVisibility(.visible, for: .navigationBar)
-            .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.25), value: isSearching)
     }
 }
 
@@ -142,18 +143,15 @@ struct WorkOrderStatusStrip: View {
                             HStack(spacing: 7) {
                                 Image(systemName: state.symbol).font(.system(size: 19, weight: .semibold))
                                     .frame(width: 24)
-                                if selection == index {
-                                    Text(state.rawValue).font(.subheadline.weight(.semibold))
-                                        .lineLimit(1).transition(.opacity)
-                                }
+                                Text(state.rawValue).font(.subheadline.weight(.semibold)).lineLimit(1)
                                 Text(counts[state.code].map(String.init) ?? "…")
                                     .font(.caption.weight(.semibold)).monospacedDigit()
                                     .contentTransition(.numericText())
                             }
-                            .foregroundStyle(selection == index ? Color(uiColor: .systemBackground) : Color.secondary)
+                            .foregroundStyle(selection == index ? state.selectedForeground : state.color)
                             .padding(.horizontal, selection == index ? 16 : 10)
                             .frame(minHeight: 44)
-                            .background(selection == index ? Color.primary : Color(uiColor: .tertiarySystemFill), in: .capsule)
+                            .background(selection == index ? state.color : state.color.opacity(0.12), in: .capsule)
                             .contentShape(.capsule)
                         }
                         .buttonStyle(.plain).id(index)
@@ -164,9 +162,11 @@ struct WorkOrderStatusStrip: View {
                 }.padding(.horizontal, 16).padding(.vertical, 8)
             }
             .scrollIndicators(.hidden)
+            .contentMargins(.all, 0, for: .scrollContent)
             .onAppear { proxy.scrollTo(selection, anchor: .center) }
             .onChange(of: selection) { _, index in withAnimation(animation) { proxy.scrollTo(index, anchor: .center) } }
         }
+        .frame(height: 60)
         .background {
             if reduceTransparency { Color(uiColor: .systemGroupedBackground) }
             else { Rectangle().fill(.regularMaterial) }
@@ -211,10 +211,11 @@ struct HorizontalCategories: View {
                             .accessibilityAddTraits(selection == index ? [.isSelected] : [])
                     }
                 }.padding(.horizontal, 20)
-            }.scrollIndicators(.hidden)
+            }.scrollIndicators(.hidden).contentMargins(.all, 0, for: .scrollContent)
                 .onChange(of: selection) { _, index in withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.25)) { proxy.scrollTo(index, anchor: .center) } }
                 .onAppear { proxy.scrollTo(selection, anchor: .center) }
         }
+        .frame(height: 54)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity)
         .background {

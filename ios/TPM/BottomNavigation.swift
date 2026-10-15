@@ -6,6 +6,7 @@ final class BottomNavigationModel: ObservableObject {
     @Published var hideTabs = false
     @Published var keyboardVisible = false
     @Published var refresh = UUID()
+    @Published var searchReset = UUID()
 }
 
 struct BottomNavigation: View {
@@ -14,9 +15,8 @@ struct BottomNavigation: View {
     var preview = false
     @State private var creating: WorkflowKind?
     @Namespace private var tabSelection
-    @Namespace private var documentTransition
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let tabs = [("我的待办", "checklist"), ("主页", "house"), ("工作台", "square.grid.2x2"), ("我的", "person.crop.circle")]
+    private let tabs = [("主页", "house"), ("我的待办", "checklist"), ("工作台", "square.grid.2x2"), ("我的", "person.crop.circle")]
     var body: some View {
         Group {
         if !navigation.hideTabs && !navigation.keyboardVisible {
@@ -24,10 +24,14 @@ struct BottomNavigation: View {
             HStack(spacing: 12) {
                 HStack(spacing: 0) {
                     ForEach(tabs.indices, id: \.self) { position in
-                        let index = [2, 0, 1, 3][position]
-                        Button { withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.25)) { selection = index } } label: {
+                        let index = [0, 2, 1, 3][position]
+                        Button {
+                            navigation.searchReset = UUID()
+                            withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .spring(response: 0.38, dampingFraction: 0.72)) { selection = index }
+                        } label: {
                             VStack(spacing: 3) {
                                 Image(systemName: tabs[position].1).font(.system(size: 20))
+                                    .scaleEffect(selection == index && !reduceMotion ? 1.06 : 1)
                                 Text(tabs[position].0).font(.system(size: 11, weight: .medium)).lineLimit(1)
                             }
                             .foregroundStyle(selection == index ? Color.accentColor : Color.primary)
@@ -44,18 +48,22 @@ struct BottomNavigation: View {
                     }
                 }.padding(4).glassEffect(.regular.interactive(), in: .capsule)
                 let kind = navigation.newDocument ?? .fault
-                    Button { creating = kind } label: {
+                    Button {
+                        navigation.searchReset = UUID()
+                        Task { @MainActor in await Task.yield(); creating = kind }
+                    } label: {
                         Image(systemName: "plus").font(.system(size: 22, weight: .regular))
                             .foregroundStyle(.primary).frame(width: 30, height: 30)
                     }
                     .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.large)
-                    .glassEffectID("new-document", in: documentTransition)
-                    .matchedTransitionSource(id: "new-document", in: documentTransition)
                     .accessibilityLabel(kind == .fault ? "新建报修" : "新建领料单")
-                    .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
+                    .transition(.opacity)
             }
         }
-        .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 8)
+        // The hosting safeAreaInset already reserves the home indicator area.
+        // Let the floating glass extend 12pt into that area, retaining 22pt on
+        // Face ID phones instead of stacking another bottom gap above it.
+        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, -12)
         .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
         }
         }
@@ -67,7 +75,7 @@ struct BottomNavigation: View {
                 if kind == .fault { OriginalFaultForm(preview: preview) }
                 else { OriginalERPForm(preview: preview) }
             }
-            .navigationTransition(.zoom(sourceID: "new-document", in: documentTransition))
+            .presentationDragIndicator(.visible)
         }
     }
 }

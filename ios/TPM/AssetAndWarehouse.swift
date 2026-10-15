@@ -23,7 +23,7 @@ struct SignInPreview: View {
             Section { NavigationLink { WorkflowNodesView(processID: "", preview: true) } label: { Label("处理流程", systemImage: "point.3.connected.trianglepath.dotted") } }
             Section { DemoNotice() }
         }
-        .navigationTitle("任务签到").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("任务签到").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .safeAreaInset(edge: .bottom) {
             HStack {
                 Spacer()
@@ -52,8 +52,8 @@ struct AssetRecordDetail: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    MarqueeContent { Text(asset["assetName"].text).font(.headline) }
-                    MarqueeContent { Text(asset["assetCode"].text).font(.subheadline).foregroundStyle(.secondary) }
+                    WrappingContent { Text(asset["assetName"].text).font(.headline) }
+                    WrappingContent { Text(asset["assetCode"].text).font(.subheadline).foregroundStyle(.secondary) }
                 }.padding(.vertical, 4)
             }
             if tab == 0 {
@@ -84,7 +84,7 @@ struct AssetRecordDetail: View {
         }
         }
         .searchPageChrome()
-        .navigationTitle("资产详情").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("资产详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility())
         .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载" + tabs[tab] + "…") }
         .onAppear { tab = tabs.firstIndex(of: initialTab) ?? 0 }
@@ -140,9 +140,9 @@ struct WarehouseStockView: View {
             if let error { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } }
             if preview { DemoNotice() }
         }
-        .navigationTitle("仓库库存").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("仓库库存").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .searchPageChrome(isSearching: searching)
-        .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索" + (searchField == "material.materialNum" ? "物料编号" : searchField == "material.materialModel" ? "规格型号" : "物料名称"))
+        .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索" + (searchField == "material.materialNum" ? "物料编号" : searchField == "material.materialModel" ? "规格型号" : "物料名称"), onSubmit: { Task { await load() } })
         .task(id: searchField + query) { await load() }
         .refreshable { await load() }
         .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载库存…") }
@@ -172,7 +172,7 @@ struct WarehouseStockFacts: View {
         List {
             Section("物料信息") { ForEach([("material.materialName", "名称"), ("material.materialNum", "物料编号"), ("material.materialModel", "规格型号"), ("material.brand.brandName", "品牌"), ("material.materialCategory.categoryName", "类别"), ("warehouse.warehouseName", "仓库"), ("place", "库位"), ("amount", "库存数量"), ("averagePrice", "平均价格"), ("inventoryLowerLimit", "库存下限"), ("inventoryLimit", "库存上限"), ("createTime", "记录时间")], id: \.0) { key, title in LabeledContent(title, value: value(key)) } }
             LabeledContent("单位", value: row["material"]["unit"].text.isEmpty ? "PCS" : row["material"]["unit"].text)
-        }.navigationTitle("仓库库存详情").navigationBarTitleDisplayMode(.inline)
+        }.navigationTitle("仓库库存详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
     }
 }
 
@@ -194,7 +194,7 @@ struct WarehouseReceiptsView: View {
             }
             if let error { Text(error).foregroundStyle(.red) }
             if preview { DemoNotice() }
-        }.navigationTitle("入库记录").navigationBarTitleDisplayMode(.inline)
+        }.navigationTitle("入库记录").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
             .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载入库记录…") }
             .task {
                 if preview { rows = [.object(["entryNumber": .string("RK-DEMO-001"), "warehousingTime": .string("2026-10-15 14:30"), "applyDate": .string("2026-10-15"), "warehouse": .object(["warehouseName": .string("备件仓")]), "user": PreviewIdentity.user])]; return }

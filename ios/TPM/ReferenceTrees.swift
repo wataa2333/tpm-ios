@@ -29,9 +29,9 @@ struct FaultTypeNode: View {
             if !node["children"].array.isEmpty {
                 DisclosureGroup(isExpanded: $expanded) {
                     FaultTypeTree(nodes: node["children"].array, choose: choose)
-                } label: { MarqueeContent { Text(node.object.label) } }
+                } label: { WrappingContent { Text(node.object.label) } }
             } else if node["type"].text == "FaultType" && !node["disabled"].bool {
-                Button { choose(node) } label: { MarqueeContent { Text(node.object.label) } }
+                Button { choose(node) } label: { WrappingContent { Text(node.object.label) } }
             }
         }
     }
@@ -54,9 +54,9 @@ struct DepartmentNode: View {
     var body: some View {
         Group {
             if !node["children"].array.isEmpty {
-                DisclosureGroup(isExpanded: $expanded) { DepartmentTree(nodes: node["children"].array, choose: choose) } label: { MarqueeContent { Text(node.object.label) } }
+                DisclosureGroup(isExpanded: $expanded) { DepartmentTree(nodes: node["children"].array, choose: choose) } label: { WrappingContent { Text(node.object.label) } }
             } else if !node["disabled"].bool && node["value"].text != "root" {
-                Button { choose(node) } label: { MarqueeContent { Text(node.object.label) } }
+                Button { choose(node) } label: { WrappingContent { Text(node.object.label) } }
             }
         }
     }

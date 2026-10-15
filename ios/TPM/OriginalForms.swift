@@ -13,6 +13,12 @@ final class OriginalFormModel: ObservableObject {
     @Published var ready = false
     let kind: String
     init(kind: String) { self.kind = kind }
+    func selectReceiverDepartment(_ department: JSONValue) {
+        var updated = data
+        updated["dept"] = department
+        updated["user"] = department["acceptUser"]
+        data = updated
+    }
     func load(_ session: LiveSession, existing: Fields? = nil, referenceSn: String? = nil) async {
         loading = true; ready = false; error = nil
         defer { loading = false }
@@ -183,18 +189,18 @@ struct ReferencePicker: View {
                     if !users.isEmpty {
                         DisclosureGroup {
                             ForEach(Array(users.enumerated()), id: \.offset) { _, user in
-                                Button { Task { await select(user) } } label: { MarqueeContent { Text(user.object.label) } }
+                                Button { Task { await select(user) } } label: { WrappingContent { Text(user.object.label) } }
                             }
-                        } label: { MarqueeContent { Text(group["groupName"].text) } }
+                        } label: { WrappingContent { Text(group["groupName"].text) } }
                     }
                 }
             } else { ForEach(Array(visible.enumerated()), id: \.offset) { _, value in
                 Button { Task { await select(value) } } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 5) {
-                            MarqueeContent { Text(label(value)).foregroundStyle(.primary) }
+                            WrappingContent { Text(label(value)).foregroundStyle(.primary) }
                             let detail = subtitle(value)
-                            if !detail.isEmpty { MarqueeContent { Text(detail).font(.subheadline).foregroundStyle(.secondary) } }
+                            if !detail.isEmpty { WrappingContent { Text(detail).font(.subheadline).foregroundStyle(.secondary) } }
                         }
                         Spacer()
                         if picked.contains(identity(value)) { Image(systemName: "checkmark") }
@@ -209,13 +215,12 @@ struct ReferencePicker: View {
             if !loading && visible.isEmpty && error == nil { ContentUnavailableView("暂无匹配内容", systemImage: "magnifyingglass") }
         }
         .overlay { AnimatedLoadingOverlay(isPresented: loading || selecting, title: "正在加载…") }
-        .navigationTitle(source.title).navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(source.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .searchPageChrome(isSearching: searching)
-        .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索")
+        .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索", onSubmit: { Task { await load() } })
         .task { picked = Set(selected); await load() }
-        .onSubmit(of: .search) { Task { await load() } }
         .onChange(of: searchByCode) { Task { await load() } }
-        .toolbar { if multiple { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } } }
+        .toolbar { if multiple { ToolbarItem(placement: .confirmationAction) { Button("完成") { searching = false; dismiss() } } } }
     }
     private func label(_ value: JSONValue) -> String {
         source == .outboundMaterials ? value["material"].object.label : value.object.label
@@ -226,7 +231,7 @@ struct ReferencePicker: View {
         return [v["assetCode"].text, v["addressCode"].text, v["userName"].text, v["projectCode"].text, v["divisionName"].text].filter { !$0.isEmpty }.joined(separator: " · ")
     }
     private func select(_ value: JSONValue) async {
-        if preview { choose(value); if !multiple { dismiss() }; return }
+        if preview { choose(value); if !multiple { searching = false; dismiss() }; return }
         guard !selecting else { return }
         selecting = true
         defer { selecting = false }
@@ -241,7 +246,7 @@ struct ReferencePicker: View {
                 if [.materials, .outboundMaterials].contains(source) { picked.insert(identity(value)) }
                 else if picked.contains(identity(value)) { picked.remove(identity(value)) }
                 else { picked.insert(identity(value)) }
-            } else { dismiss() }
+            } else { searching = false; dismiss() }
         } catch { self.error = error.localizedDescription }
     }
     private func load(more: Bool = false) async {
@@ -328,9 +333,29 @@ struct ServerDateField: View {
     @Binding var value: JSONValue
     var dateOnly = false
     var required = false
+    @State private var presented = false
+    private var date: Binding<Date> {
+        Binding(get: { parsedDate(value) }, set: { value = .string(serverDate($0, dateOnly: dateOnly)) })
+    }
     var body: some View {
-        DatePicker(selection: Binding(get: { parsedDate(value) }, set: { value = .string(serverDate($0, dateOnly: dateOnly)) }), displayedComponents: dateOnly ? [.date] : [.date, .hourAndMinute]) {
-            if required { RequiredLabel(title: title) } else { Text(title) }
+        Button { presented = true } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                if required { RequiredLabel(title: title) } else { Text(title) }
+                Spacer(minLength: 0)
+                Text(serverDate(date.wrappedValue, dateOnly: dateOnly))
+                    .font(.subheadline).monospacedDigit().foregroundStyle(.tint)
+                    .multilineTextAlignment(.trailing).lineLimit(nil)
+            }.foregroundStyle(.primary).frame(minHeight: 44)
+        }.buttonStyle(.plain).accessibilityIdentifier("date-" + title)
+        .sheet(isPresented: $presented) {
+            NavigationStack {
+                Form {
+                    DatePicker("选择时间", selection: date, displayedComponents: dateOnly ? [.date] : [.date, .hourAndMinute])
+                        .datePickerStyle(.wheel).labelsHidden()
+                }.environment(\.locale, Locale(identifier: "zh_CN"))
+                    .navigationTitle(title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { presented = false } } }
+            }.presentationDetents([.medium, .large])
         }
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
@@ -392,9 +417,12 @@ struct OriginalFaultForm: View {
                     model.data["applyDept"] = user["depts"].array.first ?? .null
                 }
                 ReferenceField(title: "申请部门", source: .departments, value: field("applyDept"), required: true)
-                ReferenceField(title: "受理部门", source: .departments, value: field("dept"), required: true) { dept in model.data["user"] = dept["acceptUser"] }
+                ReferenceField(title: "受理部门", source: .departments, value: field("dept"), required: true) { model.selectReceiverDepartment($0) }
                 ReferenceField(title: "维修受理人", source: .users, value: field("user"), required: true) { user in
                     if let department = user["depts"].array.first { model.data["dept"] = department }
+                }
+                if !(model.data["dept"]?.object.isEmpty ?? true) && (model.data["user"]?.object.isEmpty ?? true) {
+                    Text("该部门未设置默认受理人，请手动选择维修受理人").font(.footnote).foregroundStyle(.secondary)
                 }
                 VStack(alignment: .leading, spacing: 8) { RequiredLabel(title: "报修人联系电话"); TextField("请输入联系电话", text: text("userPhone")).keyboardType(.phonePad).onChange(of: model.data.text("userPhone")) { _, value in model.data["userPhone"] = .string(limitedText(value, limit: 32)) }; CharacterCount(text: model.data.text("userPhone"), limit: 32) }
                 ReferenceField(title: "维修班组", source: .groups, value: field("userGroup"), required: true)
@@ -411,7 +439,7 @@ struct OriginalFaultForm: View {
         .disabled(model.loading || model.saving)
         .initialLoadingContent(model.loading && !model.ready)
         .overlay { AnimatedLoadingOverlay(isPresented: model.loading || model.saving, title: model.saving ? "正在提交报修…" : "正在加载表单…") }
-        .navigationTitle(existing == nil ? "故障报修" : "编辑报修").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(existing == nil ? "故障报修" : "编辑报修").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(model.saving || photoUploading) }
         }
@@ -546,7 +574,7 @@ struct OriginalERPForm: View {
         .disabled(model.loading || model.saving)
         .initialLoadingContent(model.loading && !model.ready)
         .overlay { AnimatedLoadingOverlay(isPresented: model.loading || model.saving, title: model.saving ? "正在提交领料申请…" : "正在加载领料申请…") }
-        .navigationTitle("ERP 出库").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("ERP 出库").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(model.saving) }
         }
@@ -638,7 +666,7 @@ enum PreviewReferenceData {
         case .users, .workflowUsers:
             return ["示例维修人", "示例申请人", "示例审批人"].enumerated().map { .object(["userId": .number(Double($0.offset+1)), "userName": .string("demo\($0.offset+1)"), "realName": .string($0.element)]) }
         case .departments:
-            return [.object(["value": .string("root"), "label": .string("示例厂区"), "children": .array([.object(["value": .number(1), "label": .string("设备部"), "children": .array([.object(["value": .number(2), "deptName": .string("示例设备维修科")])])]), .object(["value": .number(3), "deptName": .string("示例生产部")])])])]
+            return [.object(["value": .string("root"), "label": .string("示例厂区"), "children": .array([.object(["value": .number(1), "label": .string("设备部"), "children": .array([.object(["value": .number(2), "deptName": .string("示例设备维修科")])])]), .object(["value": .number(3), "deptName": .string("示例生产部"), "acceptUser": .object(["userId": .number(91), "realName": .string("示例默认受理人")])])])])]
         case .groups:
             return [.object(["groupId": .number(1), "groupName": .string("示例维修班组")])]
         case .divisions:

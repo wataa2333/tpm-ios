@@ -1,4 +1,9 @@
 import Foundation
+import SwiftUI
+
+func faultDisplayColor(_ code: String) -> Color {
+    FaultState.allCases.first { $0.code == code || $0.rawValue == code }?.color ?? .blue
+}
 
 func serverPageCount(_ page: JSONValue) -> Int? {
     guard case .number(let total) = page["totalElements"], total >= 0, total.isFinite, total < Double(Int.max) else { return nil }

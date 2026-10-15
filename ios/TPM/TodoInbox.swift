@@ -33,7 +33,7 @@ struct TodoInboxView: View {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, task in
                         let data = task["data"]
                         let kind = taskKind(task)
-                        WorkOrderCard(title: title(task), status: task["suspended"].bool ? "挂起" : task["name"].text,
+                        WorkOrderCard(title: title(task), status: task["suspended"].bool ? "挂起" : task["name"].text, color: faultDisplayColor(data["faultState"].text),
                             reference: kind == .fault ? data["asset"]["assetCode"].text : data["outNumber"].text,
                             referenceTitle: kind == .fault ? "资产编码" : "出库单号", time: readableDate(task["createTime"]),
                             facts: [("流程类型", task["processDefinitionName"].text), ("当前节点", task["name"].text)] + (kind == .fault ? faultCardFacts(data) : erpCardFacts(data))) {
@@ -56,7 +56,7 @@ struct TodoInboxView: View {
         }
         .navigationTitle("我的待办")
         .searchPageChrome()
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索待办名称")
+        .nativeSearchable(text: $query, prompt: "搜索待办名称")
         .task(id: "\(navigation.refresh)-\(category)-\(query)") { await load() }
         .refreshable { await load() }
         .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载待办…") }

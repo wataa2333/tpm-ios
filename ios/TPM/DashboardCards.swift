@@ -52,7 +52,7 @@ struct DashboardCard: View {
                 }
             }
         }
-        .clipShape(.rect(cornerRadius: 24))
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 }
@@ -86,17 +86,22 @@ struct DashboardHome: View {
                 NavigationLink {
                     if preview { OrderPoolView(kind: "维修") } else { LiveWorkflowList(kind: .fault, initialState: "RECEIVED") }
                 } label: { DashboardCard(title: "维修工单池", subtitle: "查看并领取工单", symbol: "wrench.and.screwdriver", palette: 0) }
-                NavigationLink { OrderPoolView(kind: "保养") } label: {
+                NavigationLink {
+                    if preview { OrderPoolView(kind: "保养") } else { ReadOnlyPoolView(kind: .maintenance) }
+                } label: {
                     DashboardCard(title: "保养工单池", subtitle: "保养任务", symbol: "oilcan", palette: 2)
                 }
-                NavigationLink { OrderPoolView(kind: "精密度检查") } label: {
+                NavigationLink {
+                    if preview { OrderPoolView(kind: "精密度检查") } else { ReadOnlyPoolView(kind: .precision) }
+                } label: {
                     DashboardCard(title: "精密度检查工单池", subtitle: "精密度检查任务", symbol: "ruler", palette: 1)
                 }
             }.buttonStyle(DashboardPressStyle()).padding(20)
             if preview { DemoNotice().padding(.horizontal, 20) }
         }
         .background(Color(uiColor: .systemGroupedBackground))
-        .navigationTitle("主页").navigationBarTitleDisplayMode(.large)
+        .contentMargins(.bottom, 104, for: .scrollContent)
+        .navigationTitle("主页").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
         .modifier(ListTabVisibility())
         .toolbar { ToolbarItem(placement: .topBarTrailing) {
             if preview { PreviewFactoryButton() } else { FactorySwitcherButton() }
@@ -125,7 +130,8 @@ struct DashboardWorkspace: View {
             if preview { DemoNotice().padding(.horizontal, 20) }
         }
         .background(Color(uiColor: .systemGroupedBackground))
-        .navigationTitle("工作台").navigationBarTitleDisplayMode(.large)
+        .contentMargins(.bottom, 104, for: .scrollContent)
+        .navigationTitle("工作台").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
         .modifier(ListTabVisibility())
     }
 }

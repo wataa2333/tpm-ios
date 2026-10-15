@@ -12,30 +12,32 @@ struct WorkOrderCard<Destination: View>: View {
     @ViewBuilder let destination: () -> Destination
     @State private var expanded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private var emphasis: Color { FaultState.allCases.first { $0.rawValue == status }?.color ?? color }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             NavigationLink { destination().modifier(DetailTabVisibility()) } label: {
-                HStack(alignment: .center, spacing: 12) {
-                    MarqueeContent { Text(title).font(.headline).foregroundStyle(.primary) }
-                    if !status.isEmpty { Text(status).font(.subheadline.weight(.medium)).foregroundStyle(color).lineLimit(1) }
+                HStack(alignment: .top, spacing: 12) {
+                    WrappingContent { Text(title).font(.headline).foregroundStyle(.primary) }
+                    if !status.isEmpty { Text(status).font(.subheadline.weight(.semibold)).foregroundStyle(emphasis).frame(maxWidth: 96, alignment: .trailing).fixedSize(horizontal: false, vertical: true) }
                 }
             }.buttonStyle(.plain).navigationLinkIndicatorVisibility(.hidden)
-            MarqueeContent { Text(reference.isEmpty ? "—" : reference).font(.subheadline).foregroundStyle(.secondary) }
+            WrappingContent { Text(reference.isEmpty ? "—" : reference).font(.subheadline).foregroundStyle(.secondary) }
                 .accessibilityLabel(referenceTitle + "：" + reference)
             ForEach(Array(summaryFacts.enumerated()), id: \.offset) { _, fact in
-                MarqueeContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(.subheadline).foregroundStyle(.secondary) }
+                WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(.subheadline).foregroundStyle(.secondary) }
             }
             HStack(alignment: .center, spacing: 16) {
-                MarqueeContent { Text(time).font(.subheadline).foregroundStyle(.secondary) }
+                WrappingContent { Text(time).font(.subheadline).foregroundStyle(.secondary) }
                 Button {
                     withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.24)) { expanded.toggle() }
                 } label: {
                     HStack(spacing: 6) {
-                        Text(expanded ? "收起详情" : "展开详情")
-                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        Text(expanded ? "收起详情" : "展开详情").transaction { $0.animation = nil }
+                        Image(systemName: "chevron.down")
                             .font(.caption.weight(.semibold))
+                            .rotationEffect(.degrees(expanded ? 180 : 0))
                     }
-                    .font(.subheadline.weight(.medium)).foregroundStyle(.blue)
+                    .font(.subheadline.weight(.medium)).foregroundStyle(emphasis)
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(minHeight: 44).contentShape(.rect)
                 }
@@ -43,14 +45,17 @@ struct WorkOrderCard<Destination: View>: View {
                 .accessibilityIdentifier("order-expand-" + reference)
                 .accessibilityValue(expanded ? "已展开" : "已收起")
             }
-            if expanded {
+            ExpandingDetails(expanded: expanded) {
                 VStack(spacing: 12) {
                     ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
                         ReadableFact(title: fact.0, value: fact.1)
                     }
-                    NavigationLink { destination().modifier(DetailTabVisibility()) } label: { Text("打开工单") }.buttonStyle(.plain).font(.subheadline)
+                    NavigationLink { destination().modifier(DetailTabVisibility()) } label: {
+                        Label("打开工单", systemImage: "arrow.up.right.square")
+                            .font(.subheadline.weight(.semibold)).foregroundStyle(emphasis)
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    }.buttonStyle(.plain)
                 }.padding(.top, 4)
-                    .transition(.opacity)
             }
         }.buttonStyle(.plain).padding(.vertical, 2)
             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
@@ -63,16 +68,16 @@ struct ReadableFact: View {
     @State private var shown = false
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
-            Text(title).foregroundStyle(.secondary).lineLimit(1)
+            Text(title).foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
             Spacer(minLength: 0)
-            MarqueeContent(alignment: .trailing) { Text(value.isEmpty ? "—" : value) }
+            WrappingContent(alignment: .trailing) { Text(value.isEmpty ? "—" : value) }
         }.font(.subheadline).contentShape(.rect)
             .onTapGesture { shown = true }
             .accessibilityHint("轻点查看完整内容")
             .sheet(isPresented: $shown) {
                 NavigationStack {
                     ScrollView { Text(value.isEmpty ? "—" : value).lineLimit(nil).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(20) }
-                        .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+                        .navigationTitle(title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
                         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { shown = false } } }
                 }.presentationDetents([.medium, .large])
             }
@@ -81,10 +86,11 @@ struct ReadableFact: View {
 
 struct SafeFactsStyle: LabeledContentStyle {
     func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .center, spacing: 16) {
-            configuration.label.lineLimit(1).fixedSize(horizontal: true, vertical: false)
+        HStack(alignment: .top, spacing: 12) {
+            configuration.label.lineLimit(nil).fixedSize(horizontal: false, vertical: true).frame(width: 108, alignment: .leading)
             Spacer(minLength: 0)
-            MarqueeContent(alignment: .trailing) { configuration.content }
+            configuration.content.lineLimit(nil).fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.trailing).frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 }

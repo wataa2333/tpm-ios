@@ -59,7 +59,7 @@ struct OriginalRepairForm: View {
         .disabled(loading || saving)
         .initialLoadingContent(loading && data.isEmpty)
         .overlay { AnimatedLoadingOverlay(isPresented: loading || saving, title: saving ? "正在保存维修结果…" : "正在加载维修任务…") }
-        .navigationTitle(task["name"].text.isEmpty ? "处理故障维修" : task["name"].text).navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(task["name"].text.isEmpty ? "处理故障维修" : task["name"].text).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving || photoUploading) }
         }
@@ -209,7 +209,7 @@ struct WorkflowTaskView: View {
         .disabled(loading || submitting)
         .initialLoadingContent(loading && state == .null)
         .overlay { AnimatedLoadingOverlay(isPresented: loading || submitting, title: submitting ? "正在提交…" : "正在加载当前节点…") }
-        .navigationTitle(task["name"].text).navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(task["name"].text).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(submitting) }
             if state["canDelegate"].bool || state["canResolveDelegate"].bool {
@@ -341,7 +341,7 @@ struct TaskHandoffView: View {
             Section(operation == "resolve" ? "处理说明" : "原因") { TextField("请输入", text: $reason, axis: .vertical).lineLimit(3...8) }
             if let error { Text(error).foregroundStyle(.red) }
         }
-        .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving) }
         }

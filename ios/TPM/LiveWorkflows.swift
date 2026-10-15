@@ -16,7 +16,7 @@ struct AuthenticatedRoot: View {
 struct LiveTabs: View {
     @EnvironmentObject private var navigation: BottomNavigationModel
     @EnvironmentObject private var session: LiveSession
-    @State private var selection = 2
+    @State private var selection = 0
     var body: some View {
         Group {
             switch selection {
@@ -85,10 +85,9 @@ struct LiveWorkflowList: View {
         })
         }
         .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载工单…") }
-        .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .searchPageChrome(isSearching: searching)
-        .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号")
-        .onSubmit(of: .search) { Task { await reload() } }
+        .nativeSearchable(text: $query, isPresented: $searching, prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号", onSubmit: { Task { await reload() } })
         
         .refreshable { await reload(); await reloadCounts() }
         .task(id: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)") { await reload() }
@@ -181,7 +180,7 @@ struct LiveWorkflowDetail: View {
                         Section("故障报修工单信息") {
                             LabeledContent("报修名称", value: detail["faultName"].text)
                             LabeledContent("单号", value: detail["sn"].text)
-                            HStack { Text("状态"); Spacer(); Text(faultStateName(detail["faultState"].text)).font(.body.weight(.semibold)).foregroundStyle(.orange) }
+                            HStack { Text("状态"); Spacer(); Text(faultStateName(detail["faultState"].text)).font(.body.weight(.semibold)).foregroundStyle(faultDisplayColor(detail["faultState"].text)) }
                             LabeledContent("故障时间", value: readableDate(detail["faultTime"]))
                             NavigationLink { AssetRecordDetail(record: detail["asset"]) } label: { LabeledContent("报修资产", value: detail["asset"]["assetName"].text) }
                             LabeledContent("故障申请人", value: detail["applyUser"].object.label)
@@ -222,7 +221,7 @@ struct LiveWorkflowDetail: View {
                 .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在刷新…") }
             }
         }
-        .navigationTitle(kind == .fault ? "报修详情" : "出库详情").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(kind == .fault ? "报修详情" : "出库详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility())
         .task { await load() }
         .toolbar {
@@ -275,7 +274,7 @@ struct LiveRecordFacts: View {
     let record: JSONValue
     let title: String
     let fields: [(String, String)]
-    var body: some View { List { ForEach(fields, id: \.0) { key, label in if record.at(key) != .null { LabeledContent(label, value: readableDate(record.at(key))) } } }.navigationTitle(title).navigationBarTitleDisplayMode(.inline).modifier(DetailTabVisibility()) }
+    var body: some View { List { ForEach(fields, id: \.0) { key, label in if record.at(key) != .null { LabeledContent(label, value: readableDate(record.at(key))) } } }.navigationTitle(title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome().modifier(DetailTabVisibility()) }
 }
 struct AttachmentRow: View {
     let photo: JSONValue
@@ -303,8 +302,8 @@ struct LiveCatalogView: View {
                     if source == .assets { AssetRecordDetail(record: record) }
                     else { List { Section(record["materialDesc"].text) { MaterialFacts(material: record); LabeledContent("库存数量", value: materialQuantity(record["onhandQty"].text, material: record)) } }.navigationTitle("库存详情").modifier(DetailTabVisibility()) }
                 } label: { VStack(alignment: .leading, spacing: 5) {
-                    MarqueeContent { Text(record.object.label).font(.headline) }
-                    MarqueeContent { Text(record[source == .assets ? "assetCode" : "materialCode"].text).font(.subheadline).foregroundStyle(.secondary) }
+                    WrappingContent { Text(record.object.label).font(.headline) }
+                    WrappingContent { Text(record[source == .assets ? "assetCode" : "materialCode"].text).font(.subheadline).foregroundStyle(.secondary) }
                 } }
                 .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
@@ -316,8 +315,7 @@ struct LiveCatalogView: View {
         .navigationTitle(source == .assets ? "资产台账" : "库存")
         .modifier(ListTabVisibility())
         .searchPageChrome(isSearching: searching)
-        .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: byCode ? "搜索编号" : "搜索名称")
-        .onSubmit(of: .search) { Task { await load() } }
+        .nativeSearchable(text: $query, isPresented: $searching, prompt: byCode ? "搜索编号" : "搜索名称", onSubmit: { Task { await load() } })
         .onChange(of: byCode) { Task { await load() } }
         .task { await load() }.refreshable { await load() }
     }
@@ -383,7 +381,7 @@ struct WorkflowNodesView: View {
         }
         .initialLoadingContent(loading && history.isEmpty && definition.isEmpty)
         .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载流程…") }
-        .navigationTitle("处理流程").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("处理流程").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility())
         .task { await load() }.refreshable { await load() }
     }

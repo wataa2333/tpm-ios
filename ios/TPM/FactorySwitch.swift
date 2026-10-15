@@ -3,8 +3,8 @@ import SwiftUI
 struct PreviewFactoryButton: View {
     @State private var shown = false
     var body: some View {
-        Button("示例一厂", systemImage: "chevron.up.chevron.down") { shown = true }
-            .font(.subheadline)
+        Button { shown = true } label: { FactoryNameLabel(name: "示例一厂") }
+            .buttonStyle(.glass).buttonBorderShape(.capsule)
             .accessibilityLabel("切换厂区")
             .sheet(isPresented: $shown) { NavigationStack { FactorySwitchView(preview: true) } }
     }
@@ -15,13 +15,22 @@ struct FactorySwitcherButton: View {
     @State private var presented = false
     var body: some View {
         Button { presented = true } label: {
-            HStack(spacing: 5) {
-                MarqueeContent { Text(session.currentFactoryName) }.frame(maxWidth: 170)
-                Image(systemName: "chevron.up.chevron.down").font(.caption)
-            }.font(.subheadline)
+            FactoryNameLabel(name: session.currentFactoryName)
         }
+        .buttonStyle(.glass).buttonBorderShape(.capsule)
         .accessibilityLabel("切换厂区，当前" + session.currentFactoryName)
         .sheet(isPresented: $presented) { NavigationStack { FactorySwitchView() } }
+    }
+}
+
+private struct FactoryNameLabel: View {
+    let name: String
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(name).lineLimit(nil).fixedSize(horizontal: false, vertical: true)
+                .frame(width: 156, alignment: .leading)
+            Image(systemName: "chevron.up.chevron.down").font(.caption)
+        }.font(.subheadline).padding(.vertical, 2)
     }
 }
 
@@ -49,7 +58,7 @@ struct FactorySwitchView: View {
                 ForEach(factories, id: \.self) { factory in
                     Button { selection = factory["factoryId"].text } label: {
                         HStack(spacing: 10) {
-                            MarqueeContent { Text(factory["factoryName"].text).foregroundStyle(.primary) }
+                            WrappingContent { Text(factory["factoryName"].text).foregroundStyle(.primary) }
                             if factory["factoryId"].text == currentID { Text("当前").font(.caption).foregroundStyle(.secondary) }
                             Spacer(minLength: 12)
                             if selection == factory["factoryId"].text { Image(systemName: "checkmark").foregroundStyle(.tint) }
@@ -66,7 +75,7 @@ struct FactorySwitchView: View {
         }
         .disabled(loading || switching)
         .overlay { if loading { ProgressView("正在加载厂区…") } }
-        .navigationTitle("切换厂区").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("切换厂区").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(switching) }
             ToolbarItem(placement: .confirmationAction) {

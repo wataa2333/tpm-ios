@@ -2,17 +2,24 @@ import Testing
 import Foundation
 @testable import TPM
 
-@Test func marqueePausesAtBothEndsAndStaysInsideTheField() {
-    #expect(marqueeOffset(elapsed: 0, distance: 52) == 0)
-    #expect(marqueeOffset(elapsed: 1, distance: 52) == 0)
-    #expect(abs(marqueeOffset(elapsed: 2.4, distance: 52) - 26) < 0.001)
-    #expect(marqueeOffset(elapsed: 4, distance: 52) == 52)
-    #expect(marqueeOffset(elapsed: 100, distance: 0) == 0)
-    for tick in 0...1000 {
-        let offset = marqueeOffset(elapsed: Double(tick) / 10, distance: 52)
-        #expect(offset >= 0 && offset <= 52)
-    }
+@Test @MainActor func receiverDepartmentAppliesConfiguredDefaultAndClearsPreviousReceiver() {
+    let form = OriginalFormModel(kind: "ASSET_FAULT")
+    let user = JSONValue.object(["userId": .number(12), "realName": .string("默认受理人")])
+    let dept = JSONValue.object(["deptId": .number(7), "acceptUser": user])
+    form.selectReceiverDepartment(dept)
+    #expect(form.data["dept"] == dept)
+    #expect(form.data["user"] == user)
+    form.selectReceiverDepartment(.object(["deptId": .number(8)]))
+    #expect(form.data["user"] == .null)
 }
+
+@Test func productionPoolsUseOriginalReadEndpointsAndStateKeys() {
+    #expect(ReadOnlyPoolKind.maintenance.page == "maintain/pageMaintain")
+    #expect(ReadOnlyPoolKind.precision.page == "precise/pagePrecise")
+    #expect(ReadOnlyPoolKind.precision.stateKey == "preciseState")
+    #expect(ReadOnlyPoolKind.maintenance.nameKey == "maintainName")
+}
+
 
 @Test func statusCountUsesServerTotalRatherThanLoadedRows() {
     let page = JSONValue.object(["totalElements": .number(103), "content": .array([.object([:])])])
