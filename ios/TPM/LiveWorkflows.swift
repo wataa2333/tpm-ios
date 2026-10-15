@@ -150,6 +150,7 @@ func erpCardFacts(_ item: JSONValue) -> [(String, String)] {
 }
 
 struct LiveWorkflowDetail: View {
+    @Environment(\.closeWorkOrder) private var closeWorkOrder
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var navigation: BottomNavigationModel
     @State private var returnToList = false
@@ -159,7 +160,9 @@ struct LiveWorkflowDetail: View {
         navigation.refresh = UUID()
     }
     private func taskSheetClosed() {
-        if returnToList { dismiss() }
+        if returnToList {
+            if let closeWorkOrder { closeWorkOrder() } else { dismiss() }
+        }
         else { Task { await load() } }
     }
     @EnvironmentObject private var session: LiveSession

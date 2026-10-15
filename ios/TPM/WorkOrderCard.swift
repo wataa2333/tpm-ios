@@ -11,11 +11,12 @@ struct WorkOrderCard<Destination: View>: View {
     let facts: [(String, String)]
     @ViewBuilder let destination: () -> Destination
     @State private var expanded = false
+    @State private var opening = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var emphasis: Color { FaultState.allCases.first { $0.rawValue == status }?.color ?? color }
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            NavigationLink { destination().modifier(DetailTabVisibility()) } label: {
+            Button { opening = true } label: {
                 HStack(alignment: .top, spacing: 12) {
                     WrappingContent { Text(title).font(.headline).foregroundStyle(.primary) }
                     if !status.isEmpty { Text(status).font(.subheadline.weight(.semibold)).foregroundStyle(emphasis).frame(maxWidth: 96, alignment: .trailing).fixedSize(horizontal: false, vertical: true) }
@@ -33,7 +34,7 @@ struct WorkOrderCard<Destination: View>: View {
                     ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
                         ReadableFact(title: fact.0, value: fact.1)
                     }
-                    NavigationLink { destination().modifier(DetailTabVisibility()) } label: {
+                    Button { opening = true } label: {
                         Label("打开工单", systemImage: "arrow.up.right.square")
                             .font(.subheadline.weight(.semibold)).foregroundStyle(emphasis)
                             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
@@ -51,10 +52,12 @@ struct WorkOrderCard<Destination: View>: View {
                 }.frame(minHeight: 32)
             }
             .tint(emphasis)
-            .accessibilityIdentifier("order-expand-" + reference)
-            .accessibilityValue(expanded ? "已展开" : "已收起")
         }.buttonStyle(.plain).padding(.vertical, 2)
             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            .navigationDestination(isPresented: $opening) {
+                destination().environment(\.closeWorkOrder, { opening = false })
+                    .modifier(DetailTabVisibility())
+            }
     }
 }
 
@@ -111,7 +114,7 @@ struct CharacterCount: View {
 struct DetailTabVisibility: ViewModifier {
     @EnvironmentObject private var navigation: BottomNavigationModel
     func body(content: Content) -> some View {
-        content.toolbar(.hidden, for: .tabBar)
+        content.background { NativeTabVisibility(hidden: true).frame(width: 0, height: 0) }
             .onAppear { navigation.hideTabs = true }
     }
 }
@@ -121,7 +124,7 @@ struct DetailTabVisibility: ViewModifier {
 struct ListTabVisibility: ViewModifier {
     @EnvironmentObject private var navigation: BottomNavigationModel
     func body(content: Content) -> some View {
-        content.toolbar(.visible, for: .tabBar)
+        content.background { NativeTabVisibility(hidden: false).frame(width: 0, height: 0) }
             .onAppear { navigation.hideTabs = false }
     }
 }

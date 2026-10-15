@@ -83,16 +83,16 @@ final class PreviewTests: XCTestCase {
         app.launchArguments = ["--screen", "faults"]
         app.launch()
         XCTAssertFalse(app.staticTexts["搜索分类"].exists)
-        XCTAssertFalse(app.staticTexts["受理组别"].exists)
-        let expand = app.buttons["order-expand-FA-CNC-008"].firstMatch
+        XCTAssertFalse(factElement(app, "受理组别").exists)
+        let expand = expansionControl(app)
         XCTAssertTrue(expand.waitForExistence(timeout: 15))
         XCTAssertNotNil(app.buttons["待抢单"].value as? String)
         XCTAssertTrue((app.buttons["待抢单"].value as? String)?.contains("单") == true)
         capture(app, "Compact work orders")
         expand.tap()
-        for _ in 0..<6 where !app.staticTexts["受理组别"].isHittable { scrollUpSmall(app) }
-        XCTAssertTrue(app.staticTexts["受理组别"].exists)
-        XCTAssertTrue(app.staticTexts["受理部门"].exists)
+        for _ in 0..<6 where !factElement(app, "受理组别").isHittable { scrollUpSmall(app) }
+        XCTAssertTrue(factElement(app, "受理组别").exists)
+        XCTAssertTrue(factElement(app, "受理部门").exists)
         capture(app, "Expanded work order")
         app.terminate(); app.launch()
         app.searchFields.firstMatch.tap()
@@ -227,7 +227,7 @@ final class PreviewTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "faults"]
         app.launch()
-        let expand = app.buttons["order-expand-FA-CNC-008"]
+        let expand = expansionControl(app)
         XCTAssertTrue(expand.waitForExistence(timeout: 15))
         let title = app.staticTexts["立式加工中心异常报修"].firstMatch
         XCTAssertLessThan(expand.frame.maxY - title.frame.minY, 140)
@@ -236,9 +236,9 @@ final class PreviewTests: XCTestCase {
         XCTAssertLessThanOrEqual(time.frame.minY - reference.frame.maxY, 14)
         for _ in 0..<2 {
             expand.tap()
-            XCTAssertEqual(expand.value as? String, "已展开")
+            XCTAssertTrue(expand.label.contains("收起详情"), app.debugDescription)
             expand.tap()
-            XCTAssertEqual(expand.value as? String, "已收起")
+            XCTAssertTrue(expand.label.contains("展开详情"), app.debugDescription)
         }
         app.buttons["新建报修"].tap()
         XCTAssertTrue(app.buttons["取消"].waitForExistence(timeout: 10))
@@ -310,7 +310,7 @@ final class PreviewTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "faults"]
         app.launch()
-        let expand = app.buttons["order-expand-FA-CNC-008"].firstMatch
+        let expand = expansionControl(app)
         XCTAssertTrue(expand.waitForExistence(timeout: 15)); expand.tap()
         let open = app.buttons["order-open-FA-CNC-008"].firstMatch
         let bar = app.buttons["主页"].firstMatch
@@ -345,6 +345,14 @@ final class PreviewTests: XCTestCase {
         XCTAssertLessThan(date.frame.maxX, time.frame.minX + 1)
         XCTAssertLessThanOrEqual(time.frame.maxX, app.frame.maxX - 16)
         XCTAssertEqual(app.searchFields.count, 0)
+    }
+
+    private func expansionControl(_ app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@ OR label CONTAINS %@", "展开详情", "收起详情")).firstMatch
+    }
+
+    private func factElement(_ app: XCUIApplication, _ title: String) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
     }
 
     private func scrollUpSmall(_ app: XCUIApplication) {

@@ -251,6 +251,7 @@ struct FaultRow: View {
 }
 
 struct FaultDetailView: View {
+    @Environment(\.closeWorkOrder) private var closeWorkOrder
     @EnvironmentObject private var store: DemoStore
     let id: String
     @State private var processing = false
@@ -265,7 +266,9 @@ struct FaultDetailView: View {
         navigation.refresh = UUID()
     }
     private func taskSheetClosed() {
-        if returnToList { dismiss() }
+        if returnToList {
+            if let closeWorkOrder { closeWorkOrder() } else { dismiss() }
+        }
     }
     private var fault: Fault? { store.faults.first { $0.id == id } }
     var body: some View {

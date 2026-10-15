@@ -56,6 +56,7 @@ extension EnvironmentValues {
     @Entry var loadingViewport = CGRect.zero
     @Entry var bottomSafeArea: CGFloat = 0
     @Entry var documentSearch = false
+    @Entry var closeWorkOrder: (() -> Void)? = nil
 }
 
 struct BottomAction: View {
