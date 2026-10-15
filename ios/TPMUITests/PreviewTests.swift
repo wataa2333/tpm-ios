@@ -41,7 +41,9 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["ERP 出库"].waitForExistence(timeout: 20), "ERP form did not render")
         for _ in 0..<3 where !app.staticTexts["深沟球轴承"].isHittable { app.swipeUp() }
         XCTAssertTrue(app.staticTexts["深沟球轴承"].exists)
+        for _ in 0..<3 where !app.staticTexts["空气滤芯"].isHittable { app.swipeUp() }
         XCTAssertTrue(app.staticTexts["空气滤芯"].exists)
         capture(app, "ERP multiple materials")
     }
 }
+
