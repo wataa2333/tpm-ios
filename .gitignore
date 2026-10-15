@@ -8,4 +8,7 @@ xcuserdata/
 *.p12
 *.mobileprovision
 *.ipa
+.private/
+apk-analysis/app-service.pretty.js
+apk-analysis/contracts/
 

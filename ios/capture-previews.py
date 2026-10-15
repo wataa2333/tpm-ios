@@ -20,21 +20,21 @@ print("Capturing on", device["name"], udid, flush=True)
 if device["state"] != "Booted":
     sim("boot", udid)
 sim("bootstatus", udid, "-b")
+subprocess.run(["xcodebuild", "test", "-project", "ios/TPM.xcodeproj", "-scheme", "TPM",
+                "-configuration", "Debug", "-destination", f"platform=iOS Simulator,id={udid}",
+                "-derivedDataPath", "build/simulator", "CODE_SIGNING_ALLOWED=NO",
+                "-only-testing:TPMTests"], check=True)
 sim("status_bar", udid, "override", "--time", "9:41", "--dataNetwork", "wifi",
     "--wifiMode", "active", "--wifiBars", "3", "--batteryState", "charged", "--batteryLevel", "100")
 sim("install", udid, "build/simulator/Build/Products/Debug-iphonesimulator/TPM.app")
 output = Path("build/screenshots")
 output.mkdir(parents=True, exist_ok=True)
 screens = [
-    "home", "workspace", "faults", "working", "verifying", "finished",
-    "new-fault", "fault-detail", "repair-result", "processing", "assets",
-    "asset-detail", "stock", "stock-detail", "outbound", "outbound-detail",
-    "repair-pool", "maintenance-pool", "precision-pool", "order-detail", "profile",
+    "faults", "new-fault", "processing", "erp-form", "workflow", "loading",
 ]
 captures = [(f"{index:02d}-{screen}", "light", ["--screen", screen])
             for index, screen in enumerate(screens, 1)]
-captures += [("22-home-dark", "dark", ["--screen", "home"]),
-             ("23-faults-dark", "dark", ["--screen", "faults"])]
+captures += [("07-faults-dark", "dark", ["--screen", "faults"])]
 for name, appearance, arguments in captures:
     subprocess.run(["xcrun", "simctl", "terminate", udid, "com.personal.tpm"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

@@ -1,4 +1,12 @@
 name: TPM
+schemes:
+  TPM:
+    build:
+      targets:
+        TPM: all
+        TPMTests: [test]
+    test:
+      targets: [TPMTests]
 options:
   bundleIdPrefix: com.personal
   deploymentTarget:
@@ -8,6 +16,13 @@ targets:
     type: application
     platform: iOS
     sources: [TPM]
+    info:
+      path: TPM/Info.plist
+      properties:
+        NSAppTransportSecurity:
+          NSExceptionDomains:
+            tpm.forbetter.cn:
+              NSExceptionAllowsInsecureHTTPLoads: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.personal.tpm
@@ -19,5 +34,15 @@ targets:
         TARGETED_DEVICE_FAMILY: '1'
         SWIFT_VERSION: '6.0'
         CURRENT_PROJECT_VERSION: '1'
-        MARKETING_VERSION: '0.2.0'
+        MARKETING_VERSION: '0.3.0'
+  TPMTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [TPMTests]
+    dependencies:
+      - target: TPM
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: '6.0'
 

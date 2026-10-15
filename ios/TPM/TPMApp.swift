@@ -4,8 +4,9 @@ import PhotosUI
 @main
 struct TPMApp: App {
     @StateObject private var store = DemoStore()
+    @StateObject private var session = LiveSession()
     var body: some Scene {
-        WindowGroup { PreviewRouter().environmentObject(store) }
+        WindowGroup { PreviewRouter().environmentObject(store).environmentObject(session) }
     }
 }
 
@@ -15,9 +16,9 @@ struct PreviewRouter: View {
         let args = ProcessInfo.processInfo.arguments
         if let index = args.firstIndex(of: "--screen"), args.indices.contains(index + 1) {
             PreviewScreen(name: args[index + 1])
-        } else { MainTabs() }
+        } else { AuthenticatedRoot() }
         #else
-        MainTabs()
+        AuthenticatedRoot()
         #endif
     }
 }
@@ -31,12 +32,7 @@ enum FaultState: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self { case .reported: "tray"; case .working: "wrench.and.screwdriver"; case .verifying: "checkmark.bubble"; case .finished: "checkmark.circle" }
     }
-    var action: String? {
-        switch self { case .reported: "受理报修"; case .working: "提交维修结果"; case .verifying: "确认完成"; case .finished: nil }
-    }
-    var next: FaultState {
-        switch self { case .reported: .working; case .working: .verifying; case .verifying, .finished: .finished }
-    }
+
 }
 
 struct Asset: Identifiable, Hashable {
@@ -109,13 +105,7 @@ final class DemoStore: ObservableObject {
         .init(id: "CK-20261014-008", department: "生产二部", applicant: "李华", material: Material.samples[2], quantity: 1, date: "昨天 15:30", completed: true)
     ]
     @Published var claimedOrders: Set<String> = []
-    func transition(_ id: String, opinion: String) {
-        guard let index = faults.firstIndex(where: { $0.id == id }), faults[index].state != .finished else { return }
-        let previous = faults[index].state
-        faults[index].state = previous.next
-        faults[index].records.append("\(previous.action ?? "处理")：\(opinion)")
-        if previous == .working { faults[index].result = opinion }
-    }
+
 }
 
 struct DemoNotice: View {
@@ -224,7 +214,12 @@ struct FaultListView: View {
         }
         .navigationTitle("故障报修")
         .searchable(text: $query, prompt: "搜索设备、编号或故障")
-        .toolbar { ToolbarItem(placement: .primaryAction) { Button("新建报修", systemImage: "plus") { creating = true } } }
+        .toolbar {
+            ToolbarSpacer(.flexible, placement: .bottomBar)
+            ToolbarItem(placement: .bottomBar) {
+                Button("新建报修", systemImage: "plus") { creating = true }.labelStyle(.iconOnly).buttonStyle(.glassProminent)
+            }
+        }
         .sheet(isPresented: $creating) { NavigationStack { NewFaultView() } }
     }
 }
@@ -278,12 +273,9 @@ struct FaultDetailView: View {
                     }
                     Section { DemoNotice() }
                 }
-                .safeAreaInset(edge: .bottom) {
-                    if let action = fault.state.action {
-                        Button(action) { processing = true }
-                            .buttonStyle(.borderedProminent).controlSize(.large)
-                            .frame(maxWidth: .infinity).padding().background(.bar)
-                    }
+                .toolbar {
+                    ToolbarSpacer(.flexible, placement: .bottomBar)
+                    ToolbarItem(placement: .bottomBar) { Button("维修处理") { processing = true }.buttonStyle(.glassProminent) }
                 }
                 .sheet(isPresented: $processing) { NavigationStack { FaultProcessingView(id: id) } }
             } else { ContentUnavailableView("单据不存在", systemImage: "doc.questionmark") }
@@ -293,82 +285,13 @@ struct FaultDetailView: View {
 }
 
 struct FaultProcessingView: View {
-    @EnvironmentObject private var store: DemoStore
-    @Environment(\.dismiss) private var dismiss
     let id: String
-    @State private var opinion = ""
-    @State private var confirming = false
-    private var fault: Fault? { store.faults.first { $0.id == id } }
-    var body: some View {
-        Form {
-            Section { Text(fault?.asset.name ?? "设备"); LabeledContent("当前状态", value: fault?.state.rawValue ?? "") }
-            Section {
-                TextField(fault?.state == .working ? "填写故障原因与维修结果" : "填写处理意见", text: $opinion, axis: .vertical).lineLimit(5...10)
-            } header: { Text(fault?.state == .working ? "维修结果" : "处理意见") } footer: { Text("演示流程：待受理 → 待完成 → 待确认 → 已完成。真实权限与动作以原系统为准。") }
-        }
-        .navigationTitle(fault?.state.action ?? "处理单据").navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-            ToolbarItem(placement: .confirmationAction) { Button("提交") { confirming = true }.disabled(opinion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
-        }
-        .confirmationDialog("提交本地模拟处理？", isPresented: $confirming, titleVisibility: .visible) {
-            Button("提交模拟处理") { store.transition(id, opinion: opinion); dismiss() }
-        } message: { Text("不会调用服务器，也不会影响实际单据。") }
-    }
+    var body: some View { OriginalRepairForm(faultID: id, task: .object(["name": .string("维修处理")]), preview: true) }
 }
 
 struct NewFaultView: View {
-    @EnvironmentObject private var store: DemoStore
-    @Environment(\.dismiss) private var dismiss
-    @State private var asset: Asset?
-    @State private var description = ""
-    @State private var reporter = ""
-    @State private var urgency = "普通"
-    @State private var photos: [PhotosPickerItem] = []
-    @State private var confirming = false
-    init(prefilled: Bool = false) {
-        if prefilled {
-            _asset = State(initialValue: Asset.samples[0])
-            _description = State(initialValue: "主轴运行时出现异常振动，伴随间歇性异响。停机后已关闭电源，请安排检查。")
-            _reporter = State(initialValue: "张明")
-        }
-    }
-    private var valid: Bool { asset != nil && !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !reporter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    var body: some View {
-        Form {
-            Section {
-                NavigationLink { AssetPickerView(selection: $asset) } label: {
-                    LabeledContent("报修设备", value: asset?.name ?? "请选择")
-                }
-                if let asset {
-                    LabeledContent("资产编号", value: asset.id)
-                    LabeledContent("设备位置", value: asset.location)
-                }
-            } header: { Text("设备信息") }
-            Section {
-                TextField("描述故障现象、发生时间与影响", text: $description, axis: .vertical).lineLimit(4...8)
-                Picker("紧急程度", selection: $urgency) { Text("普通").tag("普通"); Text("紧急").tag("紧急") }
-            } header: { Text("故障信息") }
-            Section {
-                PhotosPicker(selection: $photos, maxSelectionCount: 6, matching: .images) { Label(photos.isEmpty ? "选择故障照片" : "已选择 \(photos.count) 张照片", systemImage: "photo.badge.plus") }
-            } header: { Text("附件（选填）") } footer: { Text("照片目前仅用于选择交互演示，不会上传，也不会保存原图。") }
-            Section("报修人") { TextField("姓名", text: $reporter).textContentType(.name) }
-            Section { DemoNotice() }
-        }
-        .navigationTitle("新建报修").navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-            ToolbarItem(placement: .confirmationAction) { Button("提交") { confirming = true }.disabled(!valid) }
-        }
-        .confirmationDialog("创建模拟报修单？", isPresented: $confirming, titleVisibility: .visible) {
-            Button("创建模拟单据") {
-                guard let asset else { return }
-                let id = "DEMO-" + UUID().uuidString.prefix(8)
-                store.faults.insert(Fault(id: id, asset: asset, description: description, reporter: reporter, time: "刚刚", state: .reported, records: ["\(reporter) 提交报修 · \(urgency)"], photoCount: photos.count), at: 0)
-                dismiss()
-            }
-        } message: { Text("单据仅保存在本次运行中，不提交到业务服务器。") }
-    }
+    init(prefilled: Bool = false) {}
+    var body: some View { OriginalFaultForm(preview: true) }
 }
 
 struct AssetListView: View {
@@ -613,7 +536,10 @@ struct PreviewScreen: View {
         case "working": NavigationStack { FaultListView(initialState: .working) }
         case "verifying": NavigationStack { FaultListView(initialState: .verifying) }
         case "finished": NavigationStack { FaultListView(initialState: .finished) }
-        case "new-fault": NavigationStack { NewFaultView(prefilled: true) }
+        case "new-fault": NavigationStack { OriginalFaultForm(preview: true) }
+        case "erp-form": NavigationStack { OriginalERPForm(preview: true) }
+        case "workflow": NavigationStack { WorkflowNodesView(processID: "", preview: true) }
+        case "loading": ProgressView("正在加载…")
         case "fault-detail": NavigationStack { FaultDetailView(id: "BX-20261015-001") }
         case "repair-result": NavigationStack { FaultDetailView(id: "BX-20261013-001") }
         case "processing": NavigationStack { FaultProcessingView(id: "BX-20261014-001") }
@@ -632,4 +558,4 @@ struct PreviewScreen: View {
     }
 }
 
-#Preview { MainTabs().environmentObject(DemoStore()) }
+#Preview { MainTabs().environmentObject(DemoStore()).environmentObject(LiveSession()) }
