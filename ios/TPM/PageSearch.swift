@@ -67,7 +67,7 @@ private struct PageSearch: ViewModifier {
                         .transition(.opacity)
                 }
             }.padding(.horizontal, 16).padding(.vertical, 8)
-                .background(.regularMaterial)
+                .background(.thinMaterial)
                 .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.24), value: active.wrappedValue)
         }
         .onDisappear { active.wrappedValue = false }
@@ -80,7 +80,7 @@ extension View {
         modifier(PageSearch(text: text, presented: isPresented, prompt: prompt, submit: onSubmit))
     }
     func nativeNavigationChrome() -> some View {
-        toolbarBackground(.regularMaterial, for: .navigationBar)
+        toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbarBackgroundVisibility(.visible, for: .navigationBar)
     }
 }

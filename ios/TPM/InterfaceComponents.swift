@@ -12,7 +12,7 @@ struct SearchPageChrome: ViewModifier {
             .scrollContentBackground(.hidden)
             .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
-            .toolbarBackground(.regularMaterial, for: .navigationBar)
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbarBackgroundVisibility(.visible, for: .navigationBar)
     }
 }
@@ -56,6 +56,7 @@ struct KeyboardTabVisibility: ViewModifier {
 extension EnvironmentValues {
     @Entry var previewReferences = false
     @Entry var loadingViewport = CGRect.zero
+    @Entry var bottomSafeArea: CGFloat = 0
 }
 
 struct BottomAction: View {
@@ -90,7 +91,7 @@ struct LoadingOverlay: View {
             VStack(spacing: 12) {
                 ProgressView().controlSize(.large)
                 Text(title).font(.subheadline)
-            }.padding(24).background(.regularMaterial, in: .rect(cornerRadius: 22))
+            }.padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .position(loadingIndicatorCenter(container: geometry.frame(in: .global), viewport: viewport))
         }.accessibilityAddTraits(.updatesFrequently)
         }

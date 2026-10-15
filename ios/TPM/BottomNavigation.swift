@@ -1,5 +1,9 @@
 import SwiftUI
 
+func bottomBarExtension(safeAreaInset: CGFloat) -> CGFloat {
+    min(12, max(0, safeAreaInset - 20))
+}
+
 @MainActor
 final class BottomNavigationModel: ObservableObject {
     @Published var newDocument: WorkflowKind?
@@ -16,6 +20,7 @@ struct BottomNavigation: View {
     @State private var creating: WorkflowKind?
     @Namespace private var tabSelection
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.bottomSafeArea) private var bottomSafeArea
     private let tabs = [("主页", "house"), ("我的待办", "checklist"), ("工作台", "square.grid.2x2"), ("我的", "person.crop.circle")]
     var body: some View {
         Group {
@@ -61,9 +66,10 @@ struct BottomNavigation: View {
             }
         }
         // The hosting safeAreaInset already reserves the home indicator area.
-        // Let the floating glass extend 12pt into that area, retaining 22pt on
-        // Face ID phones instead of stacking another bottom gap above it.
-        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, -12)
+        // Extend into that area only when the device has enough inset; never
+        // shift below the screen on a phone/orientation without a home inset.
+        .padding(.horizontal, 16).padding(.top, 4)
+        .padding(.bottom, -bottomBarExtension(safeAreaInset: bottomSafeArea))
         .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
         }
         }

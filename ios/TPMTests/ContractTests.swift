@@ -2,6 +2,15 @@ import Testing
 import Foundation
 @testable import TPM
 
+@Test func floatingBarPreservesHomeIndicatorClearanceAcrossSafeAreas() {
+    for inset in [CGFloat(0), 10, 20, 21, 34, 48] {
+        let extensionAmount = bottomBarExtension(safeAreaInset: inset)
+        #expect(extensionAmount >= 0)
+        #expect(extensionAmount <= 12)
+        #expect(inset - extensionAmount >= min(inset, 20))
+    }
+}
+
 @Test @MainActor func receiverDepartmentAppliesConfiguredDefaultAndClearsPreviousReceiver() {
     let form = OriginalFormModel(kind: "ASSET_FAULT")
     let user = JSONValue.object(["userId": .number(12), "realName": .string("默认受理人")])

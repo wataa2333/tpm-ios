@@ -5,6 +5,17 @@ func faultDisplayColor(_ code: String) -> Color {
     FaultState.allCases.first { $0.code == code || $0.rawValue == code }?.color ?? .blue
 }
 
+func approvalDisplayColor(_ code: String) -> Color {
+    switch code {
+    case "REFUSE": .red
+    case "FINISHED", "AGREE": .green
+    case "SUBMIT": .purple
+    case "CONFIRM": .teal
+    case "PENDING", "APPROVED": .orange
+    default: .blue
+    }
+}
+
 func serverPageCount(_ page: JSONValue) -> Int? {
     guard case .number(let total) = page["totalElements"], total >= 0, total.isFinite, total < Double(Int.max) else { return nil }
     return Int(total)

@@ -63,6 +63,7 @@ struct LiveWorkflowList: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, item in
                 WorkOrderCard(title: kind == .fault ? item["faultName"].text : erpCardTitle(item),
                     status: kind == .fault ? faultStateName(item["faultState"].text) : approvalStateName(item["approvalState"].text),
+                    color: kind == .fault ? faultDisplayColor(item["faultState"].text) : approvalDisplayColor(item["approvalState"].text),
                     reference: kind == .fault ? item["asset"]["assetCode"].text : item["outNumber"].text,
                     referenceTitle: kind == .fault ? "资产编码" : "出库单号",
                     time: readableDate(item[kind == .fault ? "faultTime" : "applyDate"]),

@@ -33,15 +33,15 @@ struct TodoInboxView: View {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, task in
                         let data = task["data"]
                         let kind = taskKind(task)
-                        WorkOrderCard(title: title(task), status: task["suspended"].bool ? "挂起" : task["name"].text, color: faultDisplayColor(data["faultState"].text),
+                        WorkOrderCard(title: title(task), status: task["suspended"].bool ? "挂起" : task["name"].text, color: kind == .erp ? approvalDisplayColor(data["approvalState"].text) : faultDisplayColor(data["faultState"].text),
                             reference: kind == .fault ? data["asset"]["assetCode"].text : data["outNumber"].text,
                             referenceTitle: kind == .fault ? "资产编码" : "出库单号", time: readableDate(task["createTime"]),
-                            facts: [("流程类型", task["processDefinitionName"].text), ("当前节点", task["name"].text)] + (kind == .fault ? faultCardFacts(data) : erpCardFacts(data))) {
+                            facts: [("流程类型", kind?.title ?? "其他流程"), ("当前节点", task["name"].text)] + (kind == .fault ? faultCardFacts(data) : erpCardFacts(data))) {
                             if let kind {
                                 LiveWorkflowDetail(kind: kind, id: task["businessKey"].text)
                             } else {
                                 List {
-                                    LabeledContent("流程类型", value: task["processDefinitionName"].text)
+                                    LabeledContent("流程类型", value: "其他流程")
                                     LabeledContent("当前节点", value: task["name"].text)
                                     Text("此类流程暂未开放处理").foregroundStyle(.secondary)
                                 }.navigationTitle("待办详情")

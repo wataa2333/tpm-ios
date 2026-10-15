@@ -31,10 +31,10 @@ struct DashboardCard: View {
             Image(systemName: symbol).font(.system(size: 27, weight: .medium))
                 .frame(width: 40, height: 40, alignment: .leading)
             Spacer(minLength: 14)
-            Text(title).font(.headline).lineLimit(2).multilineTextAlignment(.leading)
+            Text(title).font(.headline).lineLimit(nil).multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
             Text(subtitle).font(.caption).foregroundStyle(.white.opacity(0.88))
-                .lineLimit(2).multilineTextAlignment(.leading)
+                .lineLimit(nil).multilineTextAlignment(.leading)
         }
         .foregroundStyle(.white)
         .padding(16).frame(maxWidth: .infinity, minHeight: height, alignment: .leading)

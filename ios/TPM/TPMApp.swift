@@ -11,6 +11,7 @@ struct TPMApp: App {
             GeometryReader { geometry in
                 PreviewRouter().modifier(KeyboardTabVisibility())
                     .environment(\.loadingViewport, geometry.frame(in: .global))
+                    .environment(\.bottomSafeArea, geometry.safeAreaInsets.bottom)
                     .environmentObject(store).environmentObject(session).environmentObject(navigation)
                     .labeledContentStyle(SafeFactsStyle())
             }

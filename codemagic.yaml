@@ -1,0 +1,40 @@
+workflows:
+  wataa-ios:
+    name: wataa — native checks and unsigned IPA
+    instance_type: mac_mini_m2
+    max_build_duration: 25
+    environment:
+      xcode: "27.1"
+    scripts:
+      - name: Generate native project
+        script: |
+          set -euo pipefail
+          xcodebuild -version
+          SDK_VERSION=$(xcrun --sdk iphoneos --show-sdk-version)
+          test "${SDK_VERSION%%.*}" -ge 27
+          if ! command -v xcodegen >/dev/null; then brew install xcodegen; fi
+          cd ios
+          xcodegen generate
+      - name: Run unit and UI checks without screenshot export
+        script: |
+          set -euo pipefail
+          python3 ios/check-native-ui.py
+      - name: Build unsigned device application
+        script: |
+          set -euo pipefail
+          xcodebuild -project ios/TPM.xcodeproj -scheme TPM \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build/device CODE_SIGNING_ALLOWED=NO build
+      - name: Package for local personal signing
+        script: |
+          set -euo pipefail
+          mkdir -p build/package/Payload
+          cp -R build/device/Build/Products/Release-iphoneos/TPM.app build/package/Payload/
+          (cd build/package && zip -qr ../wataa.ipa Payload)
+          shasum -a 256 build/wataa.ipa > build/wataa.sha256
+          git rev-parse HEAD > build/source-commit.txt
+    artifacts:
+      - build/wataa.ipa
+      - build/wataa.sha256
+      - build/source-commit.txt
+      - build/NativeUIChecks.xcresult
