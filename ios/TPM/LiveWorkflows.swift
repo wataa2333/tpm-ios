@@ -18,25 +18,19 @@ struct LiveTabs: View {
     @EnvironmentObject private var session: LiveSession
     @State private var selection = 0
     var body: some View {
-        Group {
-            switch selection {
-            case 0: NavigationStack { DashboardHome() }
-            case 1: NavigationStack { DashboardWorkspace() }
-            case 2: NavigationStack { TodoInboxView() }
-            default:
+        NativeTabShell(selection: $selection) {
+            NavigationStack { DashboardHome() }.tabItem { Label("主页", systemImage: "house") }.tag(0)
+            NavigationStack { TodoInboxView() }.tabItem { Label("我的待办", systemImage: "checklist") }.tag(2)
+            NavigationStack { DashboardWorkspace() }.tabItem { Label("工作台", systemImage: "square.grid.2x2") }.tag(1)
                 NavigationStack {
                     List {
                         Section { LabeledContent("账号", value: session.authentication.text("name")); LabeledContent("姓名", value: session.authentication.text("fullName")) }
                         Section { LabeledContent("当前厂区", value: session.currentFactoryName) }
                         Section { Button("退出登录", role: .destructive) { session.signOut() } }
-                    }.navigationTitle("我的")
+                    }.navigationTitle("我的").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
                 }
-            }
+                .tabItem { Label("我的", systemImage: "person.crop.circle") }.tag(3)
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            NativeTabBar(selection: $selection)
-        }
-        .onChange(of: selection) { navigation.hideTabs = false }
     }
 }
 struct LiveWorkflowList: View {
@@ -301,7 +295,7 @@ struct LiveCatalogView: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, record in
                 NavigationLink {
                     if source == .assets { AssetRecordDetail(record: record) }
-                    else { List { Section(record["materialDesc"].text) { MaterialFacts(material: record); LabeledContent("库存数量", value: materialQuantity(record["onhandQty"].text, material: record)) } }.navigationTitle("库存详情").modifier(DetailTabVisibility()) }
+                    else { List { Section(record["materialDesc"].text) { MaterialFacts(material: record); LabeledContent("库存数量", value: materialQuantity(record["onhandQty"].text, material: record)) } }.navigationTitle("库存详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome().modifier(DetailTabVisibility()) }
                 } label: { VStack(alignment: .leading, spacing: 5) {
                     WrappingContent { Text(record.object.label).font(.headline) }
                     WrappingContent { Text(record[source == .assets ? "assetCode" : "materialCode"].text).font(.subheadline).foregroundStyle(.secondary) }

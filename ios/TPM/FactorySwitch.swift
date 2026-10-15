@@ -4,7 +4,7 @@ struct PreviewFactoryButton: View {
     @State private var shown = false
     var body: some View {
         Button { shown = true } label: { FactoryNameLabel(name: "示例一厂") }
-            .buttonStyle(.glass).buttonBorderShape(.capsule)
+            .buttonStyle(.plain)
             .accessibilityLabel("切换厂区")
             .sheet(isPresented: $shown) { NavigationStack { FactorySwitchView(preview: true) } }
     }
@@ -17,7 +17,7 @@ struct FactorySwitcherButton: View {
         Button { presented = true } label: {
             FactoryNameLabel(name: session.currentFactoryName)
         }
-        .buttonStyle(.glass).buttonBorderShape(.capsule)
+        .buttonStyle(.plain)
         .accessibilityLabel("切换厂区，当前" + session.currentFactoryName)
         .sheet(isPresented: $presented) { NavigationStack { FactorySwitchView() } }
     }

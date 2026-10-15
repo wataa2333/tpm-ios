@@ -7,13 +7,11 @@ struct SearchPageChrome: ViewModifier {
     func body(content: Content) -> some View {
         content
             .contentMargins(.top, 8, for: .scrollContent)
-            .contentMargins(.bottom, navigation.hideTabs || navigation.keyboardVisible ? 16 : 104, for: .scrollContent)
+            .contentMargins(.bottom, 16, for: .scrollContent)
             .listSectionSpacing(.compact)
             .scrollContentBackground(.hidden)
             .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
-            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-            .toolbarBackgroundVisibility(.visible, for: .navigationBar)
     }
 }
 
@@ -117,16 +115,6 @@ struct AnimatedLoadingOverlay: View {
     }
 }
 
-struct NativeTabBar: View {
-    @EnvironmentObject private var navigation: BottomNavigationModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Binding var selection: Int
-    var preview = false
-    var body: some View {
-        BottomNavigation(selection: $selection, preview: preview)
-    }
-}
-
 struct WorkOrderStatusStrip: View {
     @Binding var selection: Int
     var counts: [String: Int] = [:]
@@ -136,42 +124,36 @@ struct WorkOrderStatusStrip: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal) {
-                HStack(spacing: 8) {
+                HStack(spacing: 20) {
                     ForEach(Array(FaultState.allCases.enumerated()), id: \.offset) { index, state in
                         Button {
-                            withAnimation(animation) { selection = index }
+                            selection = index
                         } label: {
-                            HStack(spacing: 7) {
-                                Image(systemName: state.symbol).font(.system(size: 19, weight: .semibold))
-                                    .frame(width: 24)
+                            VStack(spacing: 6) {
+                            HStack(spacing: 5) {
                                 Text(state.rawValue).font(.subheadline.weight(.semibold)).lineLimit(1)
                                 Text(counts[state.code].map(String.init) ?? "…")
                                     .font(.caption.weight(.semibold)).monospacedDigit()
-                                    .contentTransition(.numericText())
                             }
-                            .foregroundStyle(selection == index ? state.selectedForeground : state.color)
-                            .padding(.horizontal, selection == index ? 16 : 10)
-                            .frame(minHeight: 44)
-                            .background(selection == index ? state.color : state.color.opacity(0.12), in: .capsule)
-                            .contentShape(.capsule)
+                            .foregroundStyle(selection == index ? state.color : Color.primary)
+                            Rectangle().fill(selection == index ? state.color : .clear).frame(height: 3)
+                            }.fixedSize(horizontal: true, vertical: false).frame(minHeight: 44)
+                            .contentShape(.rect)
                         }
                         .buttonStyle(.plain).id(index)
                         .accessibilityLabel(state.rawValue)
                         .accessibilityValue(counts[state.code].map { "\($0) 单" } ?? "数量尚未获取")
                         .accessibilityAddTraits(selection == index ? [.isSelected] : [])
                     }
-                }.padding(.horizontal, 16).padding(.vertical, 8)
+                }.padding(.horizontal, 16).padding(.vertical, 4)
             }
             .scrollIndicators(.hidden)
             .contentMargins(.all, 0, for: .scrollContent)
             .onAppear { proxy.scrollTo(selection, anchor: .center) }
             .onChange(of: selection) { _, index in withAnimation(animation) { proxy.scrollTo(index, anchor: .center) } }
         }
-        .frame(height: 60)
-        .background {
-            if reduceTransparency { Color(uiColor: .systemGroupedBackground) }
-            else { Rectangle().fill(.regularMaterial) }
-        }
+        .frame(height: 52).fixedSize(horizontal: false, vertical: true).layoutPriority(1)
+        .background(Color(uiColor: .systemGroupedBackground))
         .overlay(alignment: .bottom) { Divider() }
         .sensoryFeedback(.selection, trigger: selection)
     }
@@ -220,11 +202,7 @@ struct HorizontalCategories: View {
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity)
         .background {
-            if reduceTransparency {
-                Color(uiColor: .systemBackground)
-            } else {
-                Rectangle().fill(.regularMaterial)
-            }
+            Color(uiColor: .systemGroupedBackground)
         }
         .overlay(alignment: .bottom) { Divider() }
         .clipped()

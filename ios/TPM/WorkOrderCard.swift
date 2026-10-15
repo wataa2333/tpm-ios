@@ -27,28 +27,7 @@ struct WorkOrderCard<Destination: View>: View {
             ForEach(Array(summaryFacts.enumerated()), id: \.offset) { _, fact in
                 WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(.subheadline).foregroundStyle(.secondary) }
             }
-            HStack(alignment: .center, spacing: 16) {
-                WrappingContent { Text(time).font(.subheadline).foregroundStyle(.secondary) }
-                    .accessibilityIdentifier("order-time-" + reference)
-                Button {
-                    withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.24)) { expanded.toggle() }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(expanded ? "收起详情" : "展开详情").transaction { $0.animation = nil }
-                        Image(systemName: "chevron.down")
-                            .font(.caption.weight(.semibold))
-                            .rotationEffect(.degrees(expanded ? 180 : 0))
-                    }
-                    .font(.subheadline.weight(.medium)).foregroundStyle(emphasis)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .frame(minHeight: 32)
-                    .contentShape(Rectangle().inset(by: -6))
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("order-expand-" + reference)
-                .accessibilityValue(expanded ? "已展开" : "已收起")
-            }
-            ExpandingDetails(expanded: expanded) {
+            DisclosureGroup(isExpanded: $expanded) {
                 VStack(spacing: 12) {
                     ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
                         ReadableFact(title: fact.0, value: fact.1)
@@ -59,7 +38,18 @@ struct WorkOrderCard<Destination: View>: View {
                             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     }.buttonStyle(.plain)
                 }.padding(.top, 4)
+            } label: {
+                HStack(spacing: 12) {
+                    Text(time).font(.subheadline).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("order-time-" + reference)
+                    Spacer(minLength: 0)
+                    Text(expanded ? "收起详情" : "展开详情")
+                        .font(.subheadline.weight(.medium)).foregroundStyle(emphasis)
+                }.frame(minHeight: 32)
             }
+            .tint(emphasis)
+            .accessibilityIdentifier("order-expand-" + reference)
+            .accessibilityValue(expanded ? "已展开" : "已收起")
         }.buttonStyle(.plain).padding(.vertical, 2)
             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
     }
@@ -117,7 +107,8 @@ struct CharacterCount: View {
 struct DetailTabVisibility: ViewModifier {
     @EnvironmentObject private var navigation: BottomNavigationModel
     func body(content: Content) -> some View {
-        content.onAppear { navigation.hideTabs = true }
+        content.toolbar(.hidden, for: .tabBar)
+            .onAppear { navigation.hideTabs = true }
     }
 }
 
@@ -126,6 +117,7 @@ struct DetailTabVisibility: ViewModifier {
 struct ListTabVisibility: ViewModifier {
     @EnvironmentObject private var navigation: BottomNavigationModel
     func body(content: Content) -> some View {
-        content.onAppear { navigation.hideTabs = false }
+        content.toolbar(.visible, for: .tabBar)
+            .onAppear { navigation.hideTabs = false }
     }
 }

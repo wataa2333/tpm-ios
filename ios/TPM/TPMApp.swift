@@ -136,16 +136,15 @@ struct MainTabs: View {
     var previewFaultList = false
     init(selection: Int = 0, previewFaultList: Bool = false) { _selection = State(initialValue: selection); self.previewFaultList = previewFaultList }
     var body: some View {
-        Group {
-            switch selection {
-            case 0: NavigationStack { HomeView() }
-            case 1: NavigationStack { WorkspaceView() }
-            case 2: NavigationStack { if previewFaultList { FaultListView() } else { TodoInboxView(preview: true) } }
-            default: NavigationStack { ProfileView() }
+        NativeTabShell(selection: $selection, preview: true) {
+            NavigationStack { HomeView() }.tabItem { Label("主页", systemImage: "house") }.tag(0)
+            NavigationStack {
+                if previewFaultList { FaultListView() } else { TodoInboxView(preview: true) }
             }
+            .tabItem { Label("我的待办", systemImage: "checklist") }.tag(2)
+            NavigationStack { WorkspaceView() }.tabItem { Label("工作台", systemImage: "square.grid.2x2") }.tag(1)
+            NavigationStack { ProfileView() }.tabItem { Label("我的", systemImage: "person.crop.circle") }.tag(3)
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { NativeTabBar(selection: $selection, preview: true) }
-        .onChange(of: selection) { navigation.hideTabs = false }
     }
 }
 
@@ -608,4 +607,3 @@ struct PreviewScreen: View {
 }
 
 #Preview { MainTabs().environmentObject(DemoStore()).environmentObject(LiveSession()).environmentObject(BottomNavigationModel()) }
-

@@ -53,9 +53,10 @@ private struct PageSearch: ViewModifier {
     func body(content: Content) -> some View {
         let active = presented ?? $localActive
         content.safeAreaInset(edge: .top, spacing: 0) {
+            if !navigation.presentingDocument {
             HStack(spacing: 10) {
                 NativeSearchInput(text: $text, active: active, prompt: prompt, submit: submit)
-                    .frame(height: 44).glassEffect(.regular, in: .capsule)
+                    .frame(height: 44)
                 if active.wrappedValue {
                     Button {
                         active.wrappedValue = false
@@ -67,8 +68,9 @@ private struct PageSearch: ViewModifier {
                         .transition(.opacity)
                 }
             }.padding(.horizontal, 16).padding(.vertical, 8)
-                .background(.thinMaterial)
+                .background(Color(uiColor: .systemGroupedBackground))
                 .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.24), value: active.wrappedValue)
+            }
         }
         .onDisappear { active.wrappedValue = false }
         .onChange(of: navigation.searchReset) { active.wrappedValue = false }
@@ -80,7 +82,6 @@ extension View {
         modifier(PageSearch(text: text, presented: isPresented, prompt: prompt, submit: onSubmit))
     }
     func nativeNavigationChrome() -> some View {
-        toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-            .toolbarBackgroundVisibility(.visible, for: .navigationBar)
+        toolbarBackgroundVisibility(.automatic, for: .navigationBar)
     }
 }

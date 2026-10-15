@@ -269,8 +269,10 @@ final class PreviewTests: XCTestCase {
         let add = app.buttons["新建报修"]
         XCTAssertTrue(add.waitForExistence(timeout: 20))
         let mine = app.buttons["我的"].firstMatch
-        XCTAssertLessThan(abs(add.frame.midY - mine.frame.midY), 10)
-        XCTAssertGreaterThan(add.frame.minX, mine.frame.maxX)
+        // A real TabView places actions in its system accessory above the bar.
+        XCTAssertLessThanOrEqual(add.frame.maxY, mine.frame.minY + 2)
+        XCTAssertGreaterThan(add.frame.midX, app.frame.midX)
+        XCTAssertTrue(add.isHittable)
         XCTAssertEqual(app.buttons.matching(identifier: "我的").count, 1)
     }
 
