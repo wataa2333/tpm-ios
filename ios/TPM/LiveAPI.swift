@@ -155,7 +155,8 @@ final class LiveSession: ObservableObject {
         request.setValue("XMLHttpRequest", forHTTPHeaderField: "x-requested-with")
         func escape(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")) ?? "" }
         request.httpBody = "username=\(escape(username))&password=\(escape(password))".data(using: .utf8)
-        let result = try await perform(request)
+        // A rejected password answers 401 too; that must not sign out the account already in use.
+        let result = try await perform(request, signOutOnUnauthorized: false)
         guard !result["token"].text.isEmpty else { throw APIError(message: "服务器没有返回有效登录会话") }
         authentication = result.object
         do { try persist() } catch { authentication = [:]; throw error }
@@ -199,7 +200,7 @@ final class LiveSession: ObservableObject {
         }
         return try await perform(request)
     }
-    private func perform(_ input: URLRequest, allowPlainText: Bool = false) async throws -> JSONValue {
+    private func perform(_ input: URLRequest, allowPlainText: Bool = false, signOutOnUnauthorized: Bool = true) async throws -> JSONValue {
         let scope = scopeRevision
         var request = input
         request.timeoutInterval = 60
@@ -214,7 +215,7 @@ final class LiveSession: ObservableObject {
         guard scope == scopeRevision else { throw CancellationError() }
         guard let http = response as? HTTPURLResponse else { throw APIError(message: "服务器响应无效", request: label) }
         guard (200..<300).contains(http.statusCode) else {
-            if http.statusCode == 401 { signOut() }
+            if http.statusCode == 401 && signOutOnUnauthorized { signOut() }
             let detail = serverErrorSummary(data)
             throw APIError(message: "请求失败（\(http.statusCode)）" + (detail.isEmpty ? "" : "：" + detail), status: http.statusCode, request: label, detail: detail)
         }
@@ -249,22 +250,77 @@ func filter(_ field: String, _ value: String, _ operation: String = "eq") -> JSO
     .object(["field": .string(field), "value": .string(value), "operator": .string(operation), "logic": .string("and")])
 }
 
+extension LiveSession {
+    /// Signs in and, when asked, remembers the password in the Keychain for quick switching.
+    func signIn(username: String, password: String, remember: Bool) async throws {
+        try await login(username: username, password: password)
+        if remember {
+            let name = authentication.text("fullName")
+            try? AccountVault.save(username: username, password: password, displayName: name.isEmpty ? username : name)
+        }
+    }
+
+    /// Switches to a remembered account: the pages dim, then the new account's pages fade in.
+    func switchAccount(to account: SavedAccount) async throws {
+        switch await BiometricGate.authenticate(reason: "使用已记住的账号 " + (account.displayName.isEmpty ? account.username : account.displayName)) {
+        case .passed: break
+        case .cancelled: return
+        case .failed(let message): throw APIError(message: message)
+        }
+        guard let password = AccountVault.password(for: account.username) else {
+            throw APIError(message: "没有找到这个账号保存的密码，请重新登录并打开“记住密码”")
+        }
+        switchingFactory = true
+        defer { switchingFactory = false }
+        try await signIn(username: account.username, password: password, remember: true)
+    }
+}
+
 struct NativeLoginView: View {
     @EnvironmentObject private var session: LiveSession
+    @StateObject private var saved = SavedAccountsModel()
     @State private var username = ""
     @State private var password = ""
+    @State private var remember = true
     @State private var error: String?
     var body: some View {
         NavigationStack {
             Form {
+                if !saved.accounts.isEmpty {
+                    Section("已记住的账号") {
+                        ForEach(saved.accounts) { account in
+                            Button {
+                                Task {
+                                    do { try await session.switchAccount(to: account) }
+                                    catch { self.error = error.localizedDescription }
+                                }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(account.displayName.isEmpty ? account.username : account.displayName).foregroundStyle(Color.primary)
+                                    Text(account.username).font(.footnote).foregroundStyle(Color.secondary)
+                                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect)
+                            }
+                            .buttonStyle(.plain).disabled(session.signingIn)
+                            .swipeActions { Button("移除", role: .destructive) { saved.remove(account) } }
+                        }
+                    }
+                }
                 Section("原系统账号") {
                     TextField("账号", text: $username).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled()
                     SecureField("密码", text: $password).textContentType(.password)
+                    Toggle("记住密码", isOn: $remember)
                 }
                 Section {
-                    Button { Task { do { try await session.login(username: username, password: password); password = "" } catch { self.error = error.localizedDescription } } } label: {
+                    Button {
+                        Task {
+                            do { try await session.signIn(username: username, password: password, remember: remember); password = "" }
+                            catch { self.error = error.localizedDescription }
+                        }
+                    } label: {
                         HStack { Text("登录"); Spacer(); if session.signingIn { ProgressView() } }
                     }.disabled(session.signingIn || username.isEmpty || password.isEmpty)
+                } footer: {
+                    Text("密码只保存在这台手机的钥匙串里，不会显示，也不会上传。")
                 }
             }.navigationTitle("登录").errorDialog($error, title: "登录失败", clearsOnClose: true)
         }

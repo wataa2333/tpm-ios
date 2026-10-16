@@ -1,0 +1,196 @@
+import SwiftUI
+import Security
+import LocalAuthentication
+
+// Remembered accounts: the login page can keep the password of an account, and the "我的" page switches
+// between the remembered accounts without typing anything. Passwords are kept only in the iOS Keychain,
+// readable while the phone is unlocked and never leaving this device (not in backups, not in iCloud),
+// and they are never shown on screen: the lists show the account and the name, not the password.
+
+struct SavedAccount: Identifiable, Equatable {
+    let username: String
+    var displayName: String
+    var lastUsed: Date
+    var id: String { username }
+}
+
+enum AccountVault {
+    private static let service = "com.personal.tpm.accounts"
+    private struct Payload: Codable {
+        var password: String
+        var displayName: String
+        var lastUsed: Date
+    }
+    private static func query(_ username: String? = nil) -> [String: Any] {
+        var q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
+        if let username { q[kSecAttrAccount as String] = username }
+        return q
+    }
+    static func save(username: String, password: String, displayName: String) throws {
+        let data = try JSONEncoder().encode(Payload(password: password, displayName: displayName, lastUsed: Date()))
+        let update = SecItemUpdate(query(username) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        if update == errSecItemNotFound {
+            var add = query(username)
+            add[kSecValueData as String] = data
+            add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            guard SecItemAdd(add as CFDictionary, nil) == errSecSuccess else { throw APIError(message: "无法安全保存账号") }
+        } else if update != errSecSuccess {
+            throw APIError(message: "无法更新已保存的账号")
+        }
+    }
+    /// The remembered accounts, most recently used first. Passwords stay in the Keychain.
+    static func list() -> [SavedAccount] {
+        var q = query()
+        q[kSecReturnAttributes as String] = true
+        q[kSecReturnData as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitAll
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(q as CFDictionary, &result) == errSecSuccess, let items = result as? [[String: Any]] else { return [] }
+        return items.compactMap { item in
+            guard let name = item[kSecAttrAccount as String] as? String, let data = item[kSecValueData as String] as? Data,
+                  let payload = try? JSONDecoder().decode(Payload.self, from: data) else { return nil }
+            return SavedAccount(username: name, displayName: payload.displayName, lastUsed: payload.lastUsed)
+        }.sorted { $0.lastUsed > $1.lastUsed }
+    }
+    static func password(for username: String) -> String? {
+        var q = query(username)
+        q[kSecReturnData as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(q as CFDictionary, &result) == errSecSuccess, let data = result as? Data,
+              let payload = try? JSONDecoder().decode(Payload.self, from: data) else { return nil }
+        return payload.password
+    }
+    static func remove(username: String) {
+        SecItemDelete(query(username) as CFDictionary)
+    }
+}
+
+/// Face ID (or the device passcode as the fallback) in front of the remembered accounts: a remembered
+/// account signs in without typing a password, so the phone must first confirm it is the owner.
+enum BiometricGate {
+    static let defaultsKey = "protectSavedAccounts"
+    /// On unless the owner turned it off.
+    static var isEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: defaultsKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: defaultsKey) }
+    }
+    enum Outcome: Equatable { case passed, cancelled, failed(String) }
+    /// Decides without asking the system: whether a check is needed at all.
+    static func isRequired(enabled: Bool, arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+        enabled && !arguments.contains("--skip-biometrics")
+    }
+    static func authenticate(reason: String) async -> Outcome {
+        guard isRequired(enabled: isEnabled) else { return .passed }
+        let context = LAContext()
+        context.localizedCancelTitle = "取消"
+        var unavailable: NSError?
+        // With no Face ID and no passcode there is nothing to ask for; the Keychain items themselves
+        // need an unlocked, passcode-protected phone, so remembered accounts cannot exist there anyway.
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &unavailable) else { return .passed }
+        do {
+            return try await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) ? .passed : .failed("没有通过验证")
+        } catch let error as LAError {
+            switch error.code {
+            case .userCancel, .systemCancel, .appCancel: return .cancelled
+            default: return .failed("没有通过面容 ID 验证")
+            }
+        } catch { return .failed("没有通过面容 ID 验证") }
+    }
+}
+
+@MainActor
+final class SavedAccountsModel: ObservableObject {
+    @Published private(set) var accounts: [SavedAccount] = AccountVault.list()
+    func reload() { accounts = AccountVault.list() }
+    func remove(_ account: SavedAccount) {
+        AccountVault.remove(username: account.username)
+        reload()
+    }
+}
+
+/// The "我的" tab: the account, the factory, switching between remembered accounts and signing out.
+struct ProfileTab: View {
+    @EnvironmentObject private var session: LiveSession
+    @StateObject private var saved = SavedAccountsModel()
+    @State private var showAccounts = false
+    @State private var refreshing = false
+    @State private var switchError: String?
+    @State private var protect = BiometricGate.isEnabled
+    @State private var draftCount = 0
+    @State private var resuming: FaultDraft?
+    /// Turning the protection off is a change the owner confirms with the same check.
+    private func setProtection(_ on: Bool) {
+        if on { BiometricGate.isEnabled = true; protect = true; return }
+        Task {
+            switch await BiometricGate.authenticate(reason: "关闭对已记住账号的保护") {
+            case .passed: BiometricGate.isEnabled = false; protect = false
+            case .cancelled: protect = true
+            case .failed(let message): protect = true; switchError = message
+            }
+        }
+    }
+    private var current: String { session.authentication.text("name") }
+    var body: some View {
+        List {
+            Section {
+                LabeledContent("账号", value: current)
+                LabeledContent("姓名", value: session.authentication.text("fullName"))
+            }
+            Section { LabeledContent("当前厂区", value: session.currentFactoryName) }
+            Section {
+                NavigationLink {
+                    DraftBoxView { resuming = $0 }
+                } label: {
+                    HStack { Label("草稿箱", systemImage: "tray.full"); Spacer(); if draftCount > 0 { Text("\(draftCount)").foregroundStyle(.secondary) } }
+                }.accessibilityIdentifier("draft-box")
+            }
+            Section {
+                DisclosureGroup(isExpanded: $showAccounts) {
+                    ForEach(saved.accounts) { account in
+                        Button {
+                            Task {
+                                do { try await session.switchAccount(to: account); saved.reload() }
+                                catch { switchError = error.localizedDescription }
+                            }
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(account.displayName.isEmpty ? account.username : account.displayName).foregroundStyle(Color.primary)
+                                    Text(account.username).font(.footnote).foregroundStyle(Color.secondary)
+                                }
+                                Spacer()
+                                if account.username == current { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
+                            }.contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(account.username == current || session.signingIn)
+                        .swipeActions { Button("移除", role: .destructive) { saved.remove(account) } }
+                        .accessibilityIdentifier("saved-account-" + account.username)
+                    }
+                    if saved.accounts.isEmpty {
+                        Text("还没有记住的账号。登录时打开“记住密码”，之后就可以在这里一键切换。").font(.footnote).foregroundStyle(.secondary)
+                    }
+                    Button("添加其他账号", systemImage: "plus") { session.signOut() }
+                } label: {
+                    HStack { Label("切换账号", systemImage: "person.2.fill"); Spacer(); if session.signingIn { ProgressView() } }
+                }
+                .accessibilityIdentifier("switch-account")
+            }
+            Section {
+                Toggle("用面容 ID 保护已记住的账号", isOn: Binding(get: { protect }, set: { setProtection($0) }))
+                    .accessibilityIdentifier("protect-accounts")
+            } footer: { Text("打开后，使用已记住的账号前需要面容 ID 或设备密码验证。") }
+            Section { Button("退出登录", role: .destructive) { session.signOut() } }
+        }
+        .navigationTitle("我的").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
+        .rootTopBar(busy: refreshing) {
+            Task { refreshing = true; try? await session.refreshFactories(); refreshing = false }
+        }
+        .errorDialog($switchError, title: "切换账号失败", clearsOnClose: true)
+        .onAppear { saved.reload(); draftCount = DraftStore.shared.drafts(scope: session.draftScope).count }
+        .sheet(item: $resuming, onDismiss: { draftCount = DraftStore.shared.drafts(scope: session.draftScope).count }) { draft in
+            NavigationStack { OriginalFaultForm(draft: draft) }.presentationDragIndicator(.visible)
+        }
+    }
+}

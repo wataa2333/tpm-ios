@@ -68,6 +68,7 @@ struct TodoInboxView: View {
             rows = more ? rows + page["content"].array : page["content"].array
             last = page["last"].bool
             total = serverPageCount(page)
+            if query.isEmpty, !more, let total { navigation.todoCount = total }
         } catch is CancellationError {}
         catch let urlError as URLError where urlError.code == .cancelled {}
         catch { self.error = error.localizedDescription }

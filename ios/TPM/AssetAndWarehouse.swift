@@ -48,41 +48,55 @@ struct AssetRecordDetail: View {
     @StateObject private var gate = ReloadGate()
     private var asset: JSONValue { detail == .null ? record : detail }
     var body: some View {
-        List {
-            Section {
-                HorizontalCategories(titles: tabs, selection: $tab)
-                LoadingRow(isPresented: loading || gate.busy, title: "正在加载" + tabs[tab])
-            }
-            Section {
+        // A card page, not a List: the repair cards here expand in place, and in a ScrollView the card above
+        // stays put while the extra lines open downwards and the cards behind slide along in one animation.
+        CardPage {
+            HorizontalCategories(titles: tabs, selection: $tab)
+            LoadingRow(isPresented: loading || gate.busy, title: "正在加载" + tabs[tab])
+            CardGroup {
                 VStack(alignment: .leading, spacing: RowMetrics.spacing) {
                     WrappingContent { Text(asset["assetName"].text).font(.headline) }
                     WrappingContent { Text(asset["assetCode"].text).font(.subheadline).foregroundStyle(.secondary) }
-                }
-            }.listRowInsets(RowMetrics.insets)
-            if tab == 0 {
-                Section("基本信息") { ForEach(assetFields, id: \.0) { key, label in LabeledContent(label, value: assetDisplayValue(asset.at(key), key: key)) } }
-            } else if tab == 6 {
-                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                    let repair = assetRepairRecord(row, asset: asset)
-                    WorkOrderCard(title: repair["faultName"].text, status: faultStateName(repair["faultState"].text), reference: repair["asset"]["assetCode"].text, time: readableDate(repair["faultTime"]), facts: faultCardFacts(repair)) {
-                        if preview { FaultDetailView(id: "BX-20261015-001") }
-                        else { LiveWorkflowDetail(kind: .fault, id: row["faultId"].text) }
-                    }
-
-                }
-            } else if tab == 2 {
-                ForEach(Array(asset["albums"].array.enumerated()), id: \.offset) { _, photo in AttachmentRow(photo: photo) }
-            } else {
-                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(row["taskName"].text.isEmpty ? row.object.label : row["taskName"].text).font(.headline)
-                        Text(readableDate(row["createTime"])).font(.subheadline).foregroundStyle(.secondary)
-                        if !row["content"].text.isEmpty { Text(row["content"].text).font(.subheadline) }
-                    }
-                }.uniformRow()
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(RowMetrics.insets)
             }
-            if !loading && error == nil && tab != 0 && rows.isEmpty && (tab != 2 || asset["albums"].array.isEmpty) { CompactEmptyState(title: "暂无" + tabs[tab] + "记录") }
-            if preview { Section { DemoNotice() } }
+            if tab == 0 {
+                Text("基本信息").font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 32)
+                CardGroup {
+                    ForEach(assetFields, id: \.0) { key, label in
+                        LabeledContent(label, value: assetDisplayValue(asset.at(key), key: key)).padding(RowMetrics.insets)
+                    }
+                }
+            } else if tab == 6 {
+                CardGroup {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                        let repair = assetRepairRecord(row, asset: asset)
+                        WorkOrderCard(title: repair["faultName"].text, status: faultStateName(repair["faultState"].text), reference: repair["asset"]["assetCode"].text, time: readableDate(repair["faultTime"]), facts: faultCardFacts(repair)) {
+                            if preview { FaultDetailView(id: "BX-20261015-001") }
+                            else { LiveWorkflowDetail(kind: .fault, id: row["faultId"].text) }
+                        }
+                    }
+                }.opacity(loading || gate.busy ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
+            } else if tab == 2 {
+                if !asset["albums"].array.isEmpty {
+                    CardGroup {
+                        ForEach(Array(asset["albums"].array.enumerated()), id: \.offset) { _, photo in
+                            AttachmentRow(photo: photo).frame(maxWidth: .infinity, alignment: .leading).padding(RowMetrics.insets)
+                        }
+                    }
+                }
+            } else if !rows.isEmpty {
+                CardGroup {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(row["taskName"].text.isEmpty ? row.object.label : row["taskName"].text).font(.headline)
+                            Text(readableDate(row["createTime"])).font(.subheadline).foregroundStyle(.secondary)
+                            if !row["content"].text.isEmpty { Text(row["content"].text).font(.subheadline) }
+                        }.frame(maxWidth: .infinity, alignment: .leading).padding(RowMetrics.insets)
+                    }
+                }
+            }
+            if !loading && error == nil && tab != 0 && rows.isEmpty && (tab != 2 || asset["albums"].array.isEmpty) { CardGroup { CompactEmptyState(title: "暂无" + tabs[tab] + "记录") } }
+            if preview { DemoNotice().padding(.horizontal, 32).frame(maxWidth: .infinity, alignment: .leading) }
         }
         .searchPageChrome()
         .navigationTitle("资产详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()

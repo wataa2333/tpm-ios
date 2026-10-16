@@ -56,6 +56,26 @@ final class PreviewTests: XCTestCase {
         }
     }
 
+    func testDraftBoxOpensFromTheNewFormAndKeyboardButtonSitsInTheActionBar() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "new-fault", "--skip-biometrics"]
+        app.launch()
+        XCTAssertTrue(app.buttons["draft-box-button"].waitForExistence(timeout: 10))
+        app.buttons["draft-box-button"].tap()
+        XCTAssertTrue(app.navigationBars["草稿箱"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["草稿箱是空的"].exists)
+        app.buttons["完成"].tap()
+        let name = app.textFields["请输入报修名称"]
+        XCTAssertTrue(name.waitForExistence(timeout: 10))
+        name.tap()
+        let dismiss = app.buttons["keyboard-dismiss"]
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 10))
+        let save = app.buttons["保存"], submit = app.buttons["提交"]
+        XCTAssertTrue(dismiss.frame.minX > save.frame.maxX && dismiss.frame.maxX < submit.frame.minX, "收起键盘应在保存和提交之间")
+        dismiss.tap()
+        XCTAssertFalse(app.buttons["keyboard-dismiss"].waitForExistence(timeout: 2))
+    }
+
     func testReferenceSelectionsSurviveReturningToForm() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "new-fault"]
@@ -314,6 +334,22 @@ final class PreviewTests: XCTestCase {
         app.buttons["取消"].tap()
         XCTAssertTrue(app.buttons["新建报修"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.navigationBars["故障报修"].exists)
+    }
+
+    func testQuickRepairQueryCardsOpenTheOrderList() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "workspace"]
+        app.launch()
+        let machineCard = app.buttons["quick-query-按机台号查询"]
+        for _ in 0..<4 where !machineCard.exists { app.swipeUp() }
+        XCTAssertTrue(machineCard.waitForExistence(timeout: 10))
+        // Empty text: the button is disabled and nothing opens.
+        XCTAssertFalse(machineCard.isEnabled)
+        let field = app.textFields["按机台号查询"]
+        field.tap(); field.typeText("D-E59")
+        XCTAssertTrue(machineCard.isEnabled)
+        machineCard.tap()
+        XCTAssertTrue(app.navigationBars["故障报修"].waitForExistence(timeout: 10))
     }
 
     func testAcceptanceRejectAndReturnScreens() {

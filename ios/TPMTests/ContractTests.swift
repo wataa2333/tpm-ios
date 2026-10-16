@@ -241,22 +241,74 @@ import Foundation
     #expect(loads == 2)
 }
 
-@Test func peopleAreListedAToZByPinyinWithTheirOwnOrders() {
-    func order(_ id: String, _ name: String, _ user: String) -> JSONValue {
-        .object(["faultId": .string(id), "repairUser": .object(["realName": .string(name), "userName": .string(user)])])
-    }
-    let signed = [order("1", "张三", "z3"), order("2", "李四", "l4")]
-    let working = [order("3", "张三", "z3"), order("4", "阿里", "a1"), order("5", "王五", "w5"), .object(["faultId": .string("6")])]
-    let people = groupWorkers(signed: signed, working: working)
-    #expect(people.map(\.name) == ["阿里", "李四", "王五", "张三"])
-    #expect(people.map(\.initial) == ["A", "L", "W", "Z"])
-    let zhang = people.first { $0.name == "张三" }
-    #expect(zhang?.signed.count == 1 && zhang?.working.count == 1 && zhang?.count == 2)
-    // An order without an executor is listed under nobody.
-    #expect(people.reduce(0) { $0 + $1.count } == 5)
+@Test func rememberedAccountsLiveInTheKeychainAndNeverShowTheirPassword() {
+    let name = "test.fixture." + UUID().uuidString
+    defer { AccountVault.remove(username: name) }
+    try? AccountVault.save(username: name, password: "secret-1", displayName: "测试用户")
+    #expect(AccountVault.password(for: name) == "secret-1")
+    let listed = AccountVault.list().first { $0.username == name }
+    #expect(listed?.displayName == "测试用户")
+    // Saving again replaces the password and keeps one entry.
+    try? AccountVault.save(username: name, password: "secret-2", displayName: "测试用户")
+    #expect(AccountVault.password(for: name) == "secret-2")
+    #expect(AccountVault.list().filter { $0.username == name }.count == 1)
+    AccountVault.remove(username: name)
+    #expect(AccountVault.password(for: name) == nil)
 }
 
-@Test func pinyinKeyIsTonelessAndWithoutSpaces() {
-    #expect(pinyinKey("张三") == "zhangsan")
-    #expect(pinyinKey("Wu Li") == "wuli")
+@Test func dateRangeFilterUsesTheOriginalDateBetweenEnvelope() {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+    let from = calendar.date(from: DateComponents(year: 2026, month: 10, day: 1))!
+    let to = calendar.date(from: DateComponents(year: 2026, month: 10, day: 16))!
+    #expect(DateRange(from: from, to: to).serverDays(calendar: calendar) == ["2026-10-01", "2026-10-16"])
+    // Picked in the wrong order, the earlier day still goes first.
+    #expect(DateRange(from: to, to: from).serverDays(calendar: calendar) == ["2026-10-01", "2026-10-16"])
+    let filter = dateRangeFilter("faultTime", DateRange(from: from, to: to))
+    #expect(filter["field"].text == "faultTime")
+    #expect(filter["operator"].text == "dateBetween")
+    #expect(filter["logic"].text == "and")
+    #expect(filter["value"].array.map(\.text).count == 2)
+    let last7 = DateRange.lastDays(7, now: to, calendar: calendar)
+    #expect(last7.serverDays(calendar: calendar) == ["2026-10-09", "2026-10-16"])
+    #expect(DateRange.thisMonth(now: to, calendar: calendar).serverDays(calendar: calendar) == ["2026-10-01", "2026-10-16"])
+}
+
+@Test func draftsAreKeptPerAccountAndFactoryAndCanBeRemoved() {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("drafts-" + UUID().uuidString).appendingPathComponent("fault-drafts.json")
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    let store = DraftStore(url: url)
+    let first = FaultDraft(savedAt: Date(timeIntervalSince1970: 100), data: ["faultName": .string("主轴异常"), "asset": .object(["assetName": .string("台群CNC")])], selections: ["a": ["u1"]])
+    let second = FaultDraft(savedAt: Date(timeIntervalSince1970: 200), data: [:], selections: [:])
+    try? store.save(first, scope: "wang@一厂")
+    try? store.save(second, scope: "wang@一厂")
+    try? store.save(second, scope: "li@二厂")
+    let list = store.drafts(scope: "wang@一厂")
+    #expect(list.map(\.id) == [second.id, first.id])
+    #expect(list.last?.title == "主轴异常" && list.last?.subtitle == "台群CNC")
+    #expect(list.first?.title == "未命名报修")
+    #expect(list.last?.selections == ["a": ["u1"]])
+    // Saving the same draft again replaces it.
+    var changed = first; changed.data["faultName"] = .string("改名")
+    try? store.save(changed, scope: "wang@一厂")
+    #expect(store.drafts(scope: "wang@一厂").count == 2)
+    store.remove(id: first.id, scope: "wang@一厂")
+    #expect(store.drafts(scope: "wang@一厂").map(\.id) == [second.id])
+    #expect(store.drafts(scope: "li@二厂").count == 1)
+    #expect(store.drafts(scope: "nobody@一厂").isEmpty)
+}
+
+@Test func onlyWhatThePersonTypedMakesAFormWorthAsking() {
+    // What the form fills in by itself must not count.
+    #expect(!faultFormHasContent(["applyUser": .object(["realName": .string("甲")]), "userPhone": .string("138"), "faultTime": .string("2026-10-16 09:00"), "albums": .array([])]))
+    #expect(faultFormHasContent(["faultName": .string(" 报警 ")]))
+    #expect(!faultFormHasContent(["faultName": .string("   ")]))
+    #expect(faultFormHasContent(["asset": .object(["assetId": .number(1)])]))
+    #expect(faultFormHasContent(["albums": .array([.object(["url": .string("x")])])]))
+}
+
+@Test func theFaceIDGateCanBeSwitchedOffByTheOwnerOrByTheTestLaunchArgument() {
+    #expect(BiometricGate.isRequired(enabled: true, arguments: []))
+    #expect(!BiometricGate.isRequired(enabled: false, arguments: []))
+    #expect(!BiometricGate.isRequired(enabled: true, arguments: ["--skip-biometrics"]))
 }

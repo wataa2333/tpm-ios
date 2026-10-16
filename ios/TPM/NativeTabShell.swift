@@ -5,6 +5,8 @@ import SwiftUI
 struct NativeTabShell<Home: View, Todo: View, Workspace: View, Mine: View>: View {
     @Binding var selection: Int
     var preview = false
+    /// The label of the last tab: the account name once signed in.
+    var mineTitle = "我的"
     @ViewBuilder let home: () -> Home
     @ViewBuilder let todo: () -> Todo
     @ViewBuilder let workspace: () -> Workspace
@@ -15,8 +17,9 @@ struct NativeTabShell<Home: View, Todo: View, Workspace: View, Mine: View>: View
         TabView(selection: $selection) {
             Tab("主页", systemImage: "house", value: 0) { home().newDocumentButton(preview: preview) }
             Tab("我的待办", systemImage: "checklist", value: 2) { todo().newDocumentButton(preview: preview) }
+                .badge(navigation.todoCount)
             Tab("工作台", systemImage: "square.grid.2x2", value: 1) { workspace().newDocumentButton(preview: preview) }
-            Tab("我的", systemImage: "person.crop.circle", value: 3) { mine().newDocumentButton(preview: preview) }
+            Tab(mineTitle, systemImage: "person.crop.circle", value: 3) { mine().newDocumentButton(preview: preview) }
         }
         .onChange(of: selection) {
             navigation.searchReset = UUID()

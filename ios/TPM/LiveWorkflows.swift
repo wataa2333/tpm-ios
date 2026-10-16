@@ -33,26 +33,30 @@ struct LiveTabs: View {
     @EnvironmentObject private var navigation: BottomNavigationModel
     @EnvironmentObject private var session: LiveSession
     @State private var selection = 0
-    @State private var refreshingProfile = false
     var body: some View {
-        NativeTabShell(selection: $selection) {
+        NativeTabShell(selection: $selection, mineTitle: accountTitle) {
             NavigationStack { DashboardHome() }
         } todo: {
             NavigationStack { TodoInboxView() }
         } workspace: {
             NavigationStack { DashboardWorkspace() }
         } mine: {
-            NavigationStack {
-                List {
-                    Section { LabeledContent("账号", value: session.authentication.text("name")); LabeledContent("姓名", value: session.authentication.text("fullName")) }
-                    Section { LabeledContent("当前厂区", value: session.currentFactoryName) }
-                    Section { Button("退出登录", role: .destructive) { session.signOut() } }
-                }.navigationTitle("我的").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
-                    .rootTopBar(busy: refreshingProfile) {
-                        Task { refreshingProfile = true; try? await session.refreshFactories(); refreshingProfile = false }
-                    }
-            }
+            NavigationStack { ProfileTab() }
         }
+        .task(id: "\(navigation.refresh)-\(selection)") { await refreshTodoCount() }
+    }
+    /// The last tab carries the account's own name, as on the profile page.
+    private var accountTitle: String {
+        let full = session.authentication.text("fullName")
+        return full.isEmpty ? (session.authentication.text("name").isEmpty ? "我的" : session.authentication.text("name")) : full
+    }
+    /// One tiny request: only the total of the open todo tasks is needed for the badge.
+    private func refreshTodoCount() async {
+        do {
+            let page = try await session.page("process/pageUserTodoTask", limit: 1)
+            try Task.checkCancellation()
+            if let count = serverPageCount(page) { navigation.todoCount = count }
+        } catch {}
     }
 }
 struct LiveWorkflowList: View {
@@ -71,12 +75,31 @@ struct LiveWorkflowList: View {
     @State private var adding = false
     @State private var loadingMore = false
     @State private var total: Int?
+    @State private var dateRange: DateRange?
+    @State private var choosingDates = false
     @State private var stateCounts: [String: Int] = [:]
     @StateObject private var gate = ReloadGate()
-    init(kind: WorkflowKind, initialState: String = "RECEIVED") { self.kind = kind; _state = State(initialValue: initialState) }
+    private let customTitle: String?
+    /// `initialQuery` and `initialField` open the list already searching, as the quick-query cards do.
+    init(kind: WorkflowKind, initialState: String = "RECEIVED", initialQuery: String = "", initialField: FaultSearchField = .name, title: String? = nil) {
+        self.kind = kind
+        self.customTitle = title
+        _state = State(initialValue: initialState)
+        _query = State(initialValue: initialQuery)
+        _searchField = State(initialValue: initialField)
+    }
+    private var dateKey: String { dateRange?.key ?? "" }
+    /// The search words and the date range, as filters shared by the list and the per-state counts.
+    private var searchFilters: [JSONValue] {
+        var filters: [JSONValue] = []
+        if !query.isEmpty { filters.append(filter(kind == .fault ? searchField.key : "outNumber", query, "like")) }
+        if kind == .fault, let dateRange { filters.append(dateRangeFilter("faultTime", dateRange)) }
+        return filters
+    }
     var body: some View {
         CardPage {
             if kind == .fault { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? -1 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
+            if let dateRange { DateRangeChip(range: dateRange) { dateRange = nil } }
             LoadingRow(isPresented: (loading || gate.busy) && !refreshing, title: "正在加载工单")
             if kind == .fault && searching { CardGroup { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }.padding(.horizontal, 16).padding(.vertical, 6) } }
             CardGroup {
@@ -87,18 +110,27 @@ struct LiveWorkflowList: View {
             }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
             LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await reload(more: true) }
         }
-        .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .navigationTitle(customTitle ?? kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(ListTabVisibility())
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号")
 
         .refreshable { refreshing = true; await reload(); await reloadCounts(); refreshing = false }
-        .reloadsToTop(on: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)"))
+        .reloadsToTop(on: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)-\(dateKey)"))
         .animation(.smooth(duration: 0.45), value: loading || gate.busy)
+        .toolbar {
+            if kind == .fault {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { choosingDates = true } label: { Image(systemName: dateRange == nil ? "calendar" : "calendar.badge.checkmark") }
+                        .accessibilityLabel("按日期筛选").accessibilityIdentifier("date-range-button")
+                }
+            }
+        }
         .refreshButton(busy: loading || loadingMore || gate.busy) { gate.request() }
+        .sheet(isPresented: $choosingDates) { DateRangeSheet(range: $dateRange) }
         .errorDialog($error, retry: { Task { await reload() } })
-        .task(id: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)")) { await gate.run(key: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await reload() }) }
-        .task(id: gate.id("counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)")) { await gate.run("counts", key: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await reloadCounts() }) }
+        .task(id: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)-\(dateKey)")) { await gate.run(key: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)-\(dateKey)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await reload() }) }
+        .task(id: gate.id("counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)-\(dateKey)")) { await gate.run("counts", key: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)-\(dateKey)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await reloadCounts() }) }
         .onAppear {
             navigation.newDocument = kind; navigation.hideTabs = false
             if navigation.pendingListRefresh { navigation.pendingListRefresh = false; navigation.refresh = UUID() }
@@ -113,14 +145,14 @@ struct LiveWorkflowList: View {
         error = nil
         defer { loading = false; loadingMore = false }
         // A page for a filter the user has already left must never be appended to the new list.
-        let snapshot = "\(state)-\(searchField.rawValue)-\(query)"
+        let snapshot = "\(state)-\(searchField.rawValue)-\(query)-\(dateKey)"
         do {
             var filters: [JSONValue] = []
             if kind == .fault && !state.isEmpty { filters.append(filter("faultState", state)) }
-            if !query.isEmpty { filters.append(filter(kind == .fault ? searchField.key : "outNumber", query, "like")) }
+            filters += searchFilters
             let data = try await session.page(kind.page, offset: more ? rows.count : 0, filters: filters)
             try Task.checkCancellation()
-            guard snapshot == "\(state)-\(searchField.rawValue)-\(query)" else { return }
+            guard snapshot == "\(state)-\(searchField.rawValue)-\(query)-\(dateKey)" else { return }
             rows = more ? rows + data["content"].array : data["content"].array
             last = data["last"].bool
             total = serverPageCount(data)
@@ -131,7 +163,7 @@ struct LiveWorkflowList: View {
     }
     private func reloadCounts() async {
         guard kind == .fault else { return }
-        let searchFilters = query.isEmpty ? [] : [filter(searchField.key, query, "like")]
+        let searchFilters = self.searchFilters
         let api = session
         await withTaskGroup(of: (String, Int?).self) { group in
             for stage in FaultState.allCases where !["UNTREATED", "FINISHED"].contains(stage.code) {

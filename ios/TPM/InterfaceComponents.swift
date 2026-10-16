@@ -174,8 +174,10 @@ struct LoadingRow: View {
     var title = "正在加载"
     @Environment(\.pulledDown) private var pulledDown
     var body: some View {
-        if isPresented && !pulledDown {
+        // While the page is pulled down the row fades out but keeps its height, so the page does not move.
+        if isPresented {
             HStack { Spacer(); ProgressView().accessibilityLabel(title); Spacer() }
+                .opacity(pulledDown ? 0 : 1)
                 .padding(.vertical, 10)
                 .listRowBackground(Color.clear).listRowSeparator(.hidden)
         }

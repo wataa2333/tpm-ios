@@ -423,10 +423,30 @@ struct OriginalFaultForm: View {
     @State private var showConfirmation = false
     @State private var showValidation = false
     @State private var photoUploading = false
+    @State private var leaving = false
+    @State private var showingDrafts = false
+    @State private var draftID: UUID?
+    @State private var draftCount = 0
     var existing: Fields? = nil
     var preview = false
+    /// A draft to continue: applied over the freshly loaded form.
+    var draft: FaultDraft? = nil
     var onSaved: (() -> Void)? = nil
     private func field(_ key: String) -> Binding<JSONValue> { Binding(get: { model.data[key] ?? .null }, set: { model.data[key] = $0 }) }
+    private func apply(_ draft: FaultDraft) {
+        model.data = draft.data
+        for (key, value) in draft.selections { model.selections[key] = value }
+        draftID = draft.id
+    }
+    private func keepDraft() {
+        let draft = FaultDraft(id: draftID ?? UUID(), savedAt: Date(), data: model.data, selections: model.selections)
+        do { try DraftStore.shared.save(draft, scope: session.draftScope); dismiss() }
+        catch { model.error = "草稿没有保存成功：" + error.localizedDescription }
+    }
+    /// Closing a new form that holds something asks whether to keep it as a draft.
+    private func close() {
+        if existing == nil && !preview && faultFormHasContent(model.data) { leaving = true } else { dismiss() }
+    }
     private func text(_ key: String) -> Binding<String> { Binding(get: { model.data.text(key) }, set: { model.data[key] = .string($0) }) }
     var body: some View {
         Form {
@@ -466,7 +486,21 @@ struct OriginalFaultForm: View {
         .overlay { AnimatedLoadingOverlay(isPresented: model.loading || model.saving, title: model.saving ? "正在提交报修…" : "正在加载表单…") }
         .navigationTitle(existing == nil ? "故障报修" : "编辑报修").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(model.saving || photoUploading) }
+            ToolbarItem(placement: .cancellationAction) { Button("取消") { close() }.disabled(model.saving || photoUploading) }
+            if existing == nil {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button { showingDrafts = true } label: { Label(draftCount > 0 ? "草稿箱 (\(draftCount))" : "草稿箱", systemImage: "tray.full") }
+                        .disabled(model.saving || photoUploading).accessibilityIdentifier("draft-box-button")
+                }
+            }
+        }
+        .interactiveDismissDisabled(existing == nil && !preview && faultFormHasContent(model.data))
+        .choiceDialog("保存为草稿？", message: "草稿只保存在这台手机上，之后可以在“草稿箱”里继续填写。", isPresented: $leaving, primary: "保存草稿", secondary: "不保存", onPrimary: { keepDraft() }, onSecondary: { dismiss() })
+        .sheet(isPresented: $showingDrafts, onDismiss: { draftCount = DraftStore.shared.drafts(scope: session.draftScope).count }) {
+            NavigationStack {
+                DraftBoxView(dismissOnPick: true) { picked in apply(picked) }
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("完成") { showingDrafts = false } } }
+            }.presentationDetents([.medium, .large])
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             DocumentActions(busy: model.saving, submitting: confirming == true,
@@ -476,7 +510,8 @@ struct OriginalFaultForm: View {
         .task {
             guard !model.ready else { return }
             if preview { model.loading = false; model.ready = true; model.data = ["faultTime": .string("2026-10-16 09:30"), "albums": .array([]), "applyUser": PreviewIdentity.user, "applyDept": PreviewIdentity.department, "userPhone": .string("13800000000")] }
-            else { await model.load(session, existing: existing) }
+            else { await model.load(session, existing: existing); if let draft, existing == nil, model.ready { apply(draft) } }
+            draftCount = DraftStore.shared.drafts(scope: session.draftScope).count
         }
         .keyboardManaged()
         .confirmDialog(confirming == true ? "提交报修单到原系统？" : "保存报修单到原系统？", isPresented: $showConfirmation, confirmTitle: confirming == true ? "提交" : "保存") { Task { await save() } }
@@ -495,6 +530,8 @@ struct OriginalFaultForm: View {
             var payload = model.payload(committed: confirming == true)
             if existing != nil { payload["taskInfo"] = .null }
             _ = try await session.request(path, body: .object(payload))
+            // The report is on the server now: the draft it came from has done its job.
+            if let draftID { DraftStore.shared.remove(id: draftID, scope: session.draftScope) }
             onSaved?(); dismiss()
         } catch { model.error = error.localizedDescription }
     }

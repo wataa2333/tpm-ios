@@ -17,6 +17,9 @@ struct DialogSheet: View {
     var primaryRole: ButtonRole? = nil
     var copyText: String? = nil
     var showsCancel = true
+    /// An optional second choice between the main button and "取消", e.g. "不保存".
+    var secondary: String? = nil
+    var onSecondary: () -> Void = {}
     let onPrimary: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var contentHeight: CGFloat = 280
@@ -39,6 +42,11 @@ struct DialogSheet: View {
                 // Copying is for sending a server or network error to someone; a plain "please choose
                 // an approver" has nothing worth copying.
                 if let copyText, looksLikeServerError(copyText) { CopyButton(text: copyText, title: "复制错误信息").buttonStyle(.glass).controlSize(.large).frame(maxWidth: .infinity) }
+                if let secondary {
+                    Button(role: .destructive) { dismiss(); onSecondary() } label: { Text(secondary).font(.headline).frame(maxWidth: .infinity, minHeight: 28) }
+                        .buttonStyle(.glass).controlSize(.large)
+                        .accessibilityIdentifier("dialog-secondary")
+                }
                 if showsCancel {
                     Button { dismiss() } label: { Text("取消").font(.headline).frame(maxWidth: .infinity, minHeight: 28) }
                         .buttonStyle(.glass).controlSize(.large)
@@ -59,6 +67,13 @@ extension View {
     func confirmDialog(_ title: String, message: String? = nil, isPresented: Binding<Bool>, confirmTitle: String, action: @escaping () -> Void) -> some View {
         sheet(isPresented: isPresented) {
             DialogSheet(title: title, message: message, primary: confirmTitle, onPrimary: action)
+        }
+    }
+
+    /// Asks with two ways forward and "取消" to stay where you are (save the draft / discard it / keep editing).
+    func choiceDialog(_ title: String, message: String? = nil, isPresented: Binding<Bool>, primary: String, secondary: String, onPrimary: @escaping () -> Void, onSecondary: @escaping () -> Void) -> some View {
+        sheet(isPresented: isPresented) {
+            DialogSheet(title: title, message: message, primary: primary, secondary: secondary, onSecondary: onSecondary, onPrimary: onPrimary)
         }
     }
 
@@ -85,8 +100,8 @@ extension View {
     }
 }
 
-/// A text field with its own small footer: a "收起键盘" button while the field is being edited,
-/// and the character count when the field has a limit. Limits count UTF-16 units like the server.
+/// A text field with the character count when the field has a limit. The "收起键盘" button is not here: it sits
+/// in the middle of the bottom action bar (see `bottomBarPadding`). Limits count UTF-16 units like the server.
 struct EntryField: View {
     let placeholder: String
     @Binding var text: String
@@ -94,7 +109,6 @@ struct EntryField: View {
     var axis: Axis = .horizontal
     var lines: ClosedRange<Int>? = nil
     var keyboard: UIKeyboardType = .default
-    @FocusState private var focused: Bool
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Group {
@@ -102,18 +116,8 @@ struct EntryField: View {
                 else { TextField(placeholder, text: $text, axis: axis) }
             }
             .keyboardType(keyboard)
-            .focused($focused)
             .onChange(of: text) { _, value in if let limit { text = limitedText(value, limit: limit) } }
-            HStack {
-                // Always laid out and only faded, so showing it never changes the form's height
-                // while the keyboard is animating in.
-                Button { focused = false } label: { Label("收起键盘", systemImage: "keyboard.chevron.compact.down").font(.footnote) }
-                    .buttonStyle(.bordered).controlSize(.small)
-                    .opacity(focused ? 1 : 0).allowsHitTesting(focused).accessibilityHidden(!focused)
-                    .accessibilityIdentifier("keyboard-dismiss")
-                Spacer()
-                if let limit { Text("\(text.utf16.count)/\(limit) 字符").font(.footnote).foregroundStyle(.secondary) }
-            }
+            if let limit { Text("\(text.utf16.count)/\(limit) 字符").font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing) }
         }
         .fullSeparator()
     }
@@ -161,6 +165,35 @@ extension View {
     /// the buttons then sit as far from the lower screen edge as from the side edges (20pt), which keeps
     /// them concentric with the screen's rounded corners instead of floating above the home indicator.
     func bottomBarPadding() -> some View {
-        padding(.horizontal, 20).padding(.top, 8).padding(.bottom, -14)
+        modifier(BottomBarPadding())
+    }
+}
+
+/// The negative bottom padding only makes sense against the home indicator. With the keyboard up, the
+/// bar's bottom edge is the keyboard's top edge, and pulling it down would hide the buttons' labels
+/// behind the keys, so the padding is normal then. The flag changes once per show/hide, without animation.
+private struct BottomBarPadding: ViewModifier {
+    @State private var keyboardUp = false
+    func body(content: Content) -> some View {
+        content.padding(.horizontal, 20).padding(.top, 8).padding(.bottom, keyboardUp ? 8 : -14)
+            // In the middle between the left and the right action, only while the keyboard is up.
+            .overlay {
+                if keyboardUp {
+                    Button { endEditing() } label: {
+                        Label("收起键盘", systemImage: "keyboard.chevron.compact.down").font(.subheadline.weight(.medium)).lineLimit(1)
+                    }
+                    .buttonStyle(.glass).controlSize(.regular)
+                    .accessibilityIdentifier("keyboard-dismiss")
+                    .transition(.opacity)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                var transaction = Transaction(); transaction.disablesAnimations = true
+                withTransaction(transaction) { keyboardUp = true }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                var transaction = Transaction(); transaction.disablesAnimations = true
+                withTransaction(transaction) { keyboardUp = false }
+            }
     }
 }

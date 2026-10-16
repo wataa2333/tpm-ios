@@ -52,8 +52,8 @@ struct WorkOrderCard<Destination: View>: View {
                     HStack(spacing: 4) {
                         Text(expanded ? "收起详情" : "展开详情").font(.subheadline.weight(.medium))
                         Image(systemName: "chevron.down").font(.caption.weight(.semibold)).rotationEffect(.degrees(expanded ? 180 : 0)).animation(reduceMotion ? nil : .smooth(duration: 0.5), value: expanded)
-                    }.foregroundStyle(theme).frame(minHeight: 24).contentShape(.rect)
-                }.buttonStyle(.borderless)
+                    }.frame(minHeight: 24)
+                }.buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.small)
                     .accessibilityLabel(expanded ? "收起详情" : "展开详情")
                     .accessibilityIdentifier("order-expand-" + reference)
             }
@@ -63,10 +63,9 @@ struct WorkOrderCard<Destination: View>: View {
                         ReadableFact(title: fact.0, value: fact.1)
                     }
                     Button { opening = true } label: {
-                        Label("打开工单", systemImage: "arrow.up.right.square")
-                            .font(.subheadline.weight(.semibold)).foregroundStyle(theme)
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    }.buttonStyle(.borderless)
+                        Label("打开工单", systemImage: "arrow.up.right.square").font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity, minHeight: 32)
+                    }.buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.regular)
                         .accessibilityIdentifier("order-open-" + reference)
                 }
                 .padding(.top, RowMetrics.spacing)

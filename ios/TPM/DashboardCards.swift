@@ -29,7 +29,7 @@ struct DashboardCard: View {
     @ScaledMetric private var wideHeight = 104.0
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top) {
+            HStack(alignment: .center) {
                 if let count {
                     // One line for up to seven digits with their separators: it shrinks instead of wrapping.
                     Text("\(count)").font(.system(size: 30, weight: .bold, design: .rounded)).monospacedDigit()
@@ -37,8 +37,9 @@ struct DashboardCard: View {
                         .foregroundStyle(.primary)
                         .contentTransition(.numericText()).animation(.smooth(duration: 0.55), value: count)
                         .accessibilityIdentifier("dashboard-count-" + title)
-                } else if subtitle.isEmpty {
-                    // Keeps the height steady while the number is still on its way.
+                } else {
+                    // Keeps the row (and so the icon's position) steady while the number is on its way, and
+                    // on cards that show no number at all.
                     Text("0").font(.system(size: 30, weight: .bold, design: .rounded)).hidden()
                 }
                 Spacer(minLength: 8)
@@ -50,21 +51,76 @@ struct DashboardCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: wide ? wideHeight : smallHeight, alignment: .leading)
-        .background {
-            GeometryReader { proxy in
-                ZStack {
-                    Color(uiColor: .secondarySystemGroupedBackground)
-                    LinearGradient(colors: [tint.opacity(0.30), tint.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    DashboardWave(offset: 0.15 + CGFloat(seed % 3) * 0.1, mirrored: seed % 2 == 0).fill(tint.opacity(0.10))
-                    DashboardWave(offset: 0.40, mirrored: seed % 2 == 1).fill(tint.opacity(0.07))
-                    Circle().fill(tint.opacity(0.14)).frame(width: proxy.size.height * 1.1)
-                        .offset(x: proxy.size.width * (seed % 2 == 0 ? 0.42 : 0.30), y: -proxy.size.height * 0.45)
-                }
-            }
-        }
+        .background { DashboardBackground(tint: tint, seed: seed) }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .accessibilityElement(children: .combine)
     }
+}
+
+/// The soft wash of one hue with a few translucent shapes, behind every dashboard card.
+struct DashboardBackground: View {
+    let tint: Color
+    var seed = 0
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color(uiColor: .secondarySystemGroupedBackground)
+                LinearGradient(colors: [tint.opacity(0.30), tint.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                DashboardWave(offset: 0.15 + CGFloat(seed % 3) * 0.1, mirrored: seed % 2 == 0).fill(tint.opacity(0.10))
+                DashboardWave(offset: 0.40, mirrored: seed % 2 == 1).fill(tint.opacity(0.07))
+                Circle().fill(tint.opacity(0.14)).frame(width: proxy.size.height * 1.1)
+                    .offset(x: proxy.size.width * (seed % 2 == 0 ? 0.42 : 0.30), y: -proxy.size.height * 0.45)
+            }
+        }
+    }
+}
+
+/// A wide card with a text box and a "查询" button, for looking orders up by a part of what is written
+/// on them. Pressing the keyboard's search key does the same as the button.
+struct QuickQueryCard: View {
+    let title: String
+    let symbol: String
+    let tint: Color
+    let placeholder: String
+    var seed = 0
+    let search: (String) -> Void
+    @State private var text = ""
+    @FocusState private var focused: Bool
+    private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private func go() { guard !trimmed.isEmpty else { return }; focused = false; search(trimmed) }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center) {
+                Text(title).font(.headline).foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Image(systemName: symbol).font(.title2.weight(.semibold)).foregroundStyle(tint)
+            }
+            HStack(spacing: 10) {
+                TextField(placeholder, text: $text)
+                    .focused($focused)
+                    .textInputAutocapitalization(.characters).autocorrectionDisabled()
+                    .submitLabel(.search).onSubmit(go)
+                    .padding(.horizontal, 14).padding(.vertical, 11)
+                    .background(.background.opacity(0.75), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .accessibilityLabel(title)
+                Button("查询", action: go)
+                    .buttonStyle(.glassProminent).controlSize(.large)
+                    .disabled(trimmed.isEmpty)
+                    .accessibilityIdentifier("quick-query-" + title)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background { DashboardBackground(tint: tint, seed: seed) }
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+}
+
+/// Where a quick query goes: the order list opened with the search already filled in.
+struct QuickQuery: Identifiable, Hashable {
+    let id = UUID()
+    let field: FaultSearchField
+    let text: String
 }
 
 private struct DashboardWave: Shape {
@@ -120,7 +176,10 @@ struct DashboardHome: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
-                if (loadingCounts || gate.busy) && !pulling && !pulledDown { ProgressView().frame(maxWidth: .infinity).transition(.opacity) }
+                // Always takes its 20pt, only fading in and out: showing it must never move the page, or pulling
+                // the page down (which hides it) and the move that follows would keep triggering each other.
+                ProgressView().frame(maxWidth: .infinity, minHeight: 20)
+                    .opacity((loadingCounts || gate.busy) && !pulling && !pulledDown ? 1 : 0)
                 DashboardHeading(title: "维修工单")
                 NavigationLink {
                     if preview { FaultListView(initialState: .received) } else { LiveWorkflowList(kind: .fault, initialState: "") }
@@ -189,22 +248,12 @@ struct DashboardWorkspace: View {
     @EnvironmentObject private var store: DemoStore
     /// Server totals per card: "assets", "outbound" or "stock".
     @State private var counts: [String: Int] = [:]
-    /// People with orders waiting for their sign-in or being repaired, A to Z by pinyin.
-    @State private var workers: [WorkerLoad] = []
-    @State private var workerStatus: WorkerStatus = .idle
     @StateObject private var gate = ReloadGate()
     @State private var loadingCounts = false
     @State private var pulling = false
     @State private var pulledDown = false
+    @State private var route: QuickQuery?
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
-    private var workerLetters: [(letter: String, people: [WorkerLoad])] {
-        var groups: [(letter: String, people: [WorkerLoad])] = []
-        for worker in workers {
-            if let last = groups.last, last.letter == worker.initial { groups[groups.count - 1].people.append(worker) }
-            else { groups.append((worker.initial, [worker])) }
-        }
-        return groups
-    }
     private func count(_ key: String) -> Int? {
         guard preview else { return counts[key] }
         switch key {
@@ -216,7 +265,10 @@ struct DashboardWorkspace: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
-                if (loadingCounts || gate.busy) && !pulling && !pulledDown { ProgressView().frame(maxWidth: .infinity).transition(.opacity) }
+                // Always takes its 20pt, only fading in and out: showing it must never move the page, or pulling
+                // the page down (which hides it) and the move that follows would keep triggering each other.
+                ProgressView().frame(maxWidth: .infinity, minHeight: 20)
+                    .opacity((loadingCounts || gate.busy) && !pulling && !pulledDown ? 1 : 0)
                 DashboardHeading(title: "资产")
                 NavigationLink {
                     if preview { AssetListView() } else { LiveCatalogView(source: .assets) }
@@ -230,25 +282,18 @@ struct DashboardWorkspace: View {
                         if preview { StockListView() } else { LiveCatalogView(source: .materials) }
                     } label: { DashboardCard(title: "ERP 库存", symbol: "square.stack.3d.up", tint: .teal, count: count("stock"), seed: 3) }
                 }
-                if workerStatus != .idle {
-                    WorkerSectionHeader(status: workerStatus)
-                    if workers.isEmpty, case .done = workerStatus { CompactEmptyState(title: "暂无处理中的工单") }
-                    ForEach(workerLetters, id: \.letter) { group in
-                        LetterHeading(letter: group.letter)
-                        LazyVGrid(columns: columns, spacing: 12) {
-                            ForEach(group.people) { person in
-                                NavigationLink { WorkerOrdersView(worker: person) } label: {
-                                    DashboardCard(title: person.name, symbol: "person.fill", tint: .indigo, count: person.count,
-                                                  subtitle: "待签到 \(person.signed.count) · 待完成 \(person.working.count)", seed: person.name.unicodeScalars.reduce(0) { $0 + Int($1.value) } % 9)
-                                }
-                            }
-                        }
-                    }
-                }
+                DashboardHeading(title: "快速查询维修")
+                QuickQueryCard(title: "按机台号查询", symbol: "gearshape.2", tint: .purple, placeholder: "输入机台号", seed: 4) { route = QuickQuery(field: .machine, text: $0) }
+                QuickQueryCard(title: "按资产编码查询", symbol: "barcode", tint: .mint, placeholder: "输入编码的尾号或中间一段", seed: 5) { route = QuickQuery(field: .assetCode, text: $0) }
                 if preview { DemoNotice() }
             }
             .buttonStyle(DashboardPressStyle())
             .padding(.horizontal, 16).padding(.vertical, 8)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .navigationDestination(item: $route) { query in
+            if preview { FaultListView(initialState: .received) }
+            else { LiveWorkflowList(kind: .fault, initialState: "", initialQuery: query.text, initialField: query.field, title: query.field == .machine ? "机台号 " + query.text : "资产编码 " + query.text) }
         }
         .reportsPulledDown($pulledDown)
         .background(Color(uiColor: .systemGroupedBackground))
@@ -285,24 +330,6 @@ struct DashboardWorkspace: View {
                 if let value { counts[key] = value }
             }
         }
-        // People in progress: the orders of the two states, grouped by executor. The first time they
-        // appear page by page; on a refresh the old people stay until the new list is complete, so the
-        // numbers do not shrink and grow again.
-        let reader = WorkerOrderReader()
-        let firstLoad = workers.isEmpty
-        workerStatus = .reading(0)
-        do {
-            let people = try await reader.read(session: api, progress: { found, read in
-                if firstLoad { workers = found }
-                workerStatus = .reading(read)
-            })
-            guard !Task.isCancelled else { workerStatus = .idle; return }
-            workers = people
-            workerStatus = .done(Date(), orders: people.reduce(0) { $0 + $1.count }, people: people.count)
-        } catch {
-            // A failed read keeps whatever is already shown, and says so.
-            workerStatus = Task.isCancelled ? .idle : .failed
-        }
-        if counts.isEmpty && workers.isEmpty { gate.markIncomplete("main") }
+        if counts.isEmpty { gate.markIncomplete("main") }
     }
 }

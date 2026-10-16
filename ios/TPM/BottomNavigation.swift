@@ -17,5 +17,7 @@ final class BottomNavigationModel: ObservableObject {
     @Published var pendingListRefresh = false
     /// Preview-only: orders advanced while their detail is open, applied when the list reappears.
     @Published var pendingAdvance: [String: FaultState] = [:]
+    /// Open todo tasks of the signed-in account: shown as the badge on the "我的待办" tab.
+    @Published var todoCount = 0
 }
 
