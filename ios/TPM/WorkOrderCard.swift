@@ -43,6 +43,7 @@ struct WorkOrderCard<Destination: View>: View {
             ForEach(Array(summaryFacts.enumerated()), id: \.offset) { _, fact in
                 WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(.subheadline).foregroundStyle(.secondary) }
             }
+            VStack(spacing: 0) {
             HStack(spacing: 12) {
                 Text(time).font(.subheadline).foregroundStyle(.secondary)
                     .accessibilityIdentifier("order-time-" + reference)
@@ -56,21 +57,19 @@ struct WorkOrderCard<Destination: View>: View {
                     .accessibilityLabel(expanded ? "收起详情" : "展开详情")
                     .accessibilityIdentifier("order-expand-" + reference)
             }
-            if expanded {
+            ExpandableBox(expanded: expanded) {
                 VStack(spacing: 10) {
                     ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
                         ReadableFact(title: fact.0, value: fact.1)
                     }
-                }
-                .accessibilityElement(children: .contain)
-                .transition(.opacity)
-                Button { opening = true } label: {
-                    Label("打开工单", systemImage: "arrow.up.right.square")
-                        .font(.subheadline.weight(.semibold)).foregroundStyle(theme)
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                }.buttonStyle(.borderless)
-                    .accessibilityIdentifier("order-open-" + reference)
-                    .transition(.opacity)
+                    Button { opening = true } label: {
+                        Label("打开工单", systemImage: "arrow.up.right.square")
+                            .font(.subheadline.weight(.semibold)).foregroundStyle(theme)
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    }.buttonStyle(.borderless)
+                        .accessibilityIdentifier("order-open-" + reference)
+                }.padding(.top, RowMetrics.spacing)
+            }
             }
         }
         .uniformRow()
@@ -78,6 +77,25 @@ struct WorkOrderCard<Destination: View>: View {
             destination().environment(\.closeWorkOrder, { opening = false })
                 .modifier(DetailTabVisibility())
         }
+    }
+}
+
+/// Content that opens and closes by growing and shrinking its own height. The content is always laid
+/// out at its natural height inside a clipped box whose height is animated, so what is above it never
+/// moves, and the new lines are revealed from the top down. Collapsed, it is hidden from accessibility.
+struct ExpandableBox<Content: View>: View {
+    let expanded: Bool
+    @ViewBuilder let content: () -> Content
+    @State private var height: CGFloat = 0
+    var body: some View {
+        content()
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+            .frame(height: expanded ? height : 0, alignment: .top)
+            .clipped()
+            .opacity(expanded ? 1 : 0)
+            .accessibilityHidden(!expanded)
+            .allowsHitTesting(expanded)
     }
 }
 

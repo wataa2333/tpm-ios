@@ -19,33 +19,35 @@ struct NativeTabShell<Home: View, Todo: View, Workspace: View, Mine: View>: View
     private static var newTab: Int { 4 }
     private var newTitle: String { navigation.newDocument == .erp ? "新建领料单" : "新建报修" }
 
-    /// Choosing the "new" tab never changes the selection: it only opens the form. The selected tab
-    /// stays where it was, so the tab bar does not flip to the new tab and back.
-    private var tabSelection: Binding<Int> {
-        Binding(get: { selection }, set: { value in
-            if value == Self.newTab {
-                navigation.searchReset = UUID()
-                navigation.presentingDocument = true
-                creating = navigation.newDocument ?? .fault
-            } else {
-                selection = value
-                navigation.searchReset = UUID()
-                navigation.hideTabs = false
-            }
-        })
-    }
+    /// The tab that was selected before the form was opened; it is selected again when the form closes.
+    @State private var returnTab = 0
 
     var body: some View {
-        TabView(selection: tabSelection) {
+        TabView(selection: $selection) {
             Tab("主页", systemImage: "house", value: 0) { home() }
             Tab("我的待办", systemImage: "checklist", value: 2) { todo() }
             Tab("工作台", systemImage: "square.grid.2x2", value: 1) { workspace() }
             Tab("我的", systemImage: "person.crop.circle", value: 3) { mine() }
-            Tab(newTitle, systemImage: "square.and.pencil", value: Self.newTab, role: .search) { Color.clear }
+            // Choosing it really selects it, so the tab bar's glass bubble moves there once, like for any
+            // tab, and stays while the form is open; closing the form moves it back in one animation.
+            Tab(newTitle, systemImage: "square.and.pencil", value: Self.newTab, role: .search) {
+                Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+            }
+        }
+        .onChange(of: selection) { old, new in
+            navigation.searchReset = UUID()
+            if new == Self.newTab {
+                returnTab = old == Self.newTab ? returnTab : old
+                navigation.presentingDocument = true
+                creating = navigation.newDocument ?? .fault
+            } else {
+                navigation.hideTabs = false
+            }
         }
         .sheet(item: $creating, onDismiss: {
             navigation.presentingDocument = false
             navigation.refresh = UUID()
+            selection = returnTab
         }) { kind in
             NavigationStack {
                 if kind == .fault { OriginalFaultForm(preview: preview) }
