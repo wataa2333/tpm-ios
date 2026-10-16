@@ -34,12 +34,6 @@ struct WorkOrderCard<Destination: View>: View {
                     ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
                         ReadableFact(title: fact.0, value: fact.1)
                     }
-                    Button { opening = true } label: {
-                        Label("打开工单", systemImage: "arrow.up.right.square")
-                            .font(.subheadline.weight(.semibold)).foregroundStyle(emphasis)
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    }.buttonStyle(.borderless)
-                        .accessibilityIdentifier("order-open-" + reference)
                 }.padding(.top, 4)
                     .accessibilityElement(children: .contain)
             } label: {
@@ -52,6 +46,15 @@ struct WorkOrderCard<Destination: View>: View {
                 }.frame(minHeight: 32)
             }
             .tint(emphasis)
+            if expanded {
+                Button { opening = true } label: {
+                    Label("打开工单", systemImage: "arrow.up.right.square")
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(emphasis)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }.buttonStyle(.borderless)
+                    .accessibilityIdentifier("order-open-" + reference)
+                    .transition(.opacity)
+            }
         }.buttonStyle(.plain).padding(.vertical, 2)
             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
             .navigationDestination(isPresented: $opening) {

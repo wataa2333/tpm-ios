@@ -324,9 +324,13 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(open.isHittable)
         XCTAssertLessThan(open.frame.maxY, bar.frame.minY)
         open.tap()
-        XCTAssertTrue(app.navigationBars["报修详情"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars["报修详情"].waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertEqual(app.searchFields.count, 0)
         assertTabBarHidden(app)
+        app.navigationBars.buttons.firstMatch.tap()
+        let listReturned = expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: app.navigationBars["故障报修"])
+        wait(for: [listReturned], timeout: 10)
+        XCTAssertFalse(app.navigationBars["报修详情"].isHittable, "打开工单后只需返回一次")
     }
 
     func testSearchDoesNotFollowNewSheetAndNativeDateControlsFit() {
