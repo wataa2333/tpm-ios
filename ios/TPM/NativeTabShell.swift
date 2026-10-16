@@ -1,12 +1,7 @@
 import SwiftUI
 
 /// Keep the system tab bar responsible for glass rendering, hit testing, selection tracking and
-/// device safe areas.
-///
-/// The "new" action is the system's detached circular tab (`role: .search`): the standalone round
-/// icon the system draws at the trailing end of the tab bar, on the same row as the tabs. It is not
-/// a page. Choosing it restores the previous tab at once and opens the new-document sheet, so it
-/// hides and shows together with the tab bar.
+/// device safe areas. It has the four real tabs only: "new" is not a tab.
 struct NativeTabShell<Home: View, Todo: View, Workspace: View, Mine: View>: View {
     @Binding var selection: Int
     var preview = false
@@ -15,44 +10,66 @@ struct NativeTabShell<Home: View, Todo: View, Workspace: View, Mine: View>: View
     @ViewBuilder let workspace: () -> Workspace
     @ViewBuilder let mine: () -> Mine
     @EnvironmentObject private var navigation: BottomNavigationModel
-    @State private var creating: WorkflowKind?
-    private static var newTab: Int { 4 }
-    private var newTitle: String { navigation.newDocument == .erp ? "新建领料单" : "新建报修" }
-
-    /// The tab that was selected before the form was opened; it is selected again when the form closes.
-    @State private var returnTab = 0
 
     var body: some View {
         TabView(selection: $selection) {
-            Tab("主页", systemImage: "house", value: 0) { home() }
-            Tab("我的待办", systemImage: "checklist", value: 2) { todo() }
-            Tab("工作台", systemImage: "square.grid.2x2", value: 1) { workspace() }
-            Tab("我的", systemImage: "person.crop.circle", value: 3) { mine() }
-            // Choosing it really selects it, so the tab bar's glass bubble moves there once, like for any
-            // tab, and stays while the form is open; closing the form moves it back in one animation.
-            Tab(newTitle, systemImage: "square.and.pencil", value: Self.newTab, role: .search) {
-                Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
-            }
+            Tab("主页", systemImage: "house", value: 0) { home().newDocumentButton(preview: preview) }
+            Tab("我的待办", systemImage: "checklist", value: 2) { todo().newDocumentButton(preview: preview) }
+            Tab("工作台", systemImage: "square.grid.2x2", value: 1) { workspace().newDocumentButton(preview: preview) }
+            Tab("我的", systemImage: "person.crop.circle", value: 3) { mine().newDocumentButton(preview: preview) }
         }
-        .onChange(of: selection) { old, new in
+        .onChange(of: selection) {
             navigation.searchReset = UUID()
-            if new == Self.newTab {
-                returnTab = old == Self.newTab ? returnTab : old
-                navigation.presentingDocument = true
-                creating = navigation.newDocument ?? .fault
-            } else {
-                navigation.hideTabs = false
+            navigation.hideTabs = false
+        }
+    }
+}
+
+/// The "new" button, built the way the system Reminders app builds its "+": one round, blue,
+/// prominent glass button floating at the bottom-right corner, apart from everything else. It sits
+/// in the bottom safe area, so it stays above the tab bar, and it goes away with the tab bar on
+/// detail pages. The form opens as the normal sheet, so dragging it down shows the page you came from.
+struct NewDocumentButton: ViewModifier {
+    var preview = false
+    @EnvironmentObject private var navigation: BottomNavigationModel
+    @State private var creating: WorkflowKind?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private var kind: WorkflowKind { navigation.newDocument ?? .fault }
+
+    func body(content: Content) -> some View {
+        content
+            .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 0) {
+                Group {
+                    if !navigation.hideTabs {
+                        Button {
+                            navigation.searchReset = UUID()
+                            navigation.presentingDocument = true
+                            creating = kind
+                        } label: {
+                            Image(systemName: "plus").font(.title2.weight(.semibold)).frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.glassProminent).buttonBorderShape(.circle)
+                        .accessibilityLabel(kind == .erp ? "新建领料单" : "新建报修")
+                        .padding(.trailing, 20).padding(.bottom, 8)
+                        .transition(.opacity)
+                    }
+                }
+                .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.4), value: navigation.hideTabs)
             }
-        }
-        .sheet(item: $creating, onDismiss: {
-            navigation.presentingDocument = false
-            navigation.refresh = UUID()
-            selection = returnTab
-        }) { kind in
-            NavigationStack {
-                if kind == .fault { OriginalFaultForm(preview: preview) }
-                else { OriginalERPForm(preview: preview) }
-            }.presentationDragIndicator(.visible)
-        }
+            .sheet(item: $creating, onDismiss: {
+                navigation.presentingDocument = false
+                navigation.refresh = UUID()
+            }) { kind in
+                NavigationStack {
+                    if kind == .fault { OriginalFaultForm(preview: preview) }
+                    else { OriginalERPForm(preview: preview) }
+                }.presentationDragIndicator(.visible)
+            }
+    }
+}
+
+extension View {
+    func newDocumentButton(preview: Bool = false) -> some View {
+        modifier(NewDocumentButton(preview: preview))
     }
 }

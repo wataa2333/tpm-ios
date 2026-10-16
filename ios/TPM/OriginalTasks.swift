@@ -38,8 +38,8 @@ struct OriginalRepairForm: View {
                 Button { choosingAssistants = true } label: { LabeledContent("辅助维修人", value: (data["repairUsers"]?.array ?? []).map { $0["realName"].text }.joined(separator: "、")) }
             } header: { RequiredFormHeader(title: "维修任务信息") }
             Section("ERP 出库") {
-                Button("新建出库单", systemImage: "plus") { creatingERP = true }
-                Button("添加出库物料", systemImage: "shippingbox") { choosing = true }.disabled(preview)
+                Button("新建出库单", systemImage: "plus") { creatingERP = true }.fullSeparator()
+                Button("添加出库物料", systemImage: "shippingbox") { choosing = true }.disabled(preview).fullSeparator()
                 ForEach(Array((data["erpRepairMaterials"]?.array ?? []).enumerated()), id: \.offset) { index, row in
                     DisclosureGroup {
                         LabeledContent("出库单号", value: row["outbound"]["outNumber"].text)

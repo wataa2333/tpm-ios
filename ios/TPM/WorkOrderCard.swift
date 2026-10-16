@@ -48,10 +48,10 @@ struct WorkOrderCard<Destination: View>: View {
                 Text(time).font(.subheadline).foregroundStyle(.secondary)
                     .accessibilityIdentifier("order-time-" + reference)
                 Spacer(minLength: 0)
-                Button { withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { expanded.toggle() } } label: {
+                Button { expanded.toggle() } label: {
                     HStack(spacing: 4) {
                         Text(expanded ? "收起详情" : "展开详情").font(.subheadline.weight(.medium))
-                        Image(systemName: "chevron.down").font(.caption.weight(.semibold)).rotationEffect(.degrees(expanded ? 180 : 0))
+                        Image(systemName: "chevron.down").font(.caption.weight(.semibold)).rotationEffect(.degrees(expanded ? 180 : 0)).animation(reduceMotion ? nil : .smooth(duration: 0.5), value: expanded)
                     }.foregroundStyle(theme).frame(minHeight: 24).contentShape(.rect)
                 }.buttonStyle(.borderless)
                     .accessibilityLabel(expanded ? "收起详情" : "展开详情")
@@ -72,7 +72,8 @@ struct WorkOrderCard<Destination: View>: View {
             }
             }
         }
-        .uniformRow()
+        .padding(RowMetrics.insets)
+        .listRowInsets(EdgeInsets())
         .navigationDestination(isPresented: $opening) {
             destination().environment(\.closeWorkOrder, { opening = false })
                 .modifier(DetailTabVisibility())
@@ -86,16 +87,37 @@ struct WorkOrderCard<Destination: View>: View {
 struct ExpandableBox<Content: View>: View {
     let expanded: Bool
     @ViewBuilder let content: () -> Content
+    /// The content is built only while the box is open or closing. A card that has never been opened
+    /// costs one empty box, however many cards the list holds.
+    @State private var mounted = false
+    @State private var revealed = false
     @State private var height: CGFloat = 0
     var body: some View {
-        content()
-            .fixedSize(horizontal: false, vertical: true)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
-            .frame(height: expanded ? height : 0, alignment: .top)
-            .clipped()
-            .opacity(expanded ? 1 : 0)
-            .accessibilityHidden(!expanded)
-            .allowsHitTesting(expanded)
+        Group {
+            if mounted {
+                content()
+                    .fixedSize(horizontal: false, vertical: true)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+            }
+        }
+        .frame(height: revealed ? height : 0, alignment: .top)
+        .clipped()
+        .opacity(revealed ? 1 : 0)
+        .accessibilityHidden(!expanded)
+        .allowsHitTesting(expanded)
+        .task(id: expanded) {
+            if expanded {
+                // Built first at no height so it can be measured, then opened by animation.
+                mounted = true
+                try? await Task.sleep(for: .milliseconds(60))
+                if Task.isCancelled { return }
+                withAnimation(.smooth(duration: 0.5)) { revealed = true }
+            } else if mounted {
+                withAnimation(.smooth(duration: 0.5)) { revealed = false }
+                try? await Task.sleep(for: .milliseconds(560))
+                if !Task.isCancelled { mounted = false }
+            }
+        }
     }
 }
 

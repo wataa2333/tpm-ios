@@ -7,6 +7,11 @@ import SwiftUI
 final class ReloadGate: ObservableObject {
     /// Changes on every manual refresh; pages put it into their task id and scroll trigger.
     @Published private(set) var token = UUID()
+    /// True while a load runs and for at least `minimumBusy` after it started, so a load that finishes
+    /// in a blink still shows its loading animation for a calm, readable moment instead of flashing.
+    @Published private(set) var busy = false
+    static let minimumBusy: Duration = .milliseconds(600)
+    private var running = 0
     private var loaded: [String: String] = [:]
     private var manualPending = false
 
@@ -17,19 +22,32 @@ final class ReloadGate: ObservableObject {
     }
 
     /// Runs `load` unless this exact request was already loaded. After a manual refresh the main
-    /// load waits a moment so the list can finish scrolling to the top and the loading row can
-    /// open there. A load that was interrupted (the page was left mid-load) is not remembered, so
-    /// it runs again on return: that is finishing the load, not refreshing it.
-    func run(_ slot: String = "main", key: String, load: () async -> Void) async {
+    /// load waits for the list to finish scrolling to the top so the loading row can open there. A
+    /// load that was interrupted (the page was left mid-load) is not remembered, so it runs again on
+    /// return: that is finishing the load, not refreshing it.
+    func run(_ slot: String = "main", key: String, debounce: Duration? = nil, load: () async -> Void) async {
         let full = key + "|" + token.uuidString
         guard loaded[slot] != full else { return }
-        if slot == "main" && manualPending {
-            manualPending = false
-            try? await Task.sleep(for: .milliseconds(300))
+        // Typing in a search box changes the key on every letter: wait until the typing pauses.
+        if let debounce {
+            try? await Task.sleep(for: debounce)
             if Task.isCancelled { return }
         }
+        if slot == "main" && manualPending {
+            manualPending = false
+            try? await Task.sleep(for: .milliseconds(450))
+            if Task.isCancelled { return }
+        }
+        let started = ContinuousClock.now
+        running += 1; busy = true
         await load()
-        if !Task.isCancelled { loaded[slot] = full }
+        if !Task.isCancelled {
+            loaded[slot] = full
+            let remaining = Self.minimumBusy - (ContinuousClock.now - started)
+            if remaining > .zero { try? await Task.sleep(for: remaining) }
+        }
+        running -= 1
+        if running == 0 { busy = false }
     }
 
     /// Task id for `.task(id:)`: changes with the page's own key and with each manual refresh.

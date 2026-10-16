@@ -434,7 +434,7 @@ struct OriginalFaultForm: View {
                 VStack(alignment: .leading, spacing: 8) {
                     RequiredLabel(title: "报修名称")
                     EntryField(placeholder: "请输入报修名称", text: text("faultName"), limit: 64)
-                }
+                }.fullSeparator()
                 ReferenceField(title: "报修资产", source: .assets, value: field("asset"), required: true)
                 ServerDateField(title: "故障时间", value: field("faultTime"), required: true)
             } header: { RequiredFormHeader(title: "故障报修") }
@@ -450,7 +450,7 @@ struct OriginalFaultForm: View {
                 if !(model.data["dept"]?.object.isEmpty ?? true) && (model.data["user"]?.object.isEmpty ?? true) {
                     Text("该部门未设置默认受理人，请手动选择维修受理人").font(.footnote).foregroundStyle(.secondary)
                 }
-                VStack(alignment: .leading, spacing: 8) { RequiredLabel(title: "报修人联系电话"); EntryField(placeholder: "请输入联系电话", text: text("userPhone"), limit: 32, keyboard: .phonePad) }
+                VStack(alignment: .leading, spacing: 8) { RequiredLabel(title: "报修人联系电话"); EntryField(placeholder: "请输入联系电话", text: text("userPhone"), limit: 32, keyboard: .phonePad) }.fullSeparator()
                 ReferenceField(title: "维修班组", source: .groups, value: field("userGroup"), required: true)
                 ReferenceField(title: "ERP记账部门", source: .divisions, value: field("division"), required: true)
             }
@@ -572,7 +572,7 @@ struct OriginalERPForm: View {
                 ServerDateField(title: "出库时间", value: field("outboundTime"), required: true)
             } header: { RequiredFormHeader(title: "领料申请") }
             Section {
-                Button("添加出库物料", systemImage: "plus") { selecting = true }.disabled(preview)
+                Button("添加出库物料", systemImage: "plus") { selecting = true }.disabled(preview).fullSeparator()
                 ForEach(Array((model.data["erpMaterialOutbounds"]?.array ?? []).enumerated()), id: \.offset) { index, line in
                     DisclosureGroup {
                         MaterialFacts(material: line["material"])
@@ -653,7 +653,7 @@ struct DocumentActions: View {
             BottomAction(title: submitTitle, symbol: "checkmark.circle", color: .blue, busy: busy && submitting, action: submit)
         }
         .disabled(busy || disabled)
-        .padding(.horizontal, 20).padding(.vertical, 8)
+        .bottomBarPadding()
     }
 }
 

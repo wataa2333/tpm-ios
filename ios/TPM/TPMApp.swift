@@ -200,25 +200,16 @@ struct FaultListView: View {
         }
     }
     var body: some View {
-        List {
-            Section {
-                WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex(of: state)! }, set: { state = FaultState.allCases[$0] }), counts: Dictionary(uniqueKeysWithValues: FaultState.allCases.map { stage in
-                    (stage.code, store.faults.filter { $0.state == stage }.count)
-                }))
+        CardPage {
+            WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex(of: state)! }, set: { state = FaultState.allCases[$0] }), counts: Dictionary(uniqueKeysWithValues: FaultState.allCases.map { stage in
+                (stage.code, store.faults.filter { $0.state == stage }.count)
+            }))
+            if searching {
+                CardGroup { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }.padding(.horizontal, 16).padding(.vertical, 6) }
             }
-            if searching { Section {
-                Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }
-            } }
-            Section {
-                ForEach(rows) { fault in
-                    FaultRow(fault: fault)
-                        .navigationLinkIndicatorVisibility(.hidden)
-                        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
-                        .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
-                }
+            CardGroup {
+                ForEach(rows) { fault in FaultRow(fault: fault) }
                 if rows.isEmpty { CompactEmptyState() }
-            } header: {
-                HStack { Text(state.rawValue); Spacer(); Text("\(rows.count) 单").monospacedDigit() }
             }
         }
         .navigationTitle("故障报修").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
@@ -321,7 +312,7 @@ struct FaultDetailView: View {
                         if fault.state != .finished {
                             BottomAction(title: fault.state.actionTitle, symbol: fault.state.symbol) { processing = true }
                         }
-                    }.padding(.horizontal, 20).padding(.vertical, 8)
+                    }.bottomBarPadding()
                 }
                 .sheet(isPresented: $processing, onDismiss: taskSheetClosed) {
                     NavigationStack {
@@ -442,7 +433,7 @@ struct OrderDetailView: View {
         }
         .navigationTitle("工单详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility())
-        .safeAreaInset(edge: .bottom) { HStack { Spacer(); BottomAction(title: claimed ? "已抢单" : "抢单", symbol: "hand.raised") { confirming = true }.disabled(claimed) }.padding(.horizontal, 20).padding(.vertical, 8) }
+        .safeAreaInset(edge: .bottom) { HStack { Spacer(); BottomAction(title: claimed ? "已抢单" : "抢单", symbol: "hand.raised") { confirming = true }.disabled(claimed) }.bottomBarPadding() }
         .confirmationDialog("领取这张模拟工单？", isPresented: $confirming, titleVisibility: .visible) { Button("领取模拟工单") { store.claimedOrders.insert(kind + asset.id) } }
     }
 }
@@ -546,7 +537,7 @@ struct OutboundDetailView: View {
             .navigationTitle("出库详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
             .modifier(DetailTabVisibility())
             .safeAreaInset(edge: .bottom) {
-                if !item.completed { HStack { Spacer(); BottomAction(title: "确认出库", symbol: "checkmark.circle") { confirming = true } }.padding(.horizontal, 20).padding(.vertical, 8) }
+                if !item.completed { HStack { Spacer(); BottomAction(title: "确认出库", symbol: "checkmark.circle") { confirming = true } }.bottomBarPadding() }
             }
             .confirmationDialog("确认本地模拟出库？", isPresented: $confirming, titleVisibility: .visible) {
                 Button("确认模拟出库") { if let i = store.outbounds.firstIndex(where: { $0.id == id }) { store.outbounds[i].completed = true } }
@@ -564,7 +555,7 @@ struct ProfileView: View {
             Section { Text("账号、工厂和业务权限将在对接原服务器后显示。").foregroundStyle(.secondary) }
         }
         .navigationTitle("我的").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
-        .rootTopBar(preview: true)
+        .rootTopBar(preview: true, busy: false)
     }
 }
 

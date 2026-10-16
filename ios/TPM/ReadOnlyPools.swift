@@ -29,46 +29,46 @@ struct ReadOnlyPoolView: View {
     @State private var total: Int?
     @State private var error: String?
     var body: some View {
-        List {
-            Section { LoadingRow(isPresented: loading && !refreshing, title: "正在加载工单") }
+        CardPage {
+            LoadingRow(isPresented: (loading || gate.busy) && !refreshing, title: "正在加载工单")
             if searching {
-                Section {
+                CardGroup {
                     Picker("搜索分类", selection: $byAsset) {
                         Text("工单名称").tag(false)
                         Text("资产编码").tag(true)
-                    }
+                    }.padding(.horizontal, 16).padding(.vertical, 6)
                 }
             }
-            Section {
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                WorkOrderCard(title: row[kind.nameKey].text, status: "待接单", color: kind.color,
-                    reference: row["asset"]["assetCode"].text,
-                    time: readableDate(row["planStartDate"]), facts: facts(row)) {
-                    List {
-                        Section("工单信息") {
-                            LabeledContent("工单名称", value: row[kind.nameKey].text)
-                            LabeledContent("状态", value: "待接单")
-                            ForEach(Array(facts(row).enumerated()), id: \.offset) { _, fact in
-                                LabeledContent(fact.0, value: fact.1)
+            CardGroup {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    WorkOrderCard(title: row[kind.nameKey].text, status: "待接单", color: kind.color,
+                        reference: row["asset"]["assetCode"].text,
+                        time: readableDate(row["planStartDate"]), facts: facts(row)) {
+                        List {
+                            Section("工单信息") {
+                                LabeledContent("工单名称", value: row[kind.nameKey].text)
+                                LabeledContent("状态", value: "待接单")
+                                ForEach(Array(facts(row).enumerated()), id: \.offset) { _, fact in
+                                    LabeledContent(fact.0, value: fact.1)
+                                }
                             }
                         }
+                        .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
                     }
-                    .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
                 }
-            }
-            if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无待接单工单") }
-            }.opacity(loading && !moreLoading ? 0.4 : 1).animation(.easeInOut(duration: 0.22), value: loading)
-            Section { LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || moreLoading, loaded: rows.count, total: total) { await load(more: true) } }
+                if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无待接单工单") }
+            }.opacity((loading || gate.busy) && !moreLoading ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
+            LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || moreLoading, loaded: rows.count, total: total) { await load(more: true) }
         }
         .searchPageChrome(isSearching: searching)
-        .nativeSearchable(text: $query, isPresented: $searching, prompt: byAsset ? "搜索资产编码" : "搜索工单名称", onSubmit: { Task { await load() } })
+        .nativeSearchable(text: $query, isPresented: $searching, prompt: byAsset ? "搜索资产编码" : "搜索工单名称")
         .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(ListTabVisibility())
         .reloadsToTop(on: gate.id("\(byAsset)-\(query)"))
-        .animation(.snappy(duration: 0.3), value: loading)
-        .refreshButton(busy: loading || moreLoading) { gate.request() }
+        .animation(.smooth(duration: 0.45), value: loading || gate.busy)
+        .refreshButton(busy: loading || moreLoading || gate.busy) { gate.request() }
         .errorDialog($error, retry: { Task { await load() } })
-        .task(id: gate.id("\(byAsset)-\(query)")) { await gate.run(key: "\(byAsset)-\(query)") { await load() } }
+        .task(id: gate.id("\(byAsset)-\(query)")) { await gate.run(key: "\(byAsset)-\(query)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await load() }) }
         .refreshable { refreshing = true; await load(); refreshing = false }
     }
     private func facts(_ row: JSONValue) -> [(String, String)] {

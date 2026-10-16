@@ -240,7 +240,10 @@ final class PreviewTests: XCTestCase {
         XCTAssertLessThan(app.buttons["主页"].firstMatch.frame.minX, app.buttons["我的待办"].firstMatch.frame.minX)
         app.buttons["主页"].firstMatch.tap()
         XCTAssertTrue(app.buttons["新建报修"].exists)
-        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "维修工单池")).firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "所有工单")).firstMatch.waitForExistence(timeout: 10))
+        for title in ["待受理", "待抢单", "待签到", "待完成", "待确认", "已完结"] {
+            XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", title)).firstMatch.exists, title)
+        }
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "精密度检查工单池")).firstMatch.exists)
         app.buttons["工作台"].firstMatch.tap()
         XCTAssertTrue(app.buttons["新建报修"].exists)
@@ -299,13 +302,13 @@ final class PreviewTests: XCTestCase {
         let add = app.buttons["新建报修"]
         XCTAssertTrue(add.waitForExistence(timeout: 20))
         let mine = app.buttons["我的"].firstMatch
-        // The system's detached round tab sits on the same row as the tabs, to the right of "我的".
-        XCTAssertLessThan(abs(add.frame.midY - mine.frame.midY), 24)
-        XCTAssertGreaterThan(add.frame.minX, mine.frame.maxX - 2)
+        // One round button at the bottom-right corner, above the tab bar and not one of its tabs.
+        XCTAssertLessThanOrEqual(add.frame.maxY, mine.frame.minY + 2)
         XCTAssertGreaterThan(add.frame.midX, app.frame.midX)
         XCTAssertTrue(add.isHittable)
         XCTAssertEqual(app.buttons.matching(identifier: "我的").count, 1)
-        // Choosing it opens the form and leaves the previously selected tab selected.
+        XCTAssertEqual(app.tabBars.firstMatch.buttons.count, 4)
+        // It opens the form as a sheet and the page stays where it was.
         add.tap()
         XCTAssertTrue(app.buttons["取消"].waitForExistence(timeout: 10))
         app.buttons["取消"].tap()

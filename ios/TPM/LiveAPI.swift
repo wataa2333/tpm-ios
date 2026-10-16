@@ -107,6 +107,8 @@ final class LiveSession: ObservableObject {
     @Published private(set) var authentication: Fields = [:]
     @Published var signingIn = false
     @Published private(set) var scopeRevision = UUID()
+    /// True while a factory change is in flight; the app dims its content and then fades the new factory in.
+    @Published private(set) var switchingFactory = false
     private let root = URL(string: "http://tpm.forbetter.cn:8855/")!
     private let account = "tpm-session"
     var signedIn: Bool { !authentication.text("token").isEmpty }
@@ -168,6 +170,8 @@ final class LiveSession: ObservableObject {
     func changeFactory(to factoryID: String) async throws {
         guard factories.contains(where: { $0["factoryId"].text == factoryID }) else { throw APIError(message: "请选择账号可访问的厂区") }
         guard factoryID != currentFactoryID else { return }
+        switchingFactory = true
+        defer { switchingFactory = false }
         var components = URLComponents(url: root.appendingPathComponent("rest/security/changeFactory"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "factoryId", value: factoryID)]
         var request = URLRequest(url: components.url!)

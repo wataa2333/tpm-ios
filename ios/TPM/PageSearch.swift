@@ -9,14 +9,18 @@ private struct PageSearch: ViewModifier {
     let prompt: String
     let submit: () -> Void
     @State private var localActive = false
+    @State private var lastSubmitted = ""
     @EnvironmentObject private var navigation: BottomNavigationModel
     func body(content: Content) -> some View {
         let active = presented ?? $localActive
         content
             .searchable(text: $text, isPresented: active, placement: .navigationBarDrawer(displayMode: .always), prompt: prompt)
-            .onSubmit(of: .search) { submit() }
-            // Cancelling clears the text; reload so lists that only refresh on submit follow.
-            .onChange(of: active.wrappedValue) { _, isActive in if !isActive { submit() } }
+            .onSubmit(of: .search) { if text != lastSubmitted { lastSubmitted = text; submit() } }
+            // Closing the search box runs `submit` only if the text differs from what was last submitted.
+            // Pages that load by their query on their own pass nothing, so closing the box reloads nothing.
+            .onChange(of: active.wrappedValue) { _, isActive in
+                if !isActive && text != lastSubmitted { lastSubmitted = text; submit() }
+            }
             .onChange(of: navigation.searchReset) { active.wrappedValue = false }
     }
 }

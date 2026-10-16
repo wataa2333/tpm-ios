@@ -11,12 +11,29 @@ enum WorkflowKind: String, Identifiable {
 
 struct AuthenticatedRoot: View {
     @EnvironmentObject private var session: LiveSession
-    var body: some View { if session.signedIn { LiveTabs().id(session.scopeRevision) } else { NativeLoginView() } }
+    var body: some View {
+        // Switching factory rebuilds the pages for the new factory. They are not cut over: the old ones
+        // dim while the request runs, then fade out as the new ones fade in.
+        ZStack {
+            if session.signedIn {
+                LiveTabs().id(session.scopeRevision)
+                    .transition(.opacity)
+                    .opacity(session.switchingFactory ? 0.35 : 1)
+            } else {
+                NativeLoginView().transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.7), value: session.scopeRevision)
+        .animation(.easeInOut(duration: 0.4), value: session.switchingFactory)
+        .animation(.easeInOut(duration: 0.45), value: session.signedIn)
+    }
 }
+
 struct LiveTabs: View {
     @EnvironmentObject private var navigation: BottomNavigationModel
     @EnvironmentObject private var session: LiveSession
     @State private var selection = 0
+    @State private var refreshingProfile = false
     var body: some View {
         NativeTabShell(selection: $selection) {
             NavigationStack { DashboardHome() }
@@ -31,7 +48,9 @@ struct LiveTabs: View {
                     Section { LabeledContent("当前厂区", value: session.currentFactoryName) }
                     Section { Button("退出登录", role: .destructive) { session.signOut() } }
                 }.navigationTitle("我的").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
-                    .rootTopBar()
+                    .rootTopBar(busy: refreshingProfile) {
+                        Task { refreshingProfile = true; try? await session.refreshFactories(); refreshingProfile = false }
+                    }
             }
         }
     }
@@ -56,44 +75,30 @@ struct LiveWorkflowList: View {
     @StateObject private var gate = ReloadGate()
     init(kind: WorkflowKind, initialState: String = "RECEIVED") { self.kind = kind; _state = State(initialValue: initialState) }
     var body: some View {
-        List {
-            Section {
-                if kind == .fault { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? 2 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
-                LoadingRow(isPresented: loading && !refreshing, title: "正在加载工单")
-            }
-            if kind == .fault && searching { Section { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } } } }
-            Section {
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, item in
-                WorkOrderCard(title: kind == .fault ? item["faultName"].text : erpCardTitle(item),
-                    status: kind == .fault ? faultStateName(item["faultState"].text) : approvalStateName(item["approvalState"].text),
-                    color: kind == .fault ? faultDisplayColor(item["faultState"].text) : approvalDisplayColor(item["approvalState"].text),
-                    reference: kind == .fault ? item["asset"]["assetCode"].text : item["outNumber"].text,
-                    referenceTitle: kind == .fault ? "资产编码" : "出库单号",
-                    time: readableDate(item[kind == .fault ? "faultTime" : "applyDate"]),
-                    summaryFacts: kind == .fault ? [] : [("领用人", item["recipientUser"]["realName"].text), ("领用部门", item["dept"]["deptName"].text)],
-                    facts: kind == .fault ? faultCardFacts(item) : erpCardFacts(item)) {
-                    LiveWorkflowDetail(kind: kind, id: item[kind.idKey].text)
+        CardPage {
+            if kind == .fault { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? -1 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
+            LoadingRow(isPresented: (loading || gate.busy) && !refreshing, title: "正在加载工单")
+            if kind == .fault && searching { CardGroup { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }.padding(.horizontal, 16).padding(.vertical, 6) } }
+            CardGroup {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, item in
+                    LiveOrderRow(kind: kind, item: item).equatable()
                 }
-
-                .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
-                .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
-            }
-            if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无相关单据") }
-            }.opacity(loading && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.22), value: loading)
-            Section { LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await reload(more: true) } }
+                if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无相关单据") }
+            }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
+            LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await reload(more: true) }
         }
         .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(ListTabVisibility())
         .searchPageChrome(isSearching: searching)
-        .nativeSearchable(text: $query, isPresented: $searching, prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号", onSubmit: { Task { await reload() } })
+        .nativeSearchable(text: $query, isPresented: $searching, prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号")
 
         .refreshable { refreshing = true; await reload(); await reloadCounts(); refreshing = false }
         .reloadsToTop(on: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)"))
-        .animation(.snappy(duration: 0.3), value: loading)
-        .refreshButton(busy: loading || loadingMore) { gate.request() }
+        .animation(.smooth(duration: 0.45), value: loading || gate.busy)
+        .refreshButton(busy: loading || loadingMore || gate.busy) { gate.request() }
         .errorDialog($error, retry: { Task { await reload() } })
-        .task(id: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)")) { await gate.run(key: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)") { await reload() } }
-        .task(id: gate.id("counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)")) { await gate.run("counts", key: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)") { await reloadCounts() } }
+        .task(id: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)")) { await gate.run(key: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await reload() }) }
+        .task(id: gate.id("counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)")) { await gate.run("counts", key: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await reloadCounts() }) }
         .onAppear {
             navigation.newDocument = kind; navigation.hideTabs = false
             if navigation.pendingListRefresh { navigation.pendingListRefresh = false; navigation.refresh = UUID() }
@@ -126,7 +131,6 @@ struct LiveWorkflowList: View {
     }
     private func reloadCounts() async {
         guard kind == .fault else { return }
-        stateCounts = [:]
         let searchFilters = query.isEmpty ? [] : [filter(searchField.key, query, "like")]
         let api = session
         await withTaskGroup(of: (String, Int?).self) { group in
@@ -146,6 +150,25 @@ struct LiveWorkflowList: View {
         }
     }
 }
+/// One order card of a workflow list. It compares by value, so the page's loading, search and refresh state
+/// changes do not rebuild the hundreds of cards that did not change.
+struct LiveOrderRow: View, Equatable {
+    let kind: WorkflowKind
+    let item: JSONValue
+    var body: some View {
+        WorkOrderCard(title: kind == .fault ? item["faultName"].text : erpCardTitle(item),
+            status: kind == .fault ? faultStateName(item["faultState"].text) : approvalStateName(item["approvalState"].text),
+            color: kind == .fault ? faultDisplayColor(item["faultState"].text) : approvalDisplayColor(item["approvalState"].text),
+            reference: kind == .fault ? item["asset"]["assetCode"].text : item["outNumber"].text,
+            referenceTitle: kind == .fault ? "资产编码" : "出库单号",
+            time: readableDate(item[kind == .fault ? "faultTime" : "applyDate"]),
+            summaryFacts: kind == .fault ? [] : [("领用人", item["recipientUser"]["realName"].text), ("领用部门", item["dept"]["deptName"].text)],
+            facts: kind == .fault ? faultCardFacts(item) : erpCardFacts(item)) {
+            LiveWorkflowDetail(kind: kind, id: item[kind.idKey].text)
+        }
+    }
+}
+
 func faultStateName(_ state: String) -> String {
     ["UNTREATED": "报修", "REPORTED": "待受理", "RECEIVED": "待抢单", "SIGNED": "待签到", "REPAIRED": "待完成", "VERIFIED": "待确认", "RESOLVED": "待复线", "FINISHED": "已完结", "": "全部"][state] ?? state
 }
@@ -249,7 +272,7 @@ struct LiveWorkflowDetail: View {
                 }
                 .refreshable { await load() }
                 .reloadsToTop(on: gate.token)
-                .animation(.snappy(duration: 0.3), value: loading)
+                .animation(.smooth(duration: 0.45), value: loading || gate.busy)
             }
         }
         .navigationTitle(kind == .fault ? "报修详情" : "出库详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
@@ -259,12 +282,12 @@ struct LiveWorkflowDetail: View {
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if canEdit { Button("编辑") { editing = true } }
-                RefreshButton(busy: loading) { gate.request() }
+                RefreshButton(busy: loading || gate.busy) { gate.request() }
             }
         }
         .safeAreaInset(edge: .bottom) {
             if !task["id"].text.isEmpty && (taskState["canSubmit"].bool || taskState["canDelegate"].bool || taskState["canResolveDelegate"].bool) {
-                HStack { if returnAvailable { BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) { returning = true }.disabled(loading) }; Spacer(); BottomAction(title: taskActionTitle(task, kind: kind), symbol: "arrow.right.circle") { processing = true }.disabled(loading) }.padding(.horizontal, 20).padding(.vertical, 8)
+                HStack { if returnAvailable { BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) { returning = true }.disabled(loading) }; Spacer(); BottomAction(title: taskActionTitle(task, kind: kind), symbol: "arrow.right.circle") { processing = true }.disabled(loading) }.bottomBarPadding()
             }
         }
         .sheet(isPresented: $returning, onDismiss: taskSheetClosed) { NavigationStack { WorkflowTaskView(task: task, kind: kind, previewReturn: true, onCompleted: completed) } }
@@ -333,7 +356,7 @@ struct LiveCatalogView: View {
     @StateObject private var gate = ReloadGate()
     var body: some View {
         List {
-            Section { LoadingRow(isPresented: loading && !refreshing, title: "正在加载") }
+            Section { LoadingRow(isPresented: (loading || gate.busy) && !refreshing, title: "正在加载") }
             if searching { Section { Picker("搜索方式", selection: $byCode) { Text("按名称").tag(false); Text("按编号").tag(true) }.pickerStyle(.segmented).labelsHidden() } }
             Section {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, record in
@@ -348,19 +371,19 @@ struct LiveCatalogView: View {
                 .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
             }
-            }.opacity(loading && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.22), value: loading)
+            }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
             Section { LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await load(more: true) } }
         }
         .navigationTitle(source == .assets ? "资产台账" : "库存")
         .modifier(ListTabVisibility())
         .searchPageChrome(isSearching: searching)
-        .nativeSearchable(text: $query, isPresented: $searching, prompt: byCode ? "搜索编号" : "搜索名称", onSubmit: { Task { await load() } })
+        .nativeSearchable(text: $query, isPresented: $searching, prompt: byCode ? "搜索编号" : "搜索名称")
         .onChange(of: byCode) { Task { await load() } }
         .reloadsToTop(on: gate.id("\(byCode)-\(query)"))
-        .animation(.snappy(duration: 0.3), value: loading)
-        .refreshButton(busy: loading || loadingMore) { gate.request() }
+        .animation(.smooth(duration: 0.45), value: loading || gate.busy)
+        .refreshButton(busy: loading || loadingMore || gate.busy) { gate.request() }
         .errorDialog($error, retry: { Task { await load() } })
-        .task(id: gate.id("\(byCode)-\(query)")) { await gate.run(key: "\(byCode)-\(query)") { await load() } }
+        .task(id: gate.id("\(byCode)-\(query)")) { await gate.run(key: "\(byCode)-\(query)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await load() }) }
         .refreshable { refreshing = true; await load(); refreshing = false }
     }
     private func load(more: Bool = false) async {
@@ -391,7 +414,7 @@ struct WorkflowNodesView: View {
     @StateObject private var gate = ReloadGate()
     var body: some View {
         List {
-            LoadingRow(isPresented: loading, title: "正在加载流程")
+            LoadingRow(isPresented: loading || gate.busy, title: "正在加载流程")
             if !history.isEmpty {
                 Section("处理记录") {
                     ForEach(Array(history.enumerated()), id: \.offset) { _, node in
@@ -421,8 +444,8 @@ struct WorkflowNodesView: View {
         .reloadsToTop(on: gate.token)
         .task(id: gate.id("flow")) { await gate.run(key: "flow") { await load() } }
         .refreshable { await load() }
-        .animation(.snappy(duration: 0.3), value: loading)
-        .refreshButton(busy: loading) { gate.request() }
+        .animation(.smooth(duration: 0.45), value: loading || gate.busy)
+        .refreshButton(busy: loading || gate.busy) { gate.request() }
     }
     private func load() async {
         loading = true; error = nil; defer { loading = false }

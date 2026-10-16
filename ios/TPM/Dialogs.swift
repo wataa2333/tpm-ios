@@ -51,8 +51,6 @@ struct DialogSheet: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
         .presentationDetents([.height(min(contentHeight + 12, 640))])
         .presentationDragIndicator(.hidden)
-        .presentationCornerRadius(32)
-        .presentationBackground(.regularMaterial)
     }
 }
 
@@ -117,6 +115,7 @@ struct EntryField: View {
                 if let limit { Text("\(text.utf16.count)/\(limit) 字符").font(.footnote).foregroundStyle(.secondary) }
             }
         }
+        .fullSeparator()
     }
 }
 
@@ -146,4 +145,22 @@ struct ErrorDialog: ViewModifier {
 /// Messages made by the network layer: a failed request, a server status or a lost connection.
 func looksLikeServerError(_ message: String) -> Bool {
     ["请求失败", "HTTP ", "网络错误", "服务器"].contains { message.contains($0) }
+}
+
+extension View {
+    /// Makes the divider under a row run the full width. Without it the system picks the divider's
+    /// start from the row's first text, which gives rows with text fields or icons a shorter line.
+    func fullSeparator() -> some View {
+        alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+            .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
+    }
+}
+
+extension View {
+    /// Padding for the action buttons at the bottom of a page. The bottom padding is negative on purpose:
+    /// the buttons then sit as far from the lower screen edge as from the side edges (20pt), which keeps
+    /// them concentric with the screen's rounded corners instead of floating above the home indicator.
+    func bottomBarPadding() -> some View {
+        padding(.horizontal, 20).padding(.top, 8).padding(.bottom, -14)
+    }
 }

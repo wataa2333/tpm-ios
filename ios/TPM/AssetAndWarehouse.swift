@@ -28,7 +28,7 @@ struct SignInPreview: View {
             HStack {
                 Spacer()
                 BottomAction(title: signed ? "已签到" : "签到", symbol: "checkmark.circle") { signed = true; onCompleted?(); if onCompleted != nil { dismiss() } }.disabled(signed)
-            }.padding(.horizontal, 20).padding(.vertical, 8)
+            }.bottomBarPadding()
 
         }
     }
@@ -51,7 +51,7 @@ struct AssetRecordDetail: View {
         List {
             Section {
                 HorizontalCategories(titles: tabs, selection: $tab)
-                LoadingRow(isPresented: loading, title: "正在加载" + tabs[tab])
+                LoadingRow(isPresented: loading || gate.busy, title: "正在加载" + tabs[tab])
             }
             Section {
                 VStack(alignment: .leading, spacing: RowMetrics.spacing) {
@@ -89,8 +89,8 @@ struct AssetRecordDetail: View {
         .modifier(DetailTabVisibility())
         .onAppear { tab = tabs.firstIndex(of: initialTab) ?? 0 }
         .task(id: gate.id("\(tab)")) { await gate.run(key: "\(tab)") { await load() } }
-        .refreshButton(busy: loading) { gate.request() }
-        .animation(.snappy(duration: 0.3), value: loading)
+        .refreshButton(busy: loading || gate.busy) { gate.request() }
+        .animation(.smooth(duration: 0.45), value: loading || gate.busy)
         .errorDialog($error, retry: { Task { await load() } })
         .reloadsToTop(on: gate.id("\(tab)"))
     }
@@ -128,7 +128,7 @@ struct WarehouseStockView: View {
     @State private var total: Int?
     var body: some View {
         List {
-            Section { LoadingRow(isPresented: loading && !loadingMore, title: "正在加载库存") }
+            Section { LoadingRow(isPresented: (loading || gate.busy) && !loadingMore, title: "正在加载库存") }
             Section {
                 if searching { Picker("搜索分类", selection: $searchField) { Text("物料名称").tag("material.materialName"); Text("物料编号").tag("material.materialNum"); Text("规格型号").tag("material.materialModel") } }
                 NavigationLink { WarehouseReceiptsView(preview: preview) } label: { Label("入库记录", systemImage: "tray.and.arrow.down") }
@@ -145,18 +145,18 @@ struct WarehouseStockView: View {
                 }.uniformRow()
             }
             if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无库存记录") }
-            }.opacity(loading && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.22), value: loading)
+            }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
             Section { LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await load(more: true) } }
             if preview { DemoNotice() }
         }
         .navigationTitle("仓库库存").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(ListTabVisibility())
         .searchPageChrome(isSearching: searching)
-        .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索" + (searchField == "material.materialNum" ? "物料编号" : searchField == "material.materialModel" ? "规格型号" : "物料名称"), onSubmit: { Task { await load() } })
-        .task(id: gate.id(searchField + query)) { await gate.run(key: searchField + query) { await load() } }
+        .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索" + (searchField == "material.materialNum" ? "物料编号" : searchField == "material.materialModel" ? "规格型号" : "物料名称"))
+        .task(id: gate.id(searchField + query)) { await gate.run(key: searchField + query, debounce: query.isEmpty ? nil : .milliseconds(350), load: { await load() }) }
         .reloadsToTop(on: gate.id(searchField + query))
-        .animation(.snappy(duration: 0.3), value: loading)
-        .refreshButton(busy: loading || loadingMore) { gate.request() }
+        .animation(.smooth(duration: 0.45), value: loading || gate.busy)
+        .refreshButton(busy: loading || loadingMore || gate.busy) { gate.request() }
         .errorDialog($error, retry: { Task { await load() } })
         .refreshable { await load() }
     }
@@ -204,7 +204,7 @@ struct WarehouseReceiptsView: View {
     @StateObject private var gate = ReloadGate()
     var body: some View {
         List {
-            LoadingRow(isPresented: loading, title: "正在加载入库记录")
+            LoadingRow(isPresented: loading || gate.busy, title: "正在加载入库记录")
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 Section(row["entryNumber"].text) {
                     LabeledContent("入库时间", value: readableDate(row["warehousingTime"]))
@@ -217,8 +217,8 @@ struct WarehouseReceiptsView: View {
         }.navigationTitle("入库记录").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
             .errorDialog($error, clearsOnClose: true)
             .reloadsToTop(on: gate.token)
-            .animation(.snappy(duration: 0.3), value: loading)
-            .refreshButton(busy: loading) { gate.request() }
+            .animation(.smooth(duration: 0.45), value: loading || gate.busy)
+            .refreshButton(busy: loading || gate.busy) { gate.request() }
             .task(id: gate.id("receipts")) { await gate.run(key: "receipts") {
                 if preview { rows = [.object(["entryNumber": .string("RK-DEMO-001"), "warehousingTime": .string("2026-10-15 14:30"), "applyDate": .string("2026-10-15"), "warehouse": .object(["warehouseName": .string("备件仓")]), "user": PreviewIdentity.user])]; return }
                 loading = true; defer { loading = false }

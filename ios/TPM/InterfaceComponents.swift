@@ -163,7 +163,7 @@ struct AnimatedLoadingOverlay: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .allowsHitTesting(false)
-        .animation(.easeOut(duration: 0.15), value: isPresented)
+        .animation(.easeOut(duration: 0.3), value: isPresented)
     }
 }
 
@@ -200,7 +200,7 @@ struct ChipStrip: View {
                                     Text(item.title).font(.subheadline.weight(selection == item.id ? .semibold : .regular)).lineLimit(1)
                                     if item.showsCount {
                                         Text(item.count.map(String.init) ?? "…").font(.caption.weight(.semibold)).monospacedDigit()
-                                            .contentTransition(.numericText()).animation(.smooth(duration: 0.3), value: item.count)
+                                            .contentTransition(.numericText()).animation(.smooth(duration: 0.5), value: item.count)
                                     }
                                 }
                                 .foregroundStyle(selection == item.id ? Color.primary : Color.secondary)
@@ -216,7 +216,7 @@ struct ChipStrip: View {
             }
             .scrollIndicators(.hidden)
             .onAppear { proxy.scrollTo(selection, anchor: .center) }
-            .onChange(of: selection) { _, index in withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { proxy.scrollTo(index, anchor: .center) } }
+            .onChange(of: selection) { _, index in withAnimation(reduceMotion ? nil : .smooth(duration: 0.4)) { proxy.scrollTo(index, anchor: .center) } }
         }
         .frame(height: 48)
         .sensoryFeedback(.selection, trigger: selection)
