@@ -189,23 +189,23 @@ private struct ReferenceMenu: ViewModifier {
     @EnvironmentObject private var menu: ReferenceMenuModel
     func body(content: Content) -> some View {
         if menu.enabled {
-            let pinned = menu.isPinned(value), isDefault = menu.isDefault(value)
             content
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button { menu.togglePin(value) } label: { Label(pinned ? "取消置顶" : "置顶", systemImage: pinned ? "pin.slash" : "pin") }
-                        .tint(.blue).accessibilityIdentifier("menu-pin")
-                    if menu.supportsDefault {
-                        Button { menu.toggleDefault(value) } label: { Label(isDefault ? "取消默认" : "设为默认", systemImage: isDefault ? "star.slash" : "star") }
-                            .tint(.orange).accessibilityIdentifier("menu-default")
-                    }
-                }
-                .contextMenu {
-                    Button { menu.togglePin(value) } label: { Label(pinned ? "取消置顶" : "置顶", systemImage: pinned ? "pin.slash" : "pin") }
-                    if menu.supportsDefault {
-                        Button { menu.toggleDefault(value) } label: { Label(isDefault ? "取消默认" : "设为默认", systemImage: isDefault ? "star.slash" : "star") }
-                    }
-                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) { actions }
+                .contextMenu { actions }
         } else { content }
+    }
+    /// The same two choices for the swipe and for the long press.
+    @ViewBuilder private var actions: some View {
+        Button { menu.togglePin(value) } label: {
+            Label(menu.isPinned(value) ? "取消置顶" : "置顶", systemImage: menu.isPinned(value) ? "pin.slash" : "pin")
+        }
+        .tint(.blue).accessibilityIdentifier("menu-pin")
+        if menu.supportsDefault {
+            Button { menu.toggleDefault(value) } label: {
+                Label(menu.isDefault(value) ? "取消默认" : "设为默认", systemImage: menu.isDefault(value) ? "star.slash" : "star")
+            }
+            .tint(.orange).accessibilityIdentifier("menu-default")
+        }
     }
 }
 
