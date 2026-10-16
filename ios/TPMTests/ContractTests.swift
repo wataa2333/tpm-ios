@@ -285,8 +285,11 @@ import Foundation
     try? store.save(second, scope: "li@二厂")
     let list = store.drafts(scope: "wang@一厂")
     #expect(list.map(\.id) == [second.id, first.id])
-    #expect(list.last?.title == "主轴异常" && list.last?.subtitle == "台群CNC")
-    #expect(list.first?.title == "未命名报修")
+    // The title is the time of the last edit; what the draft is about goes under it.
+    #expect(list.last?.title == FaultDraft.titleFormat(Date(timeIntervalSince1970: 100)))
+    #expect(list.last?.title.count == 16 && list.last?.title.contains(":") == true)
+    #expect(list.last?.subtitle == "主轴异常")
+    #expect(list.first?.subtitle == "还没有填写内容")
     #expect(list.last?.selections == ["a": ["u1"]])
     // Saving the same draft again replaces it.
     var changed = first; changed.data["faultName"] = .string("改名")
@@ -311,4 +314,22 @@ import Foundation
     #expect(BiometricGate.isRequired(enabled: true, arguments: []))
     #expect(!BiometricGate.isRequired(enabled: false, arguments: []))
     #expect(!BiometricGate.isRequired(enabled: true, arguments: ["--skip-biometrics"]))
+}
+
+@Test func aDraftIsOnlyOfferedToTheFormOfItsOwnOrder() {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("drafts-" + UUID().uuidString).appendingPathComponent("fault-drafts.json")
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    let store = DraftStore(url: url)
+    let forA = FaultDraft(savedAt: Date(timeIntervalSince1970: 300), data: ["faultName": .string("A单")], selections: [:], orderID: "A-1", orderSN: "BX-A")
+    let forB = FaultDraft(savedAt: Date(timeIntervalSince1970: 400), data: ["faultName": .string("B单")], selections: [:], orderID: "B-1", orderSN: "BX-B")
+    let fresh = FaultDraft(savedAt: Date(timeIntervalSince1970: 100), data: ["faultName": .string("新报修")], selections: [:])
+    for draft in [forA, forB, fresh] { try? store.save(draft, scope: "wang@一厂") }
+    #expect(store.drafts(scope: "wang@一厂", for: .order("A-1")).map(\.id) == [forA.id])
+    #expect(store.drafts(scope: "wang@一厂", for: .order("B-1")).map(\.id) == [forB.id])
+    // A new report never gets the draft of an existing order, and the other way round.
+    #expect(store.drafts(scope: "wang@一厂", for: .newReport).map(\.id) == [fresh.id])
+    #expect(store.drafts(scope: "wang@一厂", for: .order("C-1")).isEmpty)
+    #expect(store.drafts(scope: "wang@一厂", for: .order("")).isEmpty)
+    #expect(store.drafts(scope: "wang@一厂").count == 3)
+    #expect(forA.subtitle == "单号 BX-A · A单")
 }

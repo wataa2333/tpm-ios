@@ -2,7 +2,7 @@ import SwiftUI
 
 // The draft box: a repair report that was filled in but not saved or submitted to the server is kept on this
 // phone, per account and per factory, so closing the form never loses the typing. A draft is only ever
-// local; "保存" and "提交" in the form still talk to the server exactly as before. Drafts hold what the form
+// local: the form's "保存" writes one, only "提交" talks to the server. Drafts hold what the form
 // holds (names, references, uploaded photo references), never passwords or tokens.
 
 struct FaultDraft: Codable, Identifiable, Equatable {
@@ -10,16 +10,34 @@ struct FaultDraft: Codable, Identifiable, Equatable {
     var savedAt: Date
     var data: Fields
     var selections: [String: [String]]
+    /// The order this draft belongs to: nil for a new report that has no number yet, otherwise the
+    /// id of the existing order being edited. A draft is only ever offered to the form of its own order.
+    var orderID: String? = nil
+    /// The order's number, for showing which order a draft belongs to.
+    var orderSN: String? = nil
 
-    var title: String {
-        let name = data.text("faultName").trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.isEmpty ? "未命名报修" : name
+    /// A draft is named by when it was last edited, to the minute: "2026-10-16 14:32". Saving it again
+    /// moves the time, and so the title, forward.
+    var title: String { Self.titleFormat(savedAt) }
+    static func titleFormat(_ date: Date, calendar: Calendar = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter.string(from: date)
     }
-    /// What else identifies the draft in the list: the asset, then the description.
+    /// What the draft is about, as far as it was filled in: the report name, else the asset, else the description.
     var subtitle: String {
-        let asset = data.text("asset.assetName")
-        if !asset.isEmpty { return asset }
-        return data.text("faultDesc").trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefix = (orderSN ?? "").isEmpty ? "" : "单号 " + (orderSN ?? "") + " · "
+        return prefix + summary
+    }
+    private var summary: String {
+        for value in [data.text("faultName"), data.text("asset.assetName"), data.text("faultDesc")] {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        return "还没有填写内容"
     }
 }
 
@@ -49,9 +67,22 @@ struct DraftStore {
         try encoder.encode(all).write(to: url, options: [.atomic, .completeFileProtection])
     }
 
+    /// Which drafts a form or a list may see. A form only ever gets the drafts of its own order.
+    enum Target: Equatable {
+        case any
+        case newReport
+        case order(String)
+        func matches(_ draft: FaultDraft) -> Bool {
+            switch self {
+            case .any: true
+            case .newReport: draft.orderID == nil
+            case .order(let id): draft.orderID == id
+            }
+        }
+    }
     /// Newest first.
-    func drafts(scope: String) -> [FaultDraft] {
-        (readAll()[scope] ?? []).sorted { $0.savedAt > $1.savedAt }
+    func drafts(scope: String, for target: Target = .any) -> [FaultDraft] {
+        (readAll()[scope] ?? []).filter(target.matches).sorted { $0.savedAt > $1.savedAt }
     }
     /// Saves a new draft, or replaces the one with the same id.
     func save(_ draft: FaultDraft, scope: String) throws {
@@ -80,6 +111,7 @@ struct DraftBoxView: View {
     @EnvironmentObject private var session: LiveSession
     @Environment(\.dismiss) private var dismiss
     var dismissOnPick = false
+    var target: DraftStore.Target = .any
     var store = DraftStore.shared
     let onPick: (FaultDraft) -> Void
     @State private var drafts: [FaultDraft] = []
@@ -99,8 +131,7 @@ struct DraftBoxView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(draft.title).font(.headline).foregroundStyle(Color.accentColor)
-                        if !draft.subtitle.isEmpty { Text(draft.subtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(2) }
-                        Text("保存于 " + draft.savedAt.formatted(.dateTime.year().month().day().hour().minute())).font(.footnote).foregroundStyle(.secondary)
+                        Text(draft.subtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
                     }.frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect)
                 }
                 .buttonStyle(.plain)
@@ -111,5 +142,5 @@ struct DraftBoxView: View {
         .navigationTitle("草稿箱").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .onAppear { reload() }
     }
-    private func reload() { drafts = store.drafts(scope: session.draftScope) }
+    private func reload() { drafts = store.drafts(scope: session.draftScope, for: target) }
 }

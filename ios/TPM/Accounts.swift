@@ -119,6 +119,7 @@ struct ProfileTab: View {
     @State private var protect = BiometricGate.isEnabled
     @State private var draftCount = 0
     @State private var resuming: FaultDraft?
+    @State private var draftNotice: String?
     /// Turning the protection off is a change the owner confirms with the same check.
     private func setProtection(_ on: Bool) {
         if on { BiometricGate.isEnabled = true; protect = true; return }
@@ -140,7 +141,12 @@ struct ProfileTab: View {
             Section { LabeledContent("当前厂区", value: session.currentFactoryName) }
             Section {
                 NavigationLink {
-                    DraftBoxView { resuming = $0 }
+                    DraftBoxView { draft in
+                        // A draft of an existing order goes back into that order's own form, never into another.
+                        if let sn = draft.orderSN, draft.orderID != nil { draftNotice = "这份草稿属于单号 " + sn + "。请打开该工单，点“编辑”继续填写。" }
+                        else if draft.orderID != nil { draftNotice = "这份草稿属于一张已有的工单。请打开该工单，点“编辑”继续填写。" }
+                        else { resuming = draft }
+                    }
                 } label: {
                     HStack { Label("草稿箱", systemImage: "tray.full"); Spacer(); if draftCount > 0 { Text("\(draftCount)").foregroundStyle(.secondary) } }
                 }.accessibilityIdentifier("draft-box")
@@ -188,6 +194,7 @@ struct ProfileTab: View {
             Task { refreshing = true; try? await session.refreshFactories(); refreshing = false }
         }
         .errorDialog($switchError, title: "切换账号失败", clearsOnClose: true)
+        .errorDialog($draftNotice, title: "请从工单里继续", clearsOnClose: true)
         .onAppear { saved.reload(); draftCount = DraftStore.shared.drafts(scope: session.draftScope).count }
         .sheet(item: $resuming, onDismiss: { draftCount = DraftStore.shared.drafts(scope: session.draftScope).count }) { draft in
             NavigationStack { OriginalFaultForm(draft: draft) }.presentationDragIndicator(.visible)

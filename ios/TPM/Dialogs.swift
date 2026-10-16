@@ -197,3 +197,33 @@ private struct BottomBarPadding: ViewModifier {
             }
     }
 }
+
+/// A short notice that slides in below the navigation bar, speaks itself to VoiceOver and goes away alone.
+private struct ToastModifier: ViewModifier {
+    @Binding var message: String?
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .top) {
+                if let message {
+                    Text(message).font(.subheadline.weight(.medium)).multilineTextAlignment(.center)
+                        .padding(.horizontal, 18).padding(.vertical, 10)
+                        .glassEffect(.regular, in: .capsule)
+                        .padding(.top, 8).padding(.horizontal, 24)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .accessibilityIdentifier("toast")
+                        .allowsHitTesting(false)
+                }
+            }
+            .animation(.smooth(duration: 0.35), value: message)
+            .onChange(of: message) { _, new in if let new { AccessibilityNotification.Announcement(new).post() } }
+            .task(id: message) {
+                guard message != nil else { return }
+                try? await Task.sleep(for: .seconds(3))
+                if !Task.isCancelled { message = nil }
+            }
+    }
+}
+
+extension View {
+    func toast(_ message: Binding<String?>) -> some View { modifier(ToastModifier(message: message)) }
+}

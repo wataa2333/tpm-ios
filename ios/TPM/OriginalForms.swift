@@ -427,25 +427,43 @@ struct OriginalFaultForm: View {
     @State private var showingDrafts = false
     @State private var draftID: UUID?
     @State private var draftCount = 0
+    @State private var toast: String?
+    @State private var loadedData: Fields = [:]
+    @State private var loadedSelections: [String: [String]] = [:]
     var existing: Fields? = nil
     var preview = false
     /// A draft to continue: applied over the freshly loaded form.
     var draft: FaultDraft? = nil
     var onSaved: (() -> Void)? = nil
     private func field(_ key: String) -> Binding<JSONValue> { Binding(get: { model.data[key] ?? .null }, set: { model.data[key] = $0 }) }
-    private func apply(_ draft: FaultDraft) {
+    private func apply(_ draft: FaultDraft, automatic: Bool = false) {
         model.data = draft.data
         for (key, value) in draft.selections { model.selections[key] = value }
         draftID = draft.id
+        toast = (automatic ? "已加载上次保存的草稿（" : "已加载草稿（") + draft.title + "）"
+    }
+    /// A draft belongs to one order: the existing order being edited, or "a new report" when there is none.
+    private var orderID: String? { existing.map { $0.text("faultId") } }
+    private var draftTarget: DraftStore.Target {
+        guard let orderID else { return .newReport }
+        return orderID.isEmpty ? .order("") : .order(orderID)
+    }
+    /// An order without an id cannot be told apart from another, so it gets no drafts at all.
+    private var draftsAllowed: Bool { existing == nil || !(orderID ?? "").isEmpty }
+    /// Whether there is something worth keeping: anything typed into a new report, any change to an existing order.
+    private var worthKeeping: Bool {
+        guard draftsAllowed, !preview else { return false }
+        return existing == nil ? faultFormHasContent(model.data) : (model.data != loadedData || model.selections != loadedSelections)
     }
     private func keepDraft() {
-        let draft = FaultDraft(id: draftID ?? UUID(), savedAt: Date(), data: model.data, selections: model.selections)
+        let draft = FaultDraft(id: draftID ?? UUID(), savedAt: Date(), data: model.data, selections: model.selections,
+                               orderID: orderID, orderSN: existing?.text("sn"))
         do { try DraftStore.shared.save(draft, scope: session.draftScope); dismiss() }
         catch { model.error = "草稿没有保存成功：" + error.localizedDescription }
     }
     /// Closing a new form that holds something asks whether to keep it as a draft.
     private func close() {
-        if existing == nil && !preview && faultFormHasContent(model.data) { leaving = true } else { dismiss() }
+        if worthKeeping { leaving = true } else { dismiss() }
     }
     private func text(_ key: String) -> Binding<String> { Binding(get: { model.data.text(key) }, set: { model.data[key] = .string($0) }) }
     var body: some View {
@@ -487,31 +505,43 @@ struct OriginalFaultForm: View {
         .navigationTitle(existing == nil ? "故障报修" : "编辑报修").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { close() }.disabled(model.saving || photoUploading) }
-            if existing == nil {
+            if draftsAllowed {
                 ToolbarItem(placement: .confirmationAction) {
                     Button { showingDrafts = true } label: { Label(draftCount > 0 ? "草稿箱 (\(draftCount))" : "草稿箱", systemImage: "tray.full") }
                         .disabled(model.saving || photoUploading).accessibilityIdentifier("draft-box-button")
                 }
             }
         }
-        .interactiveDismissDisabled(existing == nil && !preview && faultFormHasContent(model.data))
-        .choiceDialog("保存为草稿？", message: "草稿只保存在这台手机上，之后可以在“草稿箱”里继续填写。", isPresented: $leaving, primary: "保存草稿", secondary: "不保存", onPrimary: { keepDraft() }, onSecondary: { dismiss() })
-        .sheet(isPresented: $showingDrafts, onDismiss: { draftCount = DraftStore.shared.drafts(scope: session.draftScope).count }) {
+        .toast($toast)
+        .interactiveDismissDisabled(worthKeeping)
+        .choiceDialog("保存为草稿？", message: "没填完也可以保存。草稿只在这台手机上，标题是最后编辑的时间，之后可在“草稿箱”里继续填写。", isPresented: $leaving, primary: "保存草稿", secondary: "不保存", onPrimary: { keepDraft() }, onSecondary: { dismiss() })
+        .sheet(isPresented: $showingDrafts, onDismiss: { draftCount = DraftStore.shared.drafts(scope: session.draftScope, for: draftTarget).count }) {
             NavigationStack {
-                DraftBoxView(dismissOnPick: true) { picked in apply(picked) }
+                DraftBoxView(dismissOnPick: true, target: draftTarget) { picked in apply(picked) }
                     .toolbar { ToolbarItem(placement: .cancellationAction) { Button("完成") { showingDrafts = false } } }
             }.presentationDetents([.medium, .large])
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             DocumentActions(busy: model.saving, submitting: confirming == true,
                             disabled: !model.ready || photoUploading,
-                            save: { prepare(false) }, submit: { prepare(true) })
+                            // "保存" keeps a draft on this phone: nothing is sent to the server and nothing is required.
+                            // Only "提交" writes to the server, and it needs the form complete.
+                            save: { if draftsAllowed { keepDraft() } else { prepare(false) } }, submit: { prepare(true) })
         }
         .task {
             guard !model.ready else { return }
             if preview { model.loading = false; model.ready = true; model.data = ["faultTime": .string("2026-10-16 09:30"), "albums": .array([]), "applyUser": PreviewIdentity.user, "applyDept": PreviewIdentity.department, "userPhone": .string("13800000000")] }
-            else { await model.load(session, existing: existing); if let draft, existing == nil, model.ready { apply(draft) } }
-            draftCount = DraftStore.shared.drafts(scope: session.draftScope).count
+            else {
+                await model.load(session, existing: existing)
+                loadedData = model.data; loadedSelections = model.selections
+                // The form opens with what was saved last time for the same order (a new report: the last
+                // new report). A draft chosen on purpose wins; a draft of another order is never offered.
+                if draftsAllowed, model.ready {
+                    if let draft, draftTarget.matches(draft) { apply(draft) }
+                    else if let last = DraftStore.shared.drafts(scope: session.draftScope, for: draftTarget).first { apply(last, automatic: true) }
+                }
+            }
+            draftCount = DraftStore.shared.drafts(scope: session.draftScope, for: draftTarget).count
         }
         .keyboardManaged()
         .confirmDialog(confirming == true ? "提交报修单到原系统？" : "保存报修单到原系统？", isPresented: $showConfirmation, confirmTitle: confirming == true ? "提交" : "保存") { Task { await save() } }
