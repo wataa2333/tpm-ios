@@ -184,8 +184,13 @@ struct ProfileTab: View {
                 .accessibilityIdentifier("switch-account")
             }
             Section {
-                Toggle("用面容 ID 保护已记住的账号", isOn: Binding(get: { protect }, set: { setProtection($0) }))
-                    .accessibilityIdentifier("protect-accounts")
+                // Laid out by hand: text on the left, switch centred on the right of the same line.
+                HStack(spacing: 12) {
+                    Label("用面容 ID 保护已记住的账号", systemImage: "faceid").frame(maxWidth: .infinity, alignment: .leading)
+                    Toggle("用面容 ID 保护已记住的账号", isOn: Binding(get: { protect }, set: { setProtection($0) })).labelsHidden().labeledContentStyle(.automatic)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("protect-accounts")
             } footer: { Text("打开后，使用已记住的账号前需要面容 ID 或设备密码验证。") }
             Section { Button("退出登录", role: .destructive) { session.signOut() } }
         }

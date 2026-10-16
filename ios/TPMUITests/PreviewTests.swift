@@ -368,6 +368,11 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(machineCard.isEnabled)
         machineCard.tap()
         XCTAssertTrue(app.navigationBars["故障报修"].waitForExistence(timeout: 10))
+        // Back on the workspace the box is empty again: nothing of the last query is left in it.
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(machineCard.waitForExistence(timeout: 10))
+        XCTAssertFalse(machineCard.isEnabled)
+        XCTAssertNotEqual(app.textFields["按机台号查询"].value as? String, "D-E59")
     }
 
     func testAcceptanceRejectAndReturnScreens() {

@@ -16,6 +16,8 @@ struct WorkOrderCard<Destination: View>: View {
     var color: Color = .blue
     let reference: String
     var referenceTitle = "资产编码"
+    /// The machine number, shown after the reference on the same line: "EWPT-01-017-06H4 · B-F08".
+    var machine = ""
     let time: String
     var summaryFacts: [(String, String)] = []
     let facts: [(String, String)]
@@ -37,8 +39,8 @@ struct WorkOrderCard<Destination: View>: View {
                 }
             }.buttonStyle(.borderless).navigationLinkIndicatorVisibility(.hidden)
                 .accessibilityIdentifier("order-title-" + reference)
-            WrappingContent { Text(reference.isEmpty ? "—" : reference).font(.subheadline).foregroundStyle(.secondary) }
-                .accessibilityLabel(referenceTitle + "：" + reference)
+            WrappingContent { Text((reference.isEmpty ? "—" : reference) + (machine.isEmpty ? "" : " · " + machine)).font(.subheadline).foregroundStyle(.secondary) }
+                .accessibilityLabel(referenceTitle + "：" + reference + (machine.isEmpty ? "" : "，机台号：" + machine))
                 .accessibilityIdentifier("order-reference-" + reference)
             ForEach(Array(summaryFacts.enumerated()), id: \.offset) { _, fact in
                 WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(.subheadline).foregroundStyle(.secondary) }

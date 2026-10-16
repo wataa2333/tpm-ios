@@ -43,7 +43,9 @@ struct LiveTabs: View {
         } mine: {
             NavigationStack { ProfileTab() }
         }
-        .task(id: "\(navigation.refresh)-\(selection)") { await refreshTodoCount() }
+        // Only when something changed (a task was finished, a manual refresh): the todo page itself keeps the
+        // number current whenever it loads, so switching tabs asks for nothing.
+        .task(id: navigation.refresh) { await refreshTodoCount() }
     }
     /// The last tab carries the account's own name, as on the profile page.
     private var accountTitle: String {
@@ -80,10 +82,12 @@ struct LiveWorkflowList: View {
     @State private var stateCounts: [String: Int] = [:]
     @StateObject private var gate = ReloadGate()
     private let customTitle: String?
+    private let initialQuery: String
     /// `initialQuery` and `initialField` open the list already searching, as the quick-query cards do.
     init(kind: WorkflowKind, initialState: String = "RECEIVED", initialQuery: String = "", initialField: FaultSearchField = .name, title: String? = nil) {
         self.kind = kind
         self.customTitle = title
+        self.initialQuery = initialQuery
         _state = State(initialValue: initialState)
         _query = State(initialValue: initialQuery)
         _searchField = State(initialValue: initialField)
@@ -99,7 +103,7 @@ struct LiveWorkflowList: View {
     var body: some View {
         CardPage {
             if kind == .fault { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? -1 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
-            if let dateRange { DateRangeChip(range: dateRange) { self.dateRange = nil } }
+            if let activeRange = dateRange { DateRangeChip(range: activeRange) { self.dateRange = nil } }
             LoadingRow(isPresented: (loading || gate.busy) && !refreshing, title: "正在加载工单")
             if kind == .fault && searching { CardGroup { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }.padding(.horizontal, 16).padding(.vertical, 6) } }
             CardGroup {
@@ -110,7 +114,7 @@ struct LiveWorkflowList: View {
             }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
             LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await reload(more: true) }
         }
-        .navigationTitle(customTitle ?? kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .navigationTitle(query == initialQuery ? (customTitle ?? kind.title) : kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(ListTabVisibility())
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号")
@@ -166,7 +170,8 @@ struct LiveWorkflowList: View {
         let searchFilters = self.searchFilters
         let api = session
         await withTaskGroup(of: (String, Int?).self) { group in
-            for stage in FaultState.allCases where !["UNTREATED", "FINISHED"].contains(stage.code) {
+            // The state being shown gets its number from the list's own answer, so it is not asked for twice.
+            for stage in FaultState.allCases where !["UNTREATED", "FINISHED", state].contains(stage.code) {
                 let code = stage.code
                 group.addTask {
                     do {
@@ -193,6 +198,7 @@ struct LiveOrderRow: View, Equatable {
             color: kind == .fault ? faultDisplayColor(item["faultState"].text) : approvalDisplayColor(item["approvalState"].text),
             reference: kind == .fault ? item["asset"]["assetCode"].text : item["outNumber"].text,
             referenceTitle: kind == .fault ? "资产编码" : "出库单号",
+            machine: kind == .fault ? item["asset"]["addressCode"].text : "",
             time: readableDate(item[kind == .fault ? "faultTime" : "applyDate"]),
             summaryFacts: kind == .fault ? [] : [("领用人", item["recipientUser"]["realName"].text), ("领用部门", item["dept"]["deptName"].text)],
             facts: kind == .fault ? faultCardFacts(item) : erpCardFacts(item)) {
@@ -341,14 +347,19 @@ struct LiveWorkflowDetail: View {
         defer { loading = false }
         do {
             detail = try await session.request(kind.detailPath, query: [kind.idKey: id])
-            if kind == .erp { materials = try await session.request("erpOutbound/getErpMaterialOutboundsByOutboundId", query: ["outboundId": id]).array }
-            if !detail["processInstanceId"].text.isEmpty { taskState = try await session.request("workflow/getWorkflowTaskState", query: ["processInstanceId": detail["processInstanceId"].text]) }
+            // The materials and the task state both only need what the detail just said: ask for them together.
+            let api = session, isERP = kind == .erp, orderID = id, instance = detail["processInstanceId"].text
+            async let lines: [JSONValue] = isERP ? api.request("erpOutbound/getErpMaterialOutboundsByOutboundId", query: ["outboundId": orderID]).array : []
+            async let state: JSONValue? = instance.isEmpty ? nil : api.request("workflow/getWorkflowTaskState", query: ["processInstanceId": instance])
+            let (loadedLines, loadedState) = try await (lines, state)
+            if kind == .erp { materials = loadedLines }
+            if let loadedState { taskState = loadedState }
             returnAvailable = false
             if kind == .fault && !task["id"].text.isEmpty && taskState["canSubmit"].bool {
                 let form = try await session.request("workflow/getFormPropertiesConditionsByTaskId", query: ["taskId": task["id"].text])
                 returnAvailable = form["flowConditions"].array.contains { isReturnCondition($0) }
             }
-        } catch { self.error = error.localizedDescription }
+        } catch { if !isCancellation(error) { self.error = error.localizedDescription } }
     }
 }
 
@@ -442,7 +453,7 @@ struct WorkflowNodesView: View {
     @State private var definition: [JSONValue] = []
     @State private var loading = true
     @State private var error: String?
-    @StateObject private var directory = UserDirectory()
+    @ObservedObject private var directory = UserDirectory.shared
     @StateObject private var gate = ReloadGate()
     var body: some View {
         List {
@@ -487,16 +498,19 @@ struct WorkflowNodesView: View {
             return
         }
         do {
-            let loadedHistory = try await session.request("workflow/getWorkflowHistoryNodesByProcessInstanceId", query: ["processInstanceId": processID]).array
-            let loadedDefinition = try await session.request("workflow/getAssigneeElementsByProcessInstanceId", query: ["processInstanceId": processID]).array
-            history = orderedHistory(loadedHistory)
-            definition = loadedDefinition
+            // The two lists do not depend on each other: ask for both at once.
+            let api = session, instance = processID
+            async let loadedHistory = api.request("workflow/getWorkflowHistoryNodesByProcessInstanceId", query: ["processInstanceId": instance]).array
+            async let loadedDefinition = api.request("workflow/getAssigneeElementsByProcessInstanceId", query: ["processInstanceId": instance]).array
+            let (nodes, steps) = try await (loadedHistory, loadedDefinition)
+            history = orderedHistory(nodes)
+            definition = steps
             // Real names are filled in as soon as they arrive; until then the user name shows.
             await directory.resolve(historyUserNames(history), session: session)
-        } catch { self.error = error.localizedDescription }
+        } catch { if !isCancellation(error) { self.error = error.localizedDescription } }
     }
 }
 
 func faultCardFacts(_ item: JSONValue) -> [(String, String)] {
-    [("报修名称", item["faultName"].text), ("资产编码", item["asset"]["assetCode"].text), ("资产名称", item["asset"]["assetName"].text), ("机台号", item["asset"]["addressCode"].text), ("地址", item["asset"]["address"].text), ("报修人", item["applyUser"]["realName"].text), ("报修时间", readableDate(item["faultTime"])), ("受理组别", item["userGroup"]["groupName"].text), ("受理部门", item["dept"]["deptName"].text), ("受理人", item["user"]["realName"].text), ("故障描述", item["faultDesc"].text)]
+    [("报修名称", item["faultName"].text), ("资产编码", item["asset"]["assetCode"].text), ("资产名称", item["asset"]["assetName"].text), ("地址", item["asset"]["address"].text), ("报修人", item["applyUser"]["realName"].text), ("报修时间", readableDate(item["faultTime"])), ("受理组别", item["userGroup"]["groupName"].text), ("受理部门", item["dept"]["deptName"].text), ("受理人", item["user"]["realName"].text), ("故障描述", item["faultDesc"].text)]
 }

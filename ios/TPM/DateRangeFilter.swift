@@ -69,7 +69,7 @@ struct DateRangeSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    Toggle("按故障时间筛选", isOn: Binding(get: { range != nil }, set: { range = $0 ? (range ?? .lastDays(7)) : nil }))
+                    Toggle("按故障时间筛选", isOn: Binding(get: { range != nil }, set: { range = $0 ? (range ?? .lastDays(7)) : nil })).labeledContentStyle(.automatic)
                         .accessibilityIdentifier("date-range-toggle")
                 }
                 if range != nil {

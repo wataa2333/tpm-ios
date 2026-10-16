@@ -221,7 +221,8 @@ struct ReferencePicker: View {
         .errorDialog(Binding(get: { menu.notice }, set: { menu.notice = $0 }), title: "不能置顶", clearsOnClose: true)
         .environmentObject(menu)
         .searchPageChrome(isSearching: searching)
-        .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索", onSubmit: { Task { await load() } })
+        // Only lists the server searches are asked again. The others are filtered here from what is already loaded.
+        .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索", onSubmit: { if source.pagePath != nil || source == .workflowUsers { Task { await load() } } })
         .task {
             picked = Set(selected)
             // Materials are picked by quantity, not by preference: no menu there. The demo screens keep their
@@ -232,7 +233,9 @@ struct ReferencePicker: View {
             }
             await load()
         }
-        .onChange(of: searchByCode) { Task { await load() } }
+        .onChange(of: searchByCode) { if source.pagePath != nil { Task { await load() } } }
+        // The groups are only needed once "按班组" is chosen.
+        .task(id: userMode) { await loadUserGroupsIfNeeded() }
         .toolbar { if multiple { ToolbarItem(placement: .confirmationAction) { Button("完成") { finishPicking() } } } }
         // The top "完成" is replaced by the search bar while searching, so multi-select also keeps a
         // bottom button that is always there. It says how many are ticked.
@@ -327,7 +330,6 @@ struct ReferencePicker: View {
                 switch source {
                 case .users:
                     response = try await session.request("security/getSelectableUsersByFactory")
-                    userGroups = try await session.request("user/getUserGroupsByFactoryId").array
                 case .workflowUsers: response = try await session.request("workflow/searchTransferUsers", query: ["keyword": query, "size": "20"])
                 case .departments: response = try await session.request("dept/getDeptSimpleTree")
                 case .divisions: response = try await session.request("erp/getAllDivisionByFactoryId")
@@ -338,7 +340,12 @@ struct ReferencePicker: View {
                 }
                 values = response.array.filter { source != .users || $0["enabled"] != .bool(false) }
             }
-        } catch { self.error = error.localizedDescription }
+        } catch { if !isCancellation(error) { self.error = error.localizedDescription } }
+    }
+    private func loadUserGroupsIfNeeded() async {
+        guard !preview, source == .users, userMode == 1, userGroups.isEmpty else { return }
+        do { userGroups = try await session.request("user/getUserGroupsByFactoryId").array }
+        catch { if !isCancellation(error) { self.error = error.localizedDescription } }
     }
 }
 

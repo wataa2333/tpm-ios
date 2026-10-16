@@ -142,6 +142,7 @@ final class LiveSession: ObservableObject {
         } else if update != errSecSuccess { throw APIError(message: "无法更新登录会话") }
     }
     func signOut() {
+        UserDirectory.shared.clear()
         scopeRevision = UUID()
         authentication = [:]
         SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.personal.tpm", kSecAttrAccount as String: account] as CFDictionary)
@@ -212,6 +213,9 @@ final class LiveSession: ObservableObject {
         catch let error as URLError where error.code != .cancelled {
             throw APIError(message: "网络错误：" + error.localizedDescription, request: label)
         }
+        // The page that asked may be gone by now (left, or the factory or account changed). Its answer is thrown away
+        // here, before anything is decoded, stored or applied.
+        try Task.checkCancellation()
         guard scope == scopeRevision else { throw CancellationError() }
         guard let http = response as? HTTPURLResponse else { throw APIError(message: "服务器响应无效", request: label) }
         guard (200..<300).contains(http.statusCode) else {
@@ -244,6 +248,11 @@ final class LiveSession: ObservableObject {
         body.append(data); body.append(Data("\r\n--\(boundary)--\r\n".utf8)); request.httpBody = body
         return try await perform(request)
     }
+}
+
+/// A request that was cancelled because its page was left is not a failure: nothing is shown for it.
+func isCancellation(_ error: Error) -> Bool {
+    error is CancellationError || (error as? URLError)?.code == .cancelled
 }
 
 func filter(_ field: String, _ value: String, _ operation: String = "eq") -> JSONValue {
@@ -308,7 +317,8 @@ struct NativeLoginView: View {
                 Section("原系统账号") {
                     TextField("账号", text: $username).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled()
                     SecureField("密码", text: $password).textContentType(.password)
-                    Toggle("记住密码", isOn: $remember)
+                    // The app-wide label style is made for "name ... value" rows and misplaces a switch.
+                    Toggle("记住密码", isOn: $remember).labeledContentStyle(.automatic)
                 }
                 Section {
                     Button {

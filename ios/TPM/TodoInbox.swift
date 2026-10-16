@@ -83,7 +83,8 @@ struct TodoCardRow: View, Equatable {
         let kind = todoTaskKind(task)
         WorkOrderCard(title: todoTitle(task), status: todoStatusName(task, kind: kind, data: data), color: kind == .erp ? approvalDisplayColor(data["approvalState"].text) : faultDisplayColor(data["faultState"].text),
             reference: kind == .fault ? data["asset"]["assetCode"].text : data["outNumber"].text,
-            referenceTitle: kind == .fault ? "资产编码" : "出库单号", time: readableDate(task["createTime"]),
+            referenceTitle: kind == .fault ? "资产编码" : "出库单号",
+            machine: kind == .fault ? data["asset"]["addressCode"].text : "", time: readableDate(task["createTime"]),
             facts: [("流程类型", kind?.title ?? "其他流程"), ("当前节点", task["name"].text)] + (kind == .fault ? faultCardFacts(data) : erpCardFacts(data))) {
             if let kind {
                 LiveWorkflowDetail(kind: kind, id: task["businessKey"].text)

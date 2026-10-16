@@ -87,7 +87,9 @@ struct QuickQueryCard: View {
     @State private var text = ""
     @FocusState private var focused: Bool
     private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private func go() { guard !trimmed.isEmpty else { return }; focused = false; search(trimmed) }
+    /// The words go to the result page and the box empties, so coming back to look up another machine
+    /// starts from a blank box and never from the last search.
+    private func go() { guard !trimmed.isEmpty else { return }; let words = trimmed; focused = false; text = ""; search(words) }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center) {
@@ -158,8 +160,6 @@ struct DashboardHome: View {
     @State private var counts: [String: Int] = [:]
     @StateObject private var gate = ReloadGate()
     @State private var loadingCounts = false
-    @State private var pulling = false
-    @State private var pulledDown = false
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
 
     /// The repair-order cards: title, state code, symbol and the matching preview state.
@@ -174,12 +174,9 @@ struct DashboardHome: View {
         return state.map { s in store.faults.filter { $0.state == s }.count }
     }
     var body: some View {
-        ScrollView {
+        // The same scroll container as the todo page, which does not shake when pulled down.
+        CardPage {
             VStack(spacing: 12) {
-                // Always takes its 20pt, only fading in and out: showing it must never move the page, or pulling
-                // the page down (which hides it) and the move that follows would keep triggering each other.
-                ProgressView().frame(maxWidth: .infinity, minHeight: 20)
-                    .opacity((loadingCounts || gate.busy) && !pulling && !pulledDown ? 1 : 0)
                 DashboardHeading(title: "维修工单")
                 NavigationLink {
                     if preview { FaultListView(initialState: .received) } else { LiveWorkflowList(kind: .fault, initialState: "") }
@@ -203,29 +200,33 @@ struct DashboardHome: View {
                 if preview { DemoNotice() }
             }
             .buttonStyle(DashboardPressStyle())
-            .padding(.horizontal, 16).padding(.vertical, 8)
+            // Room under the last card for the floating "+" button.
+            .padding(.horizontal, 16).padding(.bottom, 80)
         }
-        .reportsPulledDown($pulledDown)
-        .background(Color(uiColor: .systemGroupedBackground))
-        .contentMargins(.bottom, 104, for: .scrollContent)
+        // The loading spinner floats over the page instead of sitting in it: it is for the first load and the
+        // refresh button, takes no room, and so can never move the content or fight the pull-down gesture.
+        // Pulling down shows the system spinner only and changes nothing on this page until the numbers arrive.
+        .overlay(alignment: .top) {
+            ProgressView().padding(.top, 6).opacity(loadingCounts || gate.busy ? 1 : 0).allowsHitTesting(false)
+                .animation(.smooth(duration: 0.3), value: loadingCounts || gate.busy)
+        }
         .navigationTitle("主页").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
         .modifier(ListTabVisibility())
         .reloadsToTop(on: gate.id("\(navigation.refresh)"))
-        .task(id: gate.id("\(navigation.refresh)")) { await gate.run(key: "\(navigation.refresh)") { await loadCounts() } }
-        .refreshable { pulling = true; await loadCounts(); pulling = false }
-        .animation(.smooth(duration: 0.45), value: loadingCounts || gate.busy)
+        .task(id: gate.id("\(navigation.refresh)")) { await gate.run(key: "\(navigation.refresh)") { loadingCounts = true; await loadCounts(); loadingCounts = false } }
+        .refreshable { await loadCounts() }
         .rootTopBar(preview: preview, busy: loadingCounts || gate.busy) { gate.request() }
     }
     /// One request per card, each asking for a single row: only `totalElements` is used.
     private func loadCounts() async {
         guard !preview else { return }
-        loadingCounts = true; defer { loadingCounts = false }
         let api = session
         // "所有工单" and "已完结" show no count: the server returns no total for them.
         var queries: [(String, String, [JSONValue])] = []
         queries += states.filter { $0.code != "FINISHED" }.map { ($0.code, "fault/pageAssetFault", [filter("faultState", $0.code)]) }
         queries += [("maintenance", ReadOnlyPoolKind.maintenance.page, ReadOnlyPoolKind.maintenance.waitingFilters),
                     ("precision", ReadOnlyPoolKind.precision.page, ReadOnlyPoolKind.precision.waitingFilters)]
+        var fresh: [String: Int] = [:]
         await withTaskGroup(of: (String, Int?).self) { group in
             for (key, path, filters) in queries {
                 group.addTask {
@@ -233,11 +234,11 @@ struct DashboardHome: View {
                     catch { return (key, nil) }
                 }
             }
-            for await (key, value) in group {
-                guard !Task.isCancelled else { return }
-                if let value { counts[key] = value }
-            }
+            for await (key, value) in group { if let value { fresh[key] = value } }
         }
+        // One update for the whole page, so the cards change together and the page is not redrawn six times.
+        guard !Task.isCancelled else { return }
+        counts.merge(fresh) { _, new in new }
     }
 }
 
@@ -250,8 +251,6 @@ struct DashboardWorkspace: View {
     @State private var counts: [String: Int] = [:]
     @StateObject private var gate = ReloadGate()
     @State private var loadingCounts = false
-    @State private var pulling = false
-    @State private var pulledDown = false
     @State private var route: QuickQuery?
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
     private func count(_ key: String) -> Int? {
@@ -263,12 +262,9 @@ struct DashboardWorkspace: View {
         }
     }
     var body: some View {
-        ScrollView {
+        // The same scroll container as the todo page, which does not shake when pulled down.
+        CardPage {
             VStack(spacing: 12) {
-                // Always takes its 20pt, only fading in and out: showing it must never move the page, or pulling
-                // the page down (which hides it) and the move that follows would keep triggering each other.
-                ProgressView().frame(maxWidth: .infinity, minHeight: 20)
-                    .opacity((loadingCounts || gate.busy) && !pulling && !pulledDown ? 1 : 0)
                 DashboardHeading(title: "资产")
                 NavigationLink {
                     if preview { AssetListView() } else { LiveCatalogView(source: .assets) }
@@ -288,36 +284,42 @@ struct DashboardWorkspace: View {
                 if preview { DemoNotice() }
             }
             .buttonStyle(DashboardPressStyle())
-            .padding(.horizontal, 16).padding(.vertical, 8)
+            // Room under the last card for the floating "+" button.
+            .padding(.horizontal, 16).padding(.bottom, 80)
         }
         .scrollDismissesKeyboard(.interactively)
         .navigationDestination(item: $route) { query in
             if preview { FaultListView(initialState: .received) }
-            else { LiveWorkflowList(kind: .fault, initialState: "", initialQuery: query.text, initialField: query.field, title: query.field == .machine ? "机台号 " + query.text : "资产编码 " + query.text) }
+            // A new identity per query: every query opens a fresh page (own list, search, filters, scroll),
+            // so nothing of an earlier query is carried over into it.
+            else { LiveWorkflowList(kind: .fault, initialState: "", initialQuery: query.text, initialField: query.field, title: query.field == .machine ? "机台号 " + query.text : "资产编码 " + query.text).id(query.id) }
         }
-        .reportsPulledDown($pulledDown)
-        .background(Color(uiColor: .systemGroupedBackground))
-        .contentMargins(.bottom, 104, for: .scrollContent)
+        // The loading spinner floats over the page instead of sitting in it: it is for the first load and the
+        // refresh button, takes no room, and so can never move the content or fight the pull-down gesture.
+        // Pulling down shows the system spinner only and changes nothing on this page until the numbers arrive.
+        .overlay(alignment: .top) {
+            ProgressView().padding(.top, 6).opacity(loadingCounts || gate.busy ? 1 : 0).allowsHitTesting(false)
+                .animation(.smooth(duration: 0.3), value: loadingCounts || gate.busy)
+        }
         .navigationTitle("工作台").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
         .modifier(ListTabVisibility())
         // Loads by itself only the first time, when nothing is shown yet. After that it is manual only:
         // the refresh button or pulling the page down.
         .reloadsToTop(on: gate.id("workspace"))
-        .task(id: gate.id("workspace")) { await gate.run(key: "workspace") { await loadCounts() } }
-        .refreshable { pulling = true; await loadCounts(); pulling = false }
-        .animation(.smooth(duration: 0.45), value: loadingCounts || gate.busy)
+        .task(id: gate.id("workspace")) { await gate.run(key: "workspace") { loadingCounts = true; await loadCounts(); loadingCounts = false } }
+        .refreshable { await loadCounts() }
         .rootTopBar(preview: preview, busy: loadingCounts || gate.busy) { gate.request() }
     }
     /// One request per card asking for a single row: only `totalElements` is used.
     private func loadCounts() async {
         guard !preview else { return }
-        loadingCounts = true; defer { loadingCounts = false }
         let api = session
         let queries: [(String, String, [JSONValue])] = [
             ("assets", "asset/pageAsset", []),
             ("outbound", WorkflowKind.erp.page, []),
             ("stock", "erpOutbound/pageErpMaterial", [.object(["field": .string("onhandQty"), "operator": .string("gt"), "value": .number(0)])])
         ]
+        var fresh: [String: Int] = [:]
         await withTaskGroup(of: (String, Int?).self) { group in
             for (key, path, filters) in queries {
                 group.addTask {
@@ -325,11 +327,10 @@ struct DashboardWorkspace: View {
                     catch { return (key, nil) }
                 }
             }
-            for await (key, value) in group {
-                guard !Task.isCancelled else { return }
-                if let value { counts[key] = value }
-            }
+            for await (key, value) in group { if let value { fresh[key] = value } }
         }
+        guard !Task.isCancelled else { return }
+        counts.merge(fresh) { _, new in new }
         if counts.isEmpty { gate.markIncomplete("main") }
     }
 }

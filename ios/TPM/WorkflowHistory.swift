@@ -170,7 +170,10 @@ func commentTypeText(_ comment: JSONValue) -> String {
 /// user name → real name, asked of the server once and kept for the session (as the original does).
 @MainActor
 final class UserDirectory: ObservableObject {
+    /// One directory for the whole signed-in session, so a name looked up once is not asked for again by the next page.
+    static let shared = UserDirectory()
     @Published private(set) var realNames: [String: String] = [:]
+    func clear() { realNames = [:] }
     func name(_ userName: String) -> String { realNames[userName].flatMap { $0.isEmpty ? nil : $0 } ?? userName }
     func resolve(_ userNames: [String], session: LiveSession) async {
         let missing = userNames.filter { realNames[$0] == nil }

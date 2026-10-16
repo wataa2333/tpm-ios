@@ -70,7 +70,7 @@ struct AssetRecordDetail: View {
                 CardGroup {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                         let repair = assetRepairRecord(row, asset: asset)
-                        WorkOrderCard(title: repair["faultName"].text, status: faultStateName(repair["faultState"].text), reference: repair["asset"]["assetCode"].text, time: readableDate(repair["faultTime"]), facts: faultCardFacts(repair)) {
+                        WorkOrderCard(title: repair["faultName"].text, status: faultStateName(repair["faultState"].text), reference: repair["asset"]["assetCode"].text, machine: repair["asset"]["addressCode"].text, time: readableDate(repair["faultTime"]), facts: faultCardFacts(repair)) {
                             if preview { FaultDetailView(id: "BX-20261015-001") }
                             else { LiveWorkflowDetail(kind: .fault, id: row["faultId"].text) }
                         }

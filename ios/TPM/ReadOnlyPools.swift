@@ -42,12 +42,13 @@ struct ReadOnlyPoolView: View {
             CardGroup {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     WorkOrderCard(title: row[kind.nameKey].text, status: "待接单", color: kind.color,
-                        reference: row["asset"]["assetCode"].text,
+                        reference: row["asset"]["assetCode"].text, machine: row["asset"]["addressCode"].text,
                         time: readableDate(row["planStartDate"]), facts: facts(row)) {
                         List {
                             Section("工单信息") {
                                 LabeledContent("工单名称", value: row[kind.nameKey].text)
                                 LabeledContent("状态", value: "待接单")
+                                if !row["asset"]["addressCode"].text.isEmpty { LabeledContent("机台号", value: row["asset"]["addressCode"].text) }
                                 ForEach(Array(facts(row).enumerated()), id: \.offset) { _, fact in
                                     LabeledContent(fact.0, value: fact.1)
                                 }
@@ -73,7 +74,7 @@ struct ReadOnlyPoolView: View {
     }
     private func facts(_ row: JSONValue) -> [(String, String)] {
         [("单号", row["sn"].text), ("资产编码", row["asset"]["assetCode"].text),
-         ("资产名称", row["asset"]["assetName"].text), ("机台号", row["asset"]["addressCode"].text),
+         ("资产名称", row["asset"]["assetName"].text),
          ("地址", row["asset"]["address"].text), ("申请人", row["applyUser"].object.label),
          ("受理部门", row["dept"].object.label), ("受理组别", row["userGroup"].object.label),
          ("受理人", row["user"].object.label), ("计划开始", readableDate(row["planStartDate"])),
