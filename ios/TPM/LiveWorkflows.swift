@@ -99,7 +99,7 @@ struct LiveWorkflowList: View {
     var body: some View {
         CardPage {
             if kind == .fault { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? -1 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
-            if let dateRange { DateRangeChip(range: dateRange) { dateRange = nil } }
+            if let dateRange { DateRangeChip(range: dateRange) { self.dateRange = nil } }
             LoadingRow(isPresented: (loading || gate.busy) && !refreshing, title: "正在加载工单")
             if kind == .fault && searching { CardGroup { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }.padding(.horizontal, 16).padding(.vertical, 6) } }
             CardGroup {
