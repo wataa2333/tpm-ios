@@ -114,7 +114,7 @@ struct CharacterCount: View {
 struct DetailTabVisibility: ViewModifier {
     @EnvironmentObject private var navigation: BottomNavigationModel
     func body(content: Content) -> some View {
-        content.background { NativeTabVisibility(hidden: true).frame(width: 0, height: 0) }
+        content.background { NativeTabVisibility(hidden: navigation.hideTabs).frame(width: 0, height: 0) }
             .onAppear { navigation.hideTabs = true }
     }
 }
@@ -124,7 +124,7 @@ struct DetailTabVisibility: ViewModifier {
 struct ListTabVisibility: ViewModifier {
     @EnvironmentObject private var navigation: BottomNavigationModel
     func body(content: Content) -> some View {
-        content.background { NativeTabVisibility(hidden: false).frame(width: 0, height: 0) }
+        content.background { NativeTabVisibility(hidden: navigation.hideTabs).frame(width: 0, height: 0) }
             .onAppear { navigation.hideTabs = false }
     }
 }

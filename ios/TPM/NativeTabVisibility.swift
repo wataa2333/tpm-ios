@@ -12,16 +12,21 @@ struct NativeTabVisibility: UIViewControllerRepresentable {
     }
     func updateUIViewController(_ controller: VisibilityController, context: Context) {
         controller.hidden = hidden
+        controller.applyVisibility(animated: !context.transaction.disablesAnimations)
     }
     final class VisibilityController: UIViewController {
         var hidden = false
+        func applyVisibility(animated: Bool) {
+            guard let tabs = tabBarController, tabs.isTabBarHidden != hidden else { return }
+            tabs.setTabBarHidden(hidden, animated: animated && !UIAccessibility.isReduceMotionEnabled)
+        }
         override func viewWillAppear(_ animated: Bool) {
             super.viewWillAppear(animated)
-            tabBarController?.setTabBarHidden(hidden, animated: animated && !UIAccessibility.isReduceMotionEnabled)
+            applyVisibility(animated: animated)
         }
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
-            tabBarController?.setTabBarHidden(hidden, animated: animated && !UIAccessibility.isReduceMotionEnabled)
+            applyVisibility(animated: animated)
         }
     }
 }
