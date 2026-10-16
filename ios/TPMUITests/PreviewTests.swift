@@ -188,16 +188,41 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["申请数量：1 件"].exists)
         capture(app, "Repair linked ERP materials")
     }
-    func testFactorySelectionRequiresDifferentFactory() {
+    func testFactoryMenuSwitchesImmediatelyWithoutChooserOrConfirmation() {
         let app = XCUIApplication()
-        app.launchArguments = ["--screen", "factories"]
+        app.launchArguments = ["--screen", "home"]
         app.launch()
-        XCTAssertTrue(app.buttons["示例一厂"].waitForExistence(timeout: 20))
-        XCTAssertFalse(app.buttons["切换"].isEnabled)
+        let menu = app.buttons["切换厂区，当前示例一厂"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 20))
+        menu.tap()
+        XCTAssertTrue(app.buttons["示例二厂"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["示例一厂"].isEnabled, "当前厂区不能重复选择")
         app.buttons["示例二厂"].tap()
-        XCTAssertTrue(app.buttons["切换"].isEnabled)
-        XCTAssertEqual(app.buttons["示例二厂"].value as? String, "已选择")
-        capture(app, "Factory selection")
+        // No full-screen chooser, no confirmation: the toolbar simply shows the new factory.
+        XCTAssertTrue(app.buttons["切换厂区，当前示例二厂"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.navigationBars["切换厂区"].exists)
+        XCTAssertFalse(app.sheets.firstMatch.exists)
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+    }
+    func testSigningInKeepsTheOrderOpenOnItsNextStepAndBackReturnsOnce() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "signed"]
+        app.launch()
+        app.buttons["order-title-FA-CNC-008"].firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["报修详情"].waitForExistence(timeout: 10))
+        app.buttons["签到"].firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["任务签到"].waitForExistence(timeout: 10))
+        // The detail's own 签到 button stays behind the sheet; tap the one that is reachable.
+        let signNow = app.buttons.matching(NSPredicate(format: "label == %@ AND hittable == true", "签到")).firstMatch
+        XCTAssertTrue(signNow.waitForExistence(timeout: 5))
+        signNow.tap()
+        // The next step is shown on the same order, not the stale 待签到 page.
+        XCTAssertTrue(app.buttons["维修处理"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars["报修详情"].isHittable)
+        app.navigationBars.buttons.firstMatch.tap()
+        let listReturned = expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: app.navigationBars["故障报修"])
+        wait(for: [listReturned], timeout: 10)
+        XCTAssertFalse(app.navigationBars["报修详情"].isHittable, "返回一次就应回到列表")
     }
     private func capture(_ app: XCUIApplication, _ name: String) {
         guard ProcessInfo.processInfo.environment["TPM_CAPTURE_SCREENSHOTS"] == "true" else { return }
@@ -333,17 +358,43 @@ final class PreviewTests: XCTestCase {
         XCTAssertFalse(app.navigationBars["报修详情"].isHittable, "打开工单后只需返回一次")
     }
 
+    func testRepairCompletionRequiresNextNodeApproverBeforeConfirming() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "repair-commit"]
+        app.launch()
+        let approver = app.buttons["assignee-demoRepairConfirmUser"]
+        XCTAssertTrue(approver.waitForExistence(timeout: 15), app.debugDescription)
+        let submit = app.buttons["提交"]
+        let enabled = expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: submit)
+        wait(for: [enabled], timeout: 10)
+        // Nothing chosen: submitting is refused and names the next node; no confirmation sheet opens.
+        submit.tap()
+        XCTAssertTrue(app.alerts["提交未完成"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.alerts.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "【维修】确认")).firstMatch.exists)
+        XCTAssertFalse(app.sheets.buttons["提交"].exists)
+        app.alerts.buttons["好"].tap()
+        // Choose the approver, then the normal confirmation is offered.
+        approver.tap()
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "示例审批人")).firstMatch.tap()
+        XCTAssertTrue(approver.waitForExistence(timeout: 5))
+        submit.tap()
+        XCTAssertTrue(app.sheets.buttons["提交"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.alerts["提交未完成"].exists)
+    }
+
     func testSearchDoesNotFollowNewSheetAndNativeDateControlsFit() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "faults"]
         app.launch()
         XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 15))
         app.searchFields.firstMatch.tap()
-        XCTAssertTrue(app.buttons["取消搜索"].waitForExistence(timeout: 5))
-        app.buttons["取消搜索"].tap()
+        let cancelSearch = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "取消", "Cancel")).firstMatch
+        XCTAssertTrue(cancelSearch.waitForExistence(timeout: 5))
+        cancelSearch.tap()
         app.buttons["新建报修"].tap()
         XCTAssertTrue(app.buttons["取消"].waitForExistence(timeout: 10))
-        XCTAssertEqual(app.searchFields.count, 0)
+        // The list's search field stays behind the sheet; it must not be reachable from the form.
+        XCTAssertFalse(app.searchFields.allElementsBoundByIndex.contains { $0.isHittable })
         let date = app.datePickers["date-value-故障时间"]
         for _ in 0..<4 where !date.isHittable { app.swipeUp() }
         let time = app.datePickers["time-value-故障时间"]
@@ -351,7 +402,7 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(time.isHittable)
         XCTAssertLessThan(date.frame.maxX, time.frame.minX + 1)
         XCTAssertLessThanOrEqual(time.frame.maxX, app.frame.maxX - 16)
-        XCTAssertEqual(app.searchFields.count, 0)
+        XCTAssertFalse(app.searchFields.allElementsBoundByIndex.contains { $0.isHittable })
     }
 
     private func expansionControl(_ app: XCUIApplication) -> XCUIElement {

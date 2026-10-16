@@ -101,7 +101,7 @@ struct DashboardHome: View {
         }
         .background(Color(uiColor: .systemGroupedBackground))
         .contentMargins(.bottom, 104, for: .scrollContent)
-        .navigationTitle("主页").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .navigationTitle("主页").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
         .modifier(ListTabVisibility())
         .toolbar { ToolbarItem(placement: .topBarTrailing) {
             if preview { PreviewFactoryButton() } else { FactorySwitcherButton() }

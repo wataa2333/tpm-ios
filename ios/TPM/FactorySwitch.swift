@@ -1,107 +1,60 @@
 import SwiftUI
 
+/// Toolbar menu for the account's factories. Choosing another factory switches at once;
+/// there is no full-screen chooser and no confirmation step.
 struct PreviewFactoryButton: View {
-    @State private var shown = false
+    @State private var current = "示例一厂"
+    private let factories = ["示例一厂", "示例二厂"]
     var body: some View {
-        Button { shown = true } label: { FactoryNameLabel(name: "示例一厂") }
-            .buttonStyle(.plain)
-            .accessibilityLabel("切换厂区")
-            .sheet(isPresented: $shown) { NavigationStack { FactorySwitchView(preview: true) } }
+        Menu {
+            ForEach(factories, id: \.self) { name in
+                Button { current = name } label: {
+                    if name == current { Label(name, systemImage: "checkmark") } else { Text(name) }
+                }.disabled(name == current)
+            }
+        } label: { FactoryNameLabel(name: current) }
+            .accessibilityLabel("切换厂区，当前" + current)
     }
 }
 
 struct FactorySwitcherButton: View {
     @EnvironmentObject private var session: LiveSession
-    @State private var presented = false
+    @State private var switching = false
+    @State private var failure: String?
     var body: some View {
-        Button { presented = true } label: {
-            FactoryNameLabel(name: session.currentFactoryName)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("切换厂区，当前" + session.currentFactoryName)
-        .sheet(isPresented: $presented) { NavigationStack { FactorySwitchView() } }
+        Menu {
+            ForEach(Array(session.factories.enumerated()), id: \.offset) { _, factory in
+                let id = factory["factoryId"].text, name = factory["factoryName"].text
+                Button { Task { await change(to: id) } } label: {
+                    if id == session.currentFactoryID { Label(name, systemImage: "checkmark") } else { Text(name) }
+                }.disabled(id == session.currentFactoryID)
+            }
+        } label: { FactoryNameLabel(name: session.currentFactoryName) }
+            .disabled(switching)
+            .accessibilityLabel("切换厂区，当前" + session.currentFactoryName)
+            // Keep the list current; the stored one comes from sign-in time.
+            .task { try? await session.refreshFactories() }
+            .alert("切换厂区失败", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+                Button("好", role: .cancel) {}
+            } message: { Text(failure ?? "") }
+    }
+    private func change(to id: String) async {
+        guard !switching else { return }
+        switching = true
+        defer { switching = false }
+        do { try await session.changeFactory(to: id) }
+        catch is CancellationError {}
+        catch { failure = error.localizedDescription }
     }
 }
 
+/// Natural width, wrapping onto a second line for long names instead of a fixed-width slot.
 private struct FactoryNameLabel: View {
     let name: String
     var body: some View {
-        HStack(spacing: 6) {
-            Text(name).lineLimit(nil).fixedSize(horizontal: false, vertical: true)
-                .frame(width: 156, alignment: .leading)
-            Image(systemName: "chevron.up.chevron.down").font(.caption)
-        }.font(.subheadline).padding(.vertical, 2)
-    }
-}
-
-struct FactorySwitchView: View {
-    @EnvironmentObject private var session: LiveSession
-    @Environment(\.dismiss) private var dismiss
-    var preview = false
-    @State private var selection = ""
-    @State private var loading = true
-    @State private var ready = false
-    @State private var switching = false
-    @State private var confirming = false
-    @State private var error: String?
-    private var factories: [JSONValue] {
-        preview ? [
-            .object(["factoryId": .number(1), "factoryName": .string("示例一厂")]),
-            .object(["factoryId": .number(2), "factoryName": .string("示例二厂")])
-        ] : session.factories
-    }
-    private var currentID: String { preview ? "1" : session.currentFactoryID }
-    private var selectedName: String { factories.first { $0["factoryId"].text == selection }?["factoryName"].text ?? "" }
-    var body: some View {
-        List {
-            Section("可访问的厂区") {
-                ForEach(factories, id: \.self) { factory in
-                    Button { selection = factory["factoryId"].text } label: {
-                        HStack(spacing: 10) {
-                            WrappingContent { Text(factory["factoryName"].text).foregroundStyle(.primary) }
-                            if factory["factoryId"].text == currentID { Text("当前").font(.caption).foregroundStyle(.secondary) }
-                            Spacer(minLength: 12)
-                            if selection == factory["factoryId"].text { Image(systemName: "checkmark").foregroundStyle(.tint) }
-                        }
-                    }
-                    .accessibilityLabel(factory["factoryName"].text)
-                    .accessibilityValue(selection == factory["factoryId"].text ? "已选择" : "未选择")
-                    .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
-                    .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
-                }
-            }
-            if let error { Section { Text(error).foregroundStyle(.red); Button("重新加载") { Task { await load() } } } }
-            if preview { Text("厂区切换界面预览，使用示例厂区，不会切换真实账号。").font(.footnote).foregroundStyle(.secondary) }
-        }
-        .disabled(loading || switching)
-        .overlay { if loading { ProgressView("正在加载厂区…") } }
-        .navigationTitle("切换厂区").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(switching) }
-            ToolbarItem(placement: .confirmationAction) {
-                Button { confirming = true } label: {
-                    HStack { if switching { ProgressView() }; Text("切换") }
-                }.disabled(!ready || loading || switching || selection.isEmpty || selection == currentID)
-            }
-        }
-        .interactiveDismissDisabled(switching)
-        .task { selection = currentID; await load() }
-        .confirmationDialog("切换到\(selectedName)？", isPresented: $confirming, titleVisibility: .visible) {
-            Button("切换厂区") { Task { await change() } }
-        } message: { Text("切换后将重新加载该厂区的单据，未保存的表单会关闭。") }
-    }
-    private func load() async {
-        loading = true; ready = false; error = nil
-        defer { loading = false }
-        if preview { ready = true; return }
-        do { try await session.refreshFactories(); ready = true }
-        catch { self.error = error.localizedDescription }
-    }
-    private func change() async {
-        guard !preview, !switching, ready else { return }
-        switching = true; error = nil
-        defer { switching = false }
-        do { try await session.changeFactory(to: selection); dismiss() }
-        catch { self.error = error.localizedDescription }
+        HStack(spacing: 4) {
+            Text(name).lineLimit(2).multilineTextAlignment(.trailing).fixedSize(horizontal: false, vertical: true)
+            Image(systemName: "chevron.up.chevron.down").font(.caption2)
+        }.font(.subheadline).frame(maxWidth: 200, alignment: .trailing)
     }
 }

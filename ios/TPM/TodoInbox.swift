@@ -15,9 +15,7 @@ struct TodoInboxView: View {
     private let keys = ["", "ASSET_FAULT", "ERP_OUTBOUND"]
 
     var body: some View {
-        VStack(spacing: 0) {
-            HorizontalCategories(titles: categories, selection: Binding(get: { keys.firstIndex(of: category) ?? 0 }, set: { category = keys[$0] }))
-            List {
+        List {
                 if preview {
                     Section {
                         if category != "ERP_OUTBOUND" {
@@ -53,14 +51,19 @@ struct TodoInboxView: View {
                     if let error { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } }
                 }
             }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            HorizontalCategories(titles: categories, selection: Binding(get: { keys.firstIndex(of: category) ?? 0 }, set: { category = keys[$0] }))
         }
         .navigationTitle("我的待办")
-        .searchPageChrome()
+        .searchPageChrome(largeTitle: true)
         .nativeSearchable(text: $query, prompt: "搜索待办名称")
         .task(id: "\(navigation.refresh)-\(category)-\(query)") { await load() }
         .refreshable { await load() }
         .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载待办…") }
-        .onAppear { navigation.newDocument = .fault; navigation.hideTabs = false }
+        .onAppear {
+            navigation.newDocument = .fault; navigation.hideTabs = false
+            if navigation.pendingListRefresh { navigation.pendingListRefresh = false; navigation.refresh = UUID() }
+        }
         .onDisappear { navigation.newDocument = nil }
     }
 

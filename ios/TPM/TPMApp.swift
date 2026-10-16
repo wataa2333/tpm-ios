@@ -10,7 +10,6 @@ struct TPMApp: App {
         WindowGroup {
             GeometryReader { geometry in
                 PreviewRouter().modifier(KeyboardTabVisibility())
-                    .environment(\.loadingViewport, geometry.frame(in: .global))
                     .environment(\.bottomSafeArea, geometry.safeAreaInsets.bottom)
                     .environmentObject(store).environmentObject(session).environmentObject(navigation)
                     .labeledContentStyle(SafeFactsStyle())
@@ -137,13 +136,14 @@ struct MainTabs: View {
     init(selection: Int = 0, previewFaultList: Bool = false) { _selection = State(initialValue: selection); self.previewFaultList = previewFaultList }
     var body: some View {
         NativeTabShell(selection: $selection, preview: true) {
-            NavigationStack { HomeView() }.tabItem { Label("主页", systemImage: "house") }.tag(0)
+            NavigationStack { HomeView() }.newDocumentButton(preview: true).tabItem { Label("主页", systemImage: "house") }.tag(0)
             NavigationStack {
                 if previewFaultList { FaultListView() } else { TodoInboxView(preview: true) }
             }
+            .newDocumentButton(preview: true)
             .tabItem { Label("我的待办", systemImage: "checklist") }.tag(2)
-            NavigationStack { WorkspaceView() }.tabItem { Label("工作台", systemImage: "square.grid.2x2") }.tag(1)
-            NavigationStack { ProfileView() }.tabItem { Label("我的", systemImage: "person.crop.circle") }.tag(3)
+            NavigationStack { WorkspaceView() }.newDocumentButton(preview: true).tabItem { Label("工作台", systemImage: "square.grid.2x2") }.tag(1)
+            NavigationStack { ProfileView() }.newDocumentButton(preview: true).tabItem { Label("我的", systemImage: "person.crop.circle") }.tag(3)
         }
     }
 }
@@ -197,10 +197,6 @@ struct FaultListView: View {
         }
     }
     var body: some View {
-        VStack(spacing: 0) {
-            WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex(of: state)! }, set: { state = FaultState.allCases[$0] }), counts: Dictionary(uniqueKeysWithValues: FaultState.allCases.map { stage in
-                (stage.code, store.faults.filter { $0.state == stage }.count)
-            }))
         List {
             if searching { Section {
                 Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }
@@ -222,6 +218,10 @@ struct FaultListView: View {
             let index = FaultState.allCases.firstIndex(of: state)!
             state = FaultState.allCases[min(max(index + (value.translation.width < 0 ? 1 : -1), 0), FaultState.allCases.count - 1)]
         })
+        .safeAreaInset(edge: .top, spacing: 0) {
+            WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex(of: state)! }, set: { state = FaultState.allCases[$0] }), counts: Dictionary(uniqueKeysWithValues: FaultState.allCases.map { stage in
+                (stage.code, store.faults.filter { $0.state == stage }.count)
+            }))
         }
         .navigationTitle("故障报修").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .searchPageChrome(isSearching: searching)
@@ -234,6 +234,11 @@ struct FaultListView: View {
             navigation.newDocument = .fault
             navigation.keyboardVisible = false
             navigation.hideTabs = false
+            // Orders advanced inside an open detail join their new step only now that the list is back.
+            for (id, next) in navigation.pendingAdvance {
+                if let index = store.faults.firstIndex(where: { $0.id == id }) { store.faults[index].state = next }
+            }
+            navigation.pendingAdvance = [:]
         }
         .onDisappear { if navigation.newDocument == .fault { navigation.newDocument = nil } }
         .sheet(isPresented: $creating) { NavigationStack { NewFaultView() } }
@@ -270,7 +275,18 @@ struct FaultDetailView: View {
             if let closeWorkOrder { closeWorkOrder() } else { dismiss() }
         }
     }
-    private var fault: Fault? { store.faults.first { $0.id == id } }
+    /// Signing in moves the order to its next step and keeps showing it; back returns to the list.
+    private func signCompleted() {
+        navigation.pendingAdvance[id] = .working
+        processing = false
+    }
+    private var storedFault: Fault? { store.faults.first { $0.id == id } }
+    /// The stored order with any step it has advanced to while this detail is open.
+    private var fault: Fault? {
+        guard var value = storedFault else { return nil }
+        if let advanced = navigation.pendingAdvance[id] { value.state = advanced }
+        return value
+    }
     var body: some View {
         Group {
             if let fault {
@@ -311,7 +327,7 @@ struct FaultDetailView: View {
                 }
                 .sheet(isPresented: $processing, onDismiss: taskSheetClosed) {
                     NavigationStack {
-                        if fault.state == .signed { SignInPreview(asset: fault.asset, onCompleted: completed) }
+                        if fault.state == .signed { SignInPreview(asset: fault.asset, onCompleted: signCompleted) }
                         else if fault.state == .working { OriginalRepairForm(faultID: id, task: .object(["name": .string("维修处理")]), preview: true, onCompleted: completed) }
                         else { WorkflowTaskView(task: .object(["name": .string(fault.state.actionTitle), "category": .string(fault.state.code)]), kind: .fault, preview: true, onCompleted: completed) }
                     }
@@ -549,7 +565,7 @@ struct ProfileView: View {
             Section("应用") { LabeledContent("版本", value: "0.5.0"); LabeledContent("数据来源", value: "模拟数据") }
             Section { Text("账号、工厂和业务权限将在对接原服务器后显示。").foregroundStyle(.secondary) }
         }
-        .navigationTitle("我的").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .navigationTitle("我的").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
     }
 }
 
@@ -574,6 +590,7 @@ struct PreviewScreen: View {
         case "resolved-detail": NavigationStack { FaultDetailView(id: "BX-20261010-001") }
         case "draft-detail": NavigationStack { FaultDetailView(id: "BX-20261016-001") }
         case "confirm-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("确认完成"), "category": .string("VERIFIED")]), kind: .fault, preview: true) }
+        case "repair-commit": NavigationStack { WorkflowTaskView(task: .object(["name": .string("完成任务"), "category": .string("REPAIRED")]), kind: .fault, preview: true) }
         case "reject-confirm": NavigationStack { WorkflowTaskView(task: .object(["name": .string("确认完成"), "category": .string("VERIFIED")]), kind: .fault, preview: true, previewCondition: "reject") }
         case "resolve-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("复线确认"), "category": .string("RESOLVED")]), kind: .fault, preview: true) }
         case "reject-resolve": NavigationStack { WorkflowTaskView(task: .object(["name": .string("复线确认"), "category": .string("RESOLVED")]), kind: .fault, preview: true, previewCondition: "reject") }
@@ -588,7 +605,6 @@ struct PreviewScreen: View {
         case "erp-form": NavigationStack { OriginalERPForm(preview: true) }
         case "workflow": NavigationStack { WorkflowNodesView(processID: "", preview: true) }
         case "loading": ZStack { NavigationStack { FaultListView() }; LoadingOverlay(title: "正在加载工单…") }
-        case "factories": NavigationStack { FactorySwitchView(preview: true) }
         case "login": NativeLoginView()
         case "asset-picker": NavigationStack { ReferencePicker(source: .assets, preview: true) { _ in } }
         case "user-picker": NavigationStack { ReferencePicker(source: .users, preview: true) { _ in } }

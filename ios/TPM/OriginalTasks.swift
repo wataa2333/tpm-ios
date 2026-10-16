@@ -19,6 +19,12 @@ struct OriginalRepairForm: View {
     @State private var confirming = false
     @State private var submitAfterSave = false
     @State private var showValidation = false
+    /// True when the alert reports a failed server call rather than a form validation problem.
+    @State private var failedOnServer = false
+    /// The original opens the next step from the freshly loaded `repair.assetFault.taskInfo`,
+    /// not from the possibly older task held by the detail page.
+    @State private var latestTask: JSONValue = .null
+    private var workflowTask: JSONValue { latestTask["id"].text.isEmpty ? task : latestTask }
     private func field(_ key: String) -> Binding<JSONValue> { Binding(get: { data[key] ?? .null }, set: { data[key] = $0 }) }
     private func text(_ key: String) -> Binding<String> { Binding(get: { data.text(key) }, set: { data[key] = .string($0) }) }
     private func useQuantity(_ index: Int) -> Binding<Double> { Binding(get: { data["erpRepairMaterials"]!.array[index]["useNum"].number }, set: { quantity in var rows = data["erpRepairMaterials"]!.array; var row = rows[index].object; row["useNum"] = .number(quantity); rows[index] = .object(row); data["erpRepairMaterials"] = .array(rows) }) }
@@ -84,9 +90,9 @@ struct OriginalRepairForm: View {
                 catch { self.error = error.localizedDescription }
             } } }
         }
-        .sheet(isPresented: $workflow, onDismiss: { Task { await load() } }) { NavigationStack { WorkflowTaskView(task: task, kind: .fault, onCompleted: { onCompleted?(); dismiss() }) } }
+        .sheet(isPresented: $workflow, onDismiss: { Task { await load() } }) { NavigationStack { WorkflowTaskView(task: workflowTask, kind: .fault, onCompleted: { onCompleted?(); dismiss() }) } }
         .confirmationDialog(submitAfterSave ? "保存维修结果并继续提交审批？" : "保存维修结果到原系统？", isPresented: $confirming, titleVisibility: .visible) { Button(submitAfterSave ? "继续" : "保存") { Task { await save() } } }
-        .alert("请检查表单", isPresented: $showValidation) { Button("好", role: .cancel) { error = nil } } message: { Text(error ?? "") }
+        .alert(failedOnServer ? "保存未完成" : "请检查表单", isPresented: $showValidation) { Button("好", role: .cancel) { if !failedOnServer { error = nil } } } message: { Text(error ?? "") }
     }
     private func load() async {
         loading = true; error = nil; defer { loading = false }
@@ -97,11 +103,12 @@ struct OriginalRepairForm: View {
         do {
             let repair = try await session.request("fault/getLatestRepairByFaultId", query: ["faultId": faultID])
             data = repair.object
+            latestTask = repair["assetFault"]["taskInfo"]
             if data["spend"] == nil { data["spend"] = .number(0) }
             data["startTime"] = .string(serverDate(parsedDate(repair["signTime"] == .null ? repair["createTime"] : repair["signTime"])))
             data["endTime"] = .string(serverDate(Date()))
             data["erpRepairMaterials"] = try await session.request("erpOutbound/getErpRepairMaterialsByRepairId", query: ["repairId": repair["repairId"].text])
-        } catch { self.error = error.localizedDescription }
+        } catch { self.error = stageFailureMessage("加载维修任务", error) }
     }
     private func addMaterial(_ material: JSONValue, allowUnissued: Bool = false) {
         guard !material["material"].object.isEmpty else { error = "此出库ERP物料信息丢失，请与ERP联系"; return }
@@ -112,6 +119,7 @@ struct OriginalRepairForm: View {
         data["erpRepairMaterials"] = .array(rows)
     }
     private func prepare(_ submit: Bool) {
+        failedOnServer = false
         showValidation = true
         guard data["faultType"] != nil, data["faultType"] != .null else { error = "请选择故障类型"; return }
         if data.text("content").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { error = "请输入说明"; return }
@@ -125,11 +133,21 @@ struct OriginalRepairForm: View {
     }
     private func save() async {
         guard !preview, !saving else { return }
+        guard let repairID = data["repairId"], repairID != .null else {
+            error = "保存维修结果失败：没有取得维修记录编号，请关闭后重新打开此任务"
+            failedOnServer = true; showValidation = true
+            return
+        }
         saving = true; error = nil; defer { saving = false }
         do {
-            _ = try await session.request("repair/handleRepair", body: .object(data))
+            // Same body as the original client: registered form fields + repairId + ERP lines,
+            // not the whole record returned by getLatestRepairByFaultId.
+            _ = try await session.request("repair/handleRepair", body: .object(repairSubmissionPayload(data, repairID: repairID)))
             if submitAfterSave { workflow = true } else { onCompleted?(); dismiss() }
-        } catch { self.error = error.localizedDescription }
+        } catch {
+            self.error = stageFailureMessage("保存维修结果", error)
+            failedOnServer = true; showValidation = true
+        }
     }
 }
 
@@ -153,6 +171,8 @@ struct WorkflowTaskView: View {
     @State private var submitting = false
     @State private var confirming = false
     @State private var error: String?
+    /// Shown in an alert: a missing next-node approver, or a failed server call with its stage.
+    @State private var failure: String?
     @State private var handoff: String?
     @State private var ready = false
     @State private var assignmentsReady = false
@@ -225,7 +245,7 @@ struct WorkflowTaskView: View {
             DocumentActions(busy: submitting, submitting: true,
                             disabled: !state["canSubmit"].bool || !ready || !assignmentsReady || assignmentsLoading || loading || condition.isEmpty,
                             submitTitle: task["category"].text == "SIGNED" && condition == "agree" ? "签到" : "提交",
-                            submit: { if task["category"].text == "SIGNED" && condition == "agree" { Task { await submit() } } else { confirming = true } })
+                            submit: { requestSubmit() })
         }
         .task { if !ready { await load() } }
         .onChange(of: condition) { _, _ in
@@ -233,6 +253,7 @@ struct WorkflowTaskView: View {
             Task { await loadAssignments() }
         }
         .confirmationDialog("提交当前流程节点？", isPresented: $confirming, titleVisibility: .visible) { Button("提交") { Task { await submit() } } }
+        .alert("提交未完成", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) { Button("好", role: .cancel) {} } message: { Text(failure ?? "") }
         .sheet(isPresented: Binding(get: { handoff != nil }, set: { if !$0 { handoff = nil } })) {
             NavigationStack { TaskHandoffView(taskID: state["taskId"].text, operation: handoff ?? "transfer") { onCompleted?(); dismiss() } }
         }
@@ -272,10 +293,16 @@ struct WorkflowTaskView: View {
             if needsERPData { materials = try await session.request("erpOutbound/getErpMaterialOutboundsByOutboundId", query: ["outboundId": task["businessKey"].text]).array }
             try await fetchAssignments()
             ready = true
-        } catch { self.error = error.localizedDescription }
+        } catch { self.error = stageFailureMessage("加载当前节点", error) }
     }
     private func fetchAssignments() async throws {
-        if preview { assignmentsReady = true; return }
+        if preview {
+            // Sanitized fixture of the original "完成任务" window: next node 【维修】确认, user-selected assignee.
+            assignments.assignees = task["category"].text == "REPAIRED" && condition == "agree" ? [PreviewBusinessData.repairConfirmNode] : []
+            assignments.selections = [:]
+            assignmentsReady = true
+            return
+        }
         let request = UUID(); assignmentRequest = request
         assignmentsLoading = true; assignmentsReady = false
         defer { if assignmentRequest == request { assignmentsLoading = false } }
@@ -287,20 +314,24 @@ struct WorkflowTaskView: View {
         for node in assignments.assignees { assignments.selections[node.text("variableName")] = usernames(node["assignees"] ?? .null) }
         assignmentsReady = true
     }
-    private func loadAssignments() async { do { try await fetchAssignments() } catch { self.error = error.localizedDescription } }
+    // A failed approver lookup keeps the submit button disabled (assignmentsReady stays false);
+    // it is never interpreted as "this node needs no approver".
+    private func loadAssignments() async { do { try await fetchAssignments() } catch { self.error = stageFailureMessage("加载下一节点审批人", error) } }
+    private var missingAssignee: String? {
+        condition == "agree" ? missingAssigneeMessage(nodes: assignments.assignees, selections: assignments.selections) : nil
+    }
+    private func requestSubmit() {
+        if let message = missingAssignee { failure = message; return }
+        if task["category"].text == "SIGNED" && condition == "agree" { Task { await submit() } } else { confirming = true }
+    }
     private func submit() async {
+        if let message = missingAssignee { failure = message; return }
         if preview { onCompleted?(); dismiss(); return }
         guard !submitting, ready, assignmentsReady, !assignmentsLoading, state["canSubmit"].bool else { return }
         submitting = true; error = nil; defer { submitting = false }
         do {
-            if condition == "agree" {
-                for node in assignments.assignees where ["ASSIGN", "SUPERVISOR"].contains(node.text("assignType")) {
-                    let count = assignments.selections[node.text("variableName"), default: []].count
-                    if count == 0 || (isCountersign(node) && count < 2) { throw APIError(message: "请选择\(node.text("taskName"))的审批人，会签节点至少两人") }
-                }
-            }
-            var payload: Fields = ["taskId": task["id"], "processInstanceId": task["processInstanceId"], "condition": .string(condition), "comment": .string(comment), "taskData": .null]
-            if condition == "agree" { payload["assignees"] = assignments.payload(committed: true)["assignees"] }
+            var payload = commitTaskPayload(task: task, condition: condition, comment: comment,
+                                            assignees: condition == "agree" ? assigneesPayload(nodes: assignments.assignees, selections: assignments.selections) : nil)
             if needsFaultData && ["agree", "assign", "appoint"].contains(condition) {
                 if ["assign", "appoint"].contains(condition) {
                     guard !taskData.text("assignUser.userName").isEmpty else { throw APIError(message: "请选择维修人员") }
@@ -319,7 +350,10 @@ struct WorkflowTaskView: View {
             }
             _ = try await session.request("process/commitTask", body: .object(payload))
             onCompleted?(); dismiss()
-        } catch { self.error = error.localizedDescription }
+        } catch {
+            let message = stageFailureMessage("提交流程节点", error)
+            self.error = message; failure = message
+        }
     }
 }
 

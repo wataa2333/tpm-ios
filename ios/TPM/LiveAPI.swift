@@ -55,7 +55,51 @@ extension Dictionary where Key == String, Value == JSONValue {
 
 struct APIError: LocalizedError {
     let message: String
+    /// HTTP status of a failed server response; nil for local validation errors.
+    var status: Int? = nil
+    /// "POST repair/handleRepair" style label. Never contains query values, headers or bodies.
+    var request: String? = nil
+    /// Sanitized one-line server explanation, empty when the server gave none.
+    var detail: String = ""
     var errorDescription: String? { message }
+}
+
+/// Short, safe description of a failing response body. HTML pages, multi-line
+/// traces, bearer tokens and credentials are never surfaced to the user.
+func serverErrorSummary(_ data: Data) -> String {
+    guard !data.isEmpty else { return "" }
+    var raw = ""
+    if let value = try? JSONDecoder().decode(JSONValue.self, from: data) {
+        for key in ["message", "msg", "errorMessage", "detail", "error"] {
+            if case .string(let text) = value[key], !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { raw = text; break }
+        }
+    } else if let text = String(data: data, encoding: .utf8) {
+        raw = text
+    }
+    let firstLine = raw.split(whereSeparator: { $0.isNewline }).first.map(String.init) ?? ""
+    var text = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+    if text.hasPrefix("<") { return "" }
+    text = text.replacingOccurrences(of: "(?i)bearer\\s+\\S+", with: "Bearer ***", options: .regularExpression)
+    text = text.replacingOccurrences(of: "(?i)(token|password|authorization|secret)\\s*[=:：]\\s*\\S+", with: "$1=***", options: .regularExpression)
+    return String(text.prefix(160))
+}
+
+/// "POST repair/handleRepair" — method and path only, so it is safe to display and log.
+func requestLabel(_ request: URLRequest) -> String {
+    var path = request.url?.path ?? ""
+    if path.hasPrefix("/rest/") { path.removeFirst(6) } else if path.hasPrefix("/") { path.removeFirst() }
+    return (request.httpMethod ?? "GET") + " " + path
+}
+
+/// Names the operation that failed so "请求失败（500）" can be told apart between
+/// saving the repair result, loading approvers and committing the workflow node.
+func stageFailureMessage(_ stage: String, _ error: Error) -> String {
+    guard let api = error as? APIError, api.status != nil || api.request != nil else {
+        return error is APIError ? error.localizedDescription : "\(stage)失败：\(error.localizedDescription)"
+    }
+    guard let status = api.status else { return "\(stage)失败：\(api.request ?? "")，\(api.message)" }
+    let explanation = api.detail.isEmpty ? "服务器未提供错误说明" : "服务器信息：" + api.detail
+    return "\(stage)失败：\(api.request ?? "") 返回 HTTP \(status)，\(explanation)"
 }
 
 @MainActor
@@ -71,7 +115,12 @@ final class LiveSession: ObservableObject {
     var currentFactoryName: String {
         factories.first { $0["factoryId"].text == currentFactoryID }?["factoryName"].text ?? "选择厂区"
     }
-    init() { restore() }
+    private let urlSession: URLSession
+    /// `authentication` is only for tests that need a signed-in session without the Keychain.
+    init(urlSession: URLSession = .shared, authentication initial: Fields? = nil) {
+        self.urlSession = urlSession
+        if let initial { authentication = initial } else { restore() }
+    }
     func restore() {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.personal.tpm", kSecAttrAccount as String: account, kSecReturnData as String: true]
         var result: CFTypeRef?
@@ -152,14 +201,18 @@ final class LiveSession: ObservableObject {
         request.timeoutInterval = 60
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let label = requestLabel(request)
+        let data: Data, response: URLResponse
+        do { (data, response) = try await urlSession.data(for: request) }
+        catch let error as URLError where error.code != .cancelled {
+            throw APIError(message: "网络错误：" + error.localizedDescription, request: label)
+        }
         guard scope == scopeRevision else { throw CancellationError() }
-        guard let http = response as? HTTPURLResponse else { throw APIError(message: "服务器响应无效") }
+        guard let http = response as? HTTPURLResponse else { throw APIError(message: "服务器响应无效", request: label) }
         guard (200..<300).contains(http.statusCode) else {
             if http.statusCode == 401 { signOut() }
-            let value = try? JSONDecoder().decode(JSONValue.self, from: data)
-            let message = value?["message"].text ?? ""
-            throw APIError(message: message.isEmpty ? "请求失败（\(http.statusCode)）" : message)
+            let detail = serverErrorSummary(data)
+            throw APIError(message: "请求失败（\(http.statusCode)）" + (detail.isEmpty ? "" : "：" + detail), status: http.statusCode, request: label, detail: detail)
         }
         if let token = http.value(forHTTPHeaderField: "Authorization"), signedIn {
             authentication["token"] = .string(token.hasPrefix("Bearer ") ? String(token.dropFirst(7)) : token)

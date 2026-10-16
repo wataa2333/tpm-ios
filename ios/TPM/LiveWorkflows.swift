@@ -19,16 +19,17 @@ struct LiveTabs: View {
     @State private var selection = 0
     var body: some View {
         NativeTabShell(selection: $selection) {
-            NavigationStack { DashboardHome() }.tabItem { Label("主页", systemImage: "house") }.tag(0)
-            NavigationStack { TodoInboxView() }.tabItem { Label("我的待办", systemImage: "checklist") }.tag(2)
-            NavigationStack { DashboardWorkspace() }.tabItem { Label("工作台", systemImage: "square.grid.2x2") }.tag(1)
+            NavigationStack { DashboardHome() }.newDocumentButton().tabItem { Label("主页", systemImage: "house") }.tag(0)
+            NavigationStack { TodoInboxView() }.newDocumentButton().tabItem { Label("我的待办", systemImage: "checklist") }.tag(2)
+            NavigationStack { DashboardWorkspace() }.newDocumentButton().tabItem { Label("工作台", systemImage: "square.grid.2x2") }.tag(1)
                 NavigationStack {
                     List {
                         Section { LabeledContent("账号", value: session.authentication.text("name")); LabeledContent("姓名", value: session.authentication.text("fullName")) }
                         Section { LabeledContent("当前厂区", value: session.currentFactoryName) }
                         Section { Button("退出登录", role: .destructive) { session.signOut() } }
-                    }.navigationTitle("我的").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+                    }.navigationTitle("我的").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
                 }
+                .newDocumentButton()
                 .tabItem { Label("我的", systemImage: "person.crop.circle") }.tag(3)
         }
     }
@@ -50,8 +51,6 @@ struct LiveWorkflowList: View {
     @State private var stateCounts: [String: Int] = [:]
     init(kind: WorkflowKind, initialState: String = "RECEIVED") { self.kind = kind; _state = State(initialValue: initialState) }
     var body: some View {
-        VStack(spacing: 0) {
-            if kind == .fault { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? 2 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
         List {
             if kind == .fault && searching { Section { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } } } }
             ForEach(Array(rows.enumerated()), id: \.offset) { _, item in
@@ -78,6 +77,9 @@ struct LiveWorkflowList: View {
             let index = FaultState.allCases.firstIndex { $0.code == state } ?? 2
             state = FaultState.allCases[min(max(index + (value.translation.width < 0 ? 1 : -1), 0), 7)].code
         })
+        // The strip sits in the top safe area so list content scrolls under the system bars.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if kind == .fault { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? 2 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
         }
         .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载工单…") }
         .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
@@ -87,7 +89,10 @@ struct LiveWorkflowList: View {
         .refreshable { await reload(); await reloadCounts() }
         .task(id: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)") { await reload() }
         .task(id: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)") { await reloadCounts() }
-        .onAppear { navigation.newDocument = kind; navigation.hideTabs = false }
+        .onAppear {
+            navigation.newDocument = kind; navigation.hideTabs = false
+            if navigation.pendingListRefresh { navigation.pendingListRefresh = false; navigation.refresh = UUID() }
+        }
         .onDisappear { if navigation.newDocument == kind { navigation.newDocument = nil } }
         .sheet(isPresented: $adding, onDismiss: { Task { await reload() } }) {
             NavigationStack { if kind == .fault { OriginalFaultForm() } else { OriginalERPForm() } }
@@ -158,6 +163,13 @@ struct LiveWorkflowDetail: View {
         returnToList = true
         processing = false; returning = false; editing = false
         navigation.refresh = UUID()
+    }
+    /// Signing in only moves the order to its next step: stay on this order, reload it so the
+    /// next action appears, and let the list refresh behind. One back gesture then returns to
+    /// the list instead of to a stale "待签到" page.
+    private func signCompleted() {
+        processing = false
+        navigation.pendingListRefresh = true
     }
     private func taskSheetClosed() {
         if returnToList {
@@ -248,7 +260,7 @@ struct LiveWorkflowDetail: View {
         .sheet(isPresented: $processing, onDismiss: taskSheetClosed) {
             NavigationStack {
                 if kind == .fault && task["category"].text == "REPAIRED" { OriginalRepairForm(faultID: id, task: task, onCompleted: completed) }
-                else { WorkflowTaskView(task: task, kind: kind, onCompleted: completed) }
+                else { WorkflowTaskView(task: task, kind: kind, onCompleted: kind == .fault && task["category"].text == "SIGNED" ? signCompleted : completed) }
             }
         }
     }

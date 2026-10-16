@@ -14,6 +14,12 @@ struct WorkOrderCard<Destination: View>: View {
     @State private var opening = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var emphasis: Color { FaultState.allCases.first { $0.rawValue == status }?.color ?? color }
+    /// Expanding animates the row height (and the open button) as one natural stretch.
+    private var expansion: Binding<Bool> {
+        Binding(get: { expanded }, set: { value in
+            withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.32)) { expanded = value }
+        })
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Button { opening = true } label: {
@@ -29,8 +35,8 @@ struct WorkOrderCard<Destination: View>: View {
             ForEach(Array(summaryFacts.enumerated()), id: \.offset) { _, fact in
                 WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(.subheadline).foregroundStyle(.secondary) }
             }
-            DisclosureGroup(isExpanded: $expanded) {
-                VStack(spacing: 12) {
+            DisclosureGroup(isExpanded: expansion) {
+                VStack(spacing: 10) {
                     ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
                         ReadableFact(title: fact.0, value: fact.1)
                     }
@@ -53,10 +59,10 @@ struct WorkOrderCard<Destination: View>: View {
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }.buttonStyle(.borderless)
                     .accessibilityIdentifier("order-open-" + reference)
-                    .transition(.opacity)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
-        }.buttonStyle(.plain).padding(.vertical, 2)
-            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+        }.buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
             .navigationDestination(isPresented: $opening) {
                 destination().environment(\.closeWorkOrder, { opening = false })
                     .modifier(DetailTabVisibility())
@@ -69,10 +75,10 @@ struct ReadableFact: View {
     let value: String
     @State private var shown = false
     var body: some View {
-        HStack(alignment: .center, spacing: 16) {
+        // Fixed title column, left-aligned values: every row of every card lines up the same way.
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(title).foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
-            Spacer(minLength: 0)
-            WrappingContent(alignment: .trailing) { Text(value.isEmpty ? "—" : value) }
+            WrappingContent(alignment: .leading) { Text(value.isEmpty ? "—" : value) }
         }.font(.subheadline).contentShape(.rect)
             .accessibilityElement(children: .contain)
             .onTapGesture { shown = true }
@@ -89,9 +95,10 @@ struct ReadableFact: View {
 
 struct SafeFactsStyle: LabeledContentStyle {
     func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            configuration.label.lineLimit(nil).fixedSize(horizontal: false, vertical: true).frame(width: 108, alignment: .leading)
-            Spacer(minLength: 0)
+        // The label keeps its natural width on one line ("维修故障类型", "请选择" never break);
+        // only long values wrap, in the space that is left.
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            configuration.label.lineLimit(1).fixedSize(horizontal: true, vertical: false).layoutPriority(1)
             configuration.content.lineLimit(nil).fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(.trailing).frame(maxWidth: .infinity, alignment: .trailing)
         }

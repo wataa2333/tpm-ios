@@ -7,27 +7,48 @@ struct NativeTabShell<Content: View>: View {
     var preview = false
     @ViewBuilder let content: () -> Content
     @EnvironmentObject private var navigation: BottomNavigationModel
-    @State private var creating: WorkflowKind?
 
     var body: some View {
         TabView(selection: $selection) { content() }
-            .tabViewBottomAccessory(isEnabled: !navigation.hideTabs && !navigation.keyboardVisible) {
-                HStack {
-                    Spacer()
-                    Button {
-                        navigation.searchReset = UUID()
-                        navigation.presentingDocument = true
-                        creating = navigation.newDocument ?? .fault
-                    } label: {
-                        Label(navigation.newDocument == .erp ? "新建领料单" : "新建报修", systemImage: "plus")
-                            .font(.body.weight(.semibold)).padding(.vertical, 8)
-                    }
-                    .padding(.trailing, 16)
-                }
-            }
             .onChange(of: selection) {
                 navigation.searchReset = UUID()
                 navigation.hideTabs = false
+            }
+    }
+}
+
+/// A round glass "new" button at the bottom-trailing corner, like the compose button in
+/// the system Notes app. It lives in the bottom safe area of each tab's navigation stack,
+/// so it sits above the system tab bar, and it disappears together with the tab bar.
+struct NewDocumentButton: ViewModifier {
+    var preview = false
+    @EnvironmentObject private var navigation: BottomNavigationModel
+    @State private var creating: WorkflowKind?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private var visible: Bool { !navigation.hideTabs && !navigation.keyboardVisible }
+    private var kind: WorkflowKind { navigation.newDocument ?? .fault }
+
+    func body(content: Content) -> some View {
+        content
+            .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 0) {
+                Group {
+                    if visible {
+                        Button {
+                            navigation.searchReset = UUID()
+                            navigation.presentingDocument = true
+                            creating = kind
+                        } label: {
+                            Image(systemName: "square.and.pencil")
+                                .font(.title2.weight(.semibold))
+                                .frame(width: 52, height: 52)
+                        }
+                        .buttonStyle(.glass).buttonBorderShape(.circle)
+                        .accessibilityLabel(kind == .erp ? "新建领料单" : "新建报修")
+                        .padding(.trailing, 20).padding(.bottom, 8)
+                        .transition(.opacity)
+                    }
+                }
+                .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.25), value: visible)
             }
             .sheet(item: $creating, onDismiss: {
                 navigation.presentingDocument = false
@@ -39,5 +60,11 @@ struct NativeTabShell<Content: View>: View {
                 }.environment(\.documentSearch, true)
                     .presentationDragIndicator(.visible)
             }
+    }
+}
+
+extension View {
+    func newDocumentButton(preview: Bool = false) -> some View {
+        modifier(NewDocumentButton(preview: preview))
     }
 }

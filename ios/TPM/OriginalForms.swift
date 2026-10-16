@@ -85,14 +85,7 @@ final class OriginalFormModel: ObservableObject {
     func payload(committed: Bool) -> Fields {
         var result = data
         result["committed"] = .bool(committed)
-        var assignments: Fields = [:]
-        for node in assignees {
-            let key = node.text("variableName"), names = selections[key, default: []]
-            if ["ASSIGN", "SUPERVISOR"].contains(node.text("assignType")) {
-                assignments[key] = .string(isCountersign(node) ? names.joined(separator: ",") : names.first ?? "")
-            } else if node.text("assignType") == "CANDIDATE_USERS" { assignments[key] = node["assignees"] ?? .array(names.map(JSONValue.string)) }
-        }
-        result["assignees"] = .object(assignments)
+        result["assignees"] = .object(assigneesPayload(nodes: assignees, selections: selections))
         if kind == "ERP_OUTBOUND" {
             result["erpMaterialOutbounds"] = .array((result["erpMaterialOutbounds"]?.array ?? []).map { value in
                 var line = value.object
@@ -357,6 +350,7 @@ struct ServerDateField: View {
 }
 
 struct AssigneesFields: View {
+    @Environment(\.previewReferences) private var preview
     let elements: [Fields]
     @Binding var selections: [String: [String]]
     var body: some View {
@@ -364,7 +358,7 @@ struct AssigneesFields: View {
             if ["ASSIGN", "SUPERVISOR"].contains(element.text("assignType")) {
                 let key = element.text("variableName")
                 NavigationLink {
-                    ReferencePicker(source: .users, multiple: isCountersign(element) || element["assigneeMultiple"]?.bool == true, selected: selections[key, default: []]) { user in
+                    ReferencePicker(source: .users, multiple: isCountersign(element) || element["assigneeMultiple"]?.bool == true, selected: selections[key, default: []], preview: preview) { user in
                         let name = user["userName"].text
                         if isCountersign(element) || element["assigneeMultiple"]?.bool == true {
                             if selections[key, default: []].contains(name) { selections[key]?.removeAll { $0 == name } }
@@ -375,6 +369,7 @@ struct AssigneesFields: View {
                     LabeledContent { Text(selections[key, default: []].isEmpty ? "请选择审批人" : selections[key, default: []].joined(separator: "、")) }
                     label: { RequiredLabel(title: element.text("taskName")) }
                 }
+                .accessibilityIdentifier("assignee-" + key)
                 .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
             }
@@ -678,6 +673,12 @@ enum PreviewReferenceData {
 }
 
 enum PreviewBusinessData {
+    /// Sanitized stand-in for the next node of the repair task ("完成任务" window):
+    /// 【维修】确认, assigned by choosing a user. Names are fictional, not server variables.
+    static let repairConfirmNode: Fields = [
+        "taskName": .string("【维修】确认"), "variableName": .string("demoRepairConfirmUser"),
+        "assignType": .string("ASSIGN"), "assignees": .null
+    ]
     static let erpLines: [JSONValue] = [
         .object(["material": .object(["id": .number(1), "materialCode": .string("WL-10028"), "materialDesc": .string("深沟球轴承"), "onhandQty": .number(24), "uom": .object(["uomDesc": .string("个")]), "lot": .string("LOT-01"), "subInv": .string("备件仓")]), "entryQuantity": .number(2)]),
         .object(["material": .object(["id": .number(2), "materialCode": .string("WL-10046"), "materialDesc": .string("空气滤芯"), "onhandQty": .number(8), "uom": .object(["uomDesc": .string("件")]), "lot": .string("LOT-02"), "subInv": .string("备件仓")]), "entryQuantity": .number(1)])

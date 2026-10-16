@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SearchPageChrome: ViewModifier {
     var isSearching = false
+    /// Tab root pages use the large title; pushed pages keep the inline one.
+    var largeTitle = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var navigation: BottomNavigationModel
     func body(content: Content) -> some View {
@@ -11,13 +13,13 @@ struct SearchPageChrome: ViewModifier {
             .listSectionSpacing(.compact)
             .scrollContentBackground(.hidden)
             .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
-            .navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+            .navigationBarTitleDisplayMode(largeTitle ? .large : .inline).nativeNavigationChrome()
     }
 }
 
 extension View {
-    func searchPageChrome(isSearching: Bool = false) -> some View {
-        modifier(SearchPageChrome(isSearching: isSearching))
+    func searchPageChrome(isSearching: Bool = false, largeTitle: Bool = false) -> some View {
+        modifier(SearchPageChrome(isSearching: isSearching, largeTitle: largeTitle))
     }
     func initialLoadingContent(_ hidden: Bool) -> some View {
         modifier(InitialLoadingContent(hidden: hidden))
@@ -53,7 +55,6 @@ struct KeyboardTabVisibility: ViewModifier {
 
 extension EnvironmentValues {
     @Entry var previewReferences = false
-    @Entry var loadingViewport = CGRect.zero
     @Entry var bottomSafeArea: CGFloat = 0
     @Entry var documentSearch = false
     @Entry var closeWorkOrder: (() -> Void)? = nil
@@ -83,25 +84,19 @@ struct BottomAction: View {
 
 struct LoadingOverlay: View {
     let title: String
-    @Environment(\.loadingViewport) private var viewport
     var body: some View {
-        GeometryReader { geometry in
-        ZStack(alignment: .topLeading) {
-            Color.black.opacity(0.22).ignoresSafeArea()
-            VStack(spacing: 12) {
+        ZStack {
+            // Blur and dim everything behind, then show the system activity indicator in the middle.
+            Rectangle().fill(.ultraThinMaterial).ignoresSafeArea()
+            Color.black.opacity(0.18).ignoresSafeArea()
+            VStack(spacing: 14) {
                 ProgressView().controlSize(.large)
-                Text(title).font(.subheadline)
-            }.padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .position(loadingIndicatorCenter(container: geometry.frame(in: .global), viewport: viewport))
-        }.accessibilityAddTraits(.updatesFrequently)
+                if !title.isEmpty { Text(title).font(.subheadline).foregroundStyle(.secondary) }
+            }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.updatesFrequently)
     }
-}
-
-func loadingIndicatorCenter(container: CGRect, viewport: CGRect) -> CGPoint {
-    let center = viewport.isEmpty ? container.midY : viewport.midY
-    let localY = center - container.minY
-    return CGPoint(x: container.width / 2, y: localY > 0 && localY < container.height ? localY : container.height / 2)
 }
 
 struct AnimatedLoadingOverlay: View {
@@ -132,12 +127,16 @@ struct WorkOrderStatusStrip: View {
                             selection = index
                         } label: {
                             VStack(spacing: 6) {
-                            HStack(spacing: 5) {
-                                Text(state.rawValue).font(.subheadline.weight(.semibold)).lineLimit(1)
+                            HStack(spacing: 6) {
+                                // The status colour is a dot and the underline; the words always use the
+                                // primary colour so they stay readable on any background.
+                                Circle().fill(state.color).frame(width: 8, height: 8)
+                                Text(state.rawValue).font(.subheadline.weight(selection == index ? .semibold : .regular)).lineLimit(1)
                                 Text(counts[state.code].map(String.init) ?? "…")
                                     .font(.caption.weight(.semibold)).monospacedDigit()
+                                    .foregroundStyle(selection == index ? Color.primary : Color.secondary)
                             }
-                            .foregroundStyle(selection == index ? state.color : Color.primary)
+                            .foregroundStyle(Color.primary)
                             Rectangle().fill(selection == index ? state.color : .clear).frame(height: 3)
                             }.fixedSize(horizontal: true, vertical: false).frame(minHeight: 44)
                             .contentShape(.rect)
@@ -155,7 +154,7 @@ struct WorkOrderStatusStrip: View {
             .onChange(of: selection) { _, index in withAnimation(animation) { proxy.scrollTo(index, anchor: .center) } }
         }
         .frame(height: 52).fixedSize(horizontal: false, vertical: true).layoutPriority(1)
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(.bar)
         .overlay(alignment: .bottom) { Divider() }
         .sensoryFeedback(.selection, trigger: selection)
     }
@@ -203,9 +202,7 @@ struct HorizontalCategories: View {
         .frame(height: 54)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity)
-        .background {
-            Color(uiColor: .systemGroupedBackground)
-        }
+        .background(.bar)
         .overlay(alignment: .bottom) { Divider() }
         .clipped()
     }

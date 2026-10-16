@@ -56,14 +56,6 @@ import Foundation
     #expect(assetRepairRecord(repair, asset: asset)["asset"]["assetCode"].text == "EWPT-01")
 }
 
-@Test func loadingUsesWindowCenterRatherThanInsetListCenter() {
-    let center = loadingIndicatorCenter(container: CGRect(x: 0, y: 200, width: 393, height: 600), viewport: CGRect(x: 0, y: 60, width: 393, height: 760))
-    #expect(center.y == 240)
-    #expect(center.x == 196.5)
-    let sheet = loadingIndicatorCenter(container: CGRect(x: 0, y: 550, width: 393, height: 260), viewport: CGRect(x: 0, y: 60, width: 393, height: 760))
-    #expect(sheet.y == 130)
-}
-
 @Test @MainActor func erpKeepsMultipleMaterialLinesAndSaveMode() {
     let form = OriginalFormModel(kind: "ERP_OUTBOUND")
     form.addMaterial(.object(["id": .number(11), "onhandQty": .number(8)]))
@@ -129,4 +121,59 @@ import Foundation
     #expect(result.count == 1)
     #expect(result[0]["children"].array.count == 1)
     #expect(result[0]["children"].array[0]["typeName"].text == "轴承磨损")
+}
+
+@Test func repairSavePayloadKeepsOnlyOriginalFormFieldsAndAllMaterialDetail() {
+    let payload = repairSubmissionPayload(ContractFixtures.repairRecord, repairID: .number(88))
+    #expect(Set(payload.keys) == ContractFixtures.repairBodyKeys)
+    #expect(payload["assetFault"] == nil)
+    #expect(payload["signTime"] == nil)
+    #expect(payload["erpRepairMaterials"]?.array.first == ContractFixtures.materialLine)
+    var sparse = ContractFixtures.repairRecord
+    sparse.removeValue(forKey: "albums"); sparse.removeValue(forKey: "erpRepairMaterials")
+    let minimal = repairSubmissionPayload(sparse, repairID: .number(88))
+    #expect(minimal["albums"] == nil)
+    #expect(minimal["erpRepairMaterials"] == .array([]))
+}
+
+@Test func missingNextNodeApproverBlocksSubmission() {
+    let nodes = [ContractFixtures.confirmNode]
+    #expect(missingAssigneeMessage(nodes: nodes, selections: [:])?.contains("【维修】确认") == true)
+    #expect(missingAssigneeMessage(nodes: nodes, selections: ["fixtureRepairConfirmUser": []]) != nil)
+    #expect(missingAssigneeMessage(nodes: nodes, selections: ["fixtureRepairConfirmUser": ["a"]]) == nil)
+    var none = ContractFixtures.confirmNode
+    none["assignType"] = .string("NONE")
+    #expect(missingAssigneeMessage(nodes: [none], selections: [:]) == nil)
+}
+
+@Test func countersignNodeNeedsTwoApproversAndJoinsThemWithCommas() {
+    let nodes = [ContractFixtures.countersignNode]
+    #expect(missingAssigneeMessage(nodes: nodes, selections: ["fixtureCountersignUsers": ["a"]]) != nil)
+    #expect(missingAssigneeMessage(nodes: nodes, selections: ["fixtureCountersignUsers": ["a", "b"]]) == nil)
+    #expect(assigneesPayload(nodes: nodes, selections: ["fixtureCountersignUsers": ["a", "b"]])["fixtureCountersignUsers"] == .string("a,b"))
+}
+
+@Test func commitPayloadOnlyCarriesApproversForAgree() {
+    let agree = commitTaskPayload(task: ContractFixtures.repairTask, condition: "agree", comment: "好",
+                                  assignees: assigneesPayload(nodes: [ContractFixtures.confirmNode], selections: ["fixtureRepairConfirmUser": ["zhang"]]))
+    #expect(agree["assignees"]?["fixtureRepairConfirmUser"] == .string("zhang"))
+    #expect(agree["taskData"] == .null)
+    let reject = commitTaskPayload(task: ContractFixtures.repairTask, condition: "reject", comment: "退", assignees: nil)
+    #expect(reject["assignees"] == nil)
+    #expect(Set(reject.keys) == ["taskId", "processInstanceId", "condition", "comment", "taskData"])
+}
+
+@Test func serverErrorSummaryIsOneSafeLine() {
+    #expect(serverErrorSummary(Data("{\"message\":\"保存失败\"}".utf8)) == "保存失败")
+    #expect(serverErrorSummary(Data("<html>oops</html>".utf8)) == "")
+    #expect(serverErrorSummary(Data()) == "")
+    #expect(serverErrorSummary(Data("第一行\n第二行 stack".utf8)) == "第一行")
+    #expect(!serverErrorSummary(Data("{\"msg\":\"token=abc123 failed\"}".utf8)).contains("abc123"))
+    #expect(serverErrorSummary(Data(String(repeating: "长", count: 400).utf8)).count <= 160)
+}
+
+@Test func requestLabelShowsMethodAndPathOnly() {
+    var request = URLRequest(url: URL(string: "http://example.invalid:8855/rest/repair/handleRepair?taskId=secret")!)
+    request.httpMethod = "POST"
+    #expect(requestLabel(request) == "POST repair/handleRepair")
 }
