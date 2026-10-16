@@ -162,15 +162,24 @@ struct ReferencePicker: View {
     @State private var last = true
     @State private var error: String?
     @State private var picked = Set<String>()
-    private func identity(_ v: JSONValue) -> String { [.users, .workflowUsers].contains(source) ? v["userName"].text : v["id"].text }
+    private func identity(_ v: JSONValue) -> String {
+        if [.users, .workflowUsers].contains(source) { return v["userName"].text }
+        // An outbound material line is identified by (outboundId, materialId); its "id" is an object whose
+        // text is empty, which made every row share one identity and tick together.
+        if source == .outboundMaterials { return outboundLineIdentity(v) }
+        return v["id"].text
+    }
+    @State private var notice: String?
+    private func available(_ v: JSONValue) -> Double { v["actualQuantity"].number - v["usedQuantity"].number }
     private var visible: [JSONValue] {
         (!preview && source.pagePath != nil) || query.isEmpty ? values : [.faultTypes, .departments].contains(source) ? matchingFaultTypes(values, query: query) : values.filter { $0.encodedString.localizedCaseInsensitiveContains(query) }
     }
     var body: some View {
         List {
+            LoadingRow(isPresented: loading || selecting, title: "正在加载")
             if source == .users { Picker("人员分类", selection: $userMode) { Text("按姓名").tag(0); Text("按班组").tag(1) }.pickerStyle(.segmented) }
             if source.pagePath != nil && searching {
-                Section { Toggle("按编号搜索", isOn: $searchByCode) }
+                Section { Picker("搜索方式", selection: $searchByCode) { Text("按名称").tag(false); Text("按编号").tag(true) }.pickerStyle(.segmented).labelsHidden() }
             }
             if source == .faultTypes {
                 FaultTypeTree(nodes: visible) { value in Task { await select(value) } }
@@ -182,7 +191,7 @@ struct ReferencePicker: View {
                     if !users.isEmpty {
                         DisclosureGroup {
                             ForEach(Array(users.enumerated()), id: \.offset) { _, user in
-                                Button { Task { await select(user) } } label: { WrappingContent { Text(user.object.label) } }
+                                Button { Task { await select(user) } } label: { WrappingContent { Text(user.object.label).foregroundStyle(Color.primary) } }.buttonStyle(.plain)
                             }
                         } label: { WrappingContent { Text(group["groupName"].text) } }
                     }
@@ -190,42 +199,71 @@ struct ReferencePicker: View {
             } else { ForEach(Array(visible.enumerated()), id: \.offset) { _, value in
                 Button { Task { await select(value) } } label: {
                     HStack {
-                        VStack(alignment: .leading, spacing: 5) {
-                            WrappingContent { Text(label(value)).foregroundStyle(.primary) }
-                            let detail = subtitle(value)
-                            if !detail.isEmpty { WrappingContent { Text(detail).font(.subheadline).foregroundStyle(.secondary) } }
+                        VStack(alignment: .leading, spacing: RowMetrics.spacing) {
+                            WrappingContent { Text(label(value)).foregroundStyle(Color.primary) }
+                            ForEach(Array(subtitleLines(value).enumerated()), id: \.offset) { _, line in
+                                WrappingContent { Text(line).font(.subheadline).foregroundStyle(source == .outboundMaterials && available(value) < 1 ? Color.red : Color.secondary) }
+                            }
                         }
                         Spacer()
-                        if picked.contains(identity(value)) { Image(systemName: "checkmark") }
+                        if picked.contains(identity(value)) { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
                     }
-                }
+                }.buttonStyle(.plain).uniformRow()
             }
             }
-            if !last && source.pagePath != nil {
-                Button { Task { await load(more: true) } } label: { HStack { Text("加载更多"); if loadingMore { ProgressView() } } }.disabled(loadingMore)
+            if source.pagePath != nil {
+                LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: values.count) { await load(more: true) }
             }
-            if let error { Section { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } } }
             if !loading && visible.isEmpty && error == nil { ContentUnavailableView("暂无匹配内容", systemImage: "magnifyingglass") }
         }
-        .overlay { AnimatedLoadingOverlay(isPresented: loading || selecting, title: "正在加载…") }
         .navigationTitle(source.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .reloadsToTop(on: "\(query)-\(searchByCode)-\(userMode)")
+        .errorDialog($error, retry: { Task { await load() } })
+        .errorDialog($notice, title: "不能选择", clearsOnClose: true)
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索", onSubmit: { Task { await load() } })
         .task { picked = Set(selected); await load() }
         .onChange(of: searchByCode) { Task { await load() } }
-        .toolbar { if multiple { ToolbarItem(placement: .confirmationAction) { Button("完成") { searching = false; dismiss() } } } }
+        .toolbar { if multiple { ToolbarItem(placement: .confirmationAction) { Button("完成") { finishPicking() } } } }
+        // The top "完成" is replaced by the search bar while searching, so multi-select also keeps a
+        // bottom button that is always there. It says how many are ticked.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if multiple {
+                Button { finishPicking() } label: {
+                    Text(picked.isEmpty ? "完成" : "完成（已选 \(picked.count) 项）").font(.headline).frame(maxWidth: .infinity, minHeight: 28)
+                }
+                .buttonStyle(.borderedProminent).controlSize(.large)
+                .padding(.horizontal, 20).padding(.vertical, 8)
+                .accessibilityIdentifier("picker-done")
+            }
+        }
+        .sensoryFeedback(.selection, trigger: picked.count)
     }
+    private func finishPicking() { endEditing(); searching = false; dismiss() }
     private func label(_ value: JSONValue) -> String {
         source == .outboundMaterials ? value["material"].object.label : value.object.label
     }
-    private func subtitle(_ v: JSONValue) -> String {
-        if source == .materials { return [v["materialCode"].text, "库存 \(materialQuantity(v["onhandQty"].text, material: v))", v["lot"].text, v["subInv"].text, v["locatorCode"].text].filter { !$0.isEmpty }.joined(separator: " · ") }
-        if source == .outboundMaterials { return [v["outbound"]["outNumber"].text, v["material"]["materialCode"].text, "可用 \(materialQuantity(String(v["actualQuantity"].number-v["usedQuantity"].number), material: v["material"]))"].joined(separator: " · ") }
-        return [v["assetCode"].text, v["addressCode"].text, v["userName"].text, v["projectCode"].text, v["divisionName"].text].filter { !$0.isEmpty }.joined(separator: " · ")
+    private func subtitleLines(_ v: JSONValue) -> [String] {
+        if source == .materials { return [[v["materialCode"].text, "库存 \(materialQuantity(v["onhandQty"].text, material: v))", v["lot"].text, v["subInv"].text, v["locatorCode"].text].filter { !$0.isEmpty }.joined(separator: " · ")] }
+        if source == .outboundMaterials {
+            let outbound = v["outbound"]
+            let people = [("申请人", outbound["user"]["realName"].text), ("领用人", outbound["recipientUser"]["realName"].text)].filter { !$0.1.isEmpty }.map { $0.0 + "：" + $0.1 }
+            let left = available(v)
+            return [[outbound["outNumber"].text, v["material"]["materialCode"].text].filter { !$0.isEmpty }.joined(separator: " · "),
+                    people.joined(separator: "　"),
+                    "可用 \(materialQuantity(String(left), material: v["material"]))" + (left < 1 ? "（不足 1，不能选择）" : "") + (outbound["applyDate"].text.isEmpty ? "" : " · 申请日期 " + readableDate(outbound["applyDate"]))]
+                .filter { !$0.isEmpty }
+        }
+        let line = [v["assetCode"].text, v["addressCode"].text, v["userName"].text, v["projectCode"].text, v["divisionName"].text].filter { !$0.isEmpty }.joined(separator: " · ")
+        return line.isEmpty ? [] : [line]
     }
     private func select(_ value: JSONValue) async {
         if preview { choose(value); if !multiple { searching = false; dismiss() }; return }
         guard !selecting else { return }
+        if source == .outboundMaterials {
+            if picked.contains(identity(value)) { notice = "这条出库物料已经选择过了。"; return }
+            if available(value) < 1 { notice = "这条出库物料的可用数量小于 1，不能选择。"; return }
+        }
         selecting = true
         defer { selecting = false }
         do {
@@ -395,8 +433,7 @@ struct OriginalFaultForm: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     RequiredLabel(title: "报修名称")
-                    TextField("请输入报修名称", text: text("faultName")).onChange(of: model.data.text("faultName")) { _, value in model.data["faultName"] = .string(limitedText(value, limit: 64)) }
-                    CharacterCount(text: model.data.text("faultName"), limit: 64)
+                    EntryField(placeholder: "请输入报修名称", text: text("faultName"), limit: 64)
                 }
                 ReferenceField(title: "报修资产", source: .assets, value: field("asset"), required: true)
                 ServerDateField(title: "故障时间", value: field("faultTime"), required: true)
@@ -413,16 +450,15 @@ struct OriginalFaultForm: View {
                 if !(model.data["dept"]?.object.isEmpty ?? true) && (model.data["user"]?.object.isEmpty ?? true) {
                     Text("该部门未设置默认受理人，请手动选择维修受理人").font(.footnote).foregroundStyle(.secondary)
                 }
-                VStack(alignment: .leading, spacing: 8) { RequiredLabel(title: "报修人联系电话"); TextField("请输入联系电话", text: text("userPhone")).keyboardType(.phonePad).onChange(of: model.data.text("userPhone")) { _, value in model.data["userPhone"] = .string(limitedText(value, limit: 32)) }; CharacterCount(text: model.data.text("userPhone"), limit: 32) }
+                VStack(alignment: .leading, spacing: 8) { RequiredLabel(title: "报修人联系电话"); EntryField(placeholder: "请输入联系电话", text: text("userPhone"), limit: 32, keyboard: .phonePad) }
                 ReferenceField(title: "维修班组", source: .groups, value: field("userGroup"), required: true)
                 ReferenceField(title: "ERP记账部门", source: .divisions, value: field("division"), required: true)
             }
             if model.assignees.contains(where: { ["ASSIGN", "SUPERVISOR"].contains($0.text("assignType")) }) {
                 Section("审批人") { AssigneesFields(elements: model.assignees, selections: $model.selections) }
             }
-            Section("故障描述") { VStack(alignment: .leading, spacing: 8) { TextField("请输入故障描述", text: text("faultDesc"), axis: .vertical).lineLimit(3...6).onChange(of: model.data.text("faultDesc")) { _, value in model.data["faultDesc"] = .string(limitedText(value, limit: 255)) }; CharacterCount(text: model.data.text("faultDesc"), limit: 255) } }
+            Section("故障描述") { EntryField(placeholder: "请输入故障描述", text: text("faultDesc"), limit: 255, axis: .vertical, lines: 3...6) }
             Section("现场照片") { OriginalPhotosField(albums: field("albums"), directory: "asset_fault", preview: preview, uploading: $photoUploading) }
-            if let error = model.error { Section { Text(error).foregroundStyle(.red); if !model.ready && !model.loading { Button("重新加载") { Task { await model.load(session, existing: existing) } } } } }
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(model.loading || model.saving)
@@ -442,10 +478,9 @@ struct OriginalFaultForm: View {
             if preview { model.loading = false; model.ready = true; model.data = ["faultTime": .string("2026-10-16 09:30"), "albums": .array([]), "applyUser": PreviewIdentity.user, "applyDept": PreviewIdentity.department, "userPhone": .string("13800000000")] }
             else { await model.load(session, existing: existing) }
         }
-        .confirmationDialog(confirming == true ? "提交报修单到原系统？" : "保存报修单到原系统？", isPresented: $showConfirmation, titleVisibility: .visible) {
-            Button(confirming == true ? "提交" : "保存") { Task { await save() } }
-        }
-        .alert("请检查表单", isPresented: $showValidation) { Button("好", role: .cancel) { model.error = nil } } message: { Text(model.error ?? "") }
+        .keyboardManaged()
+        .confirmDialog(confirming == true ? "提交报修单到原系统？" : "保存报修单到原系统？", isPresented: $showConfirmation, confirmTitle: confirming == true ? "提交" : "保存") { Task { await save() } }
+        .errorDialog($model.error, title: model.ready ? "提示" : "加载失败", clearsOnClose: true, retry: model.ready ? nil : { Task { await model.load(session, existing: existing) } })
     }
     private func prepare(_ committed: Bool) {
         if let error = model.validationError() { model.error = error; showValidation = true; return }
@@ -483,8 +518,8 @@ struct OriginalPhotosField: View {
         }
         PhotosPicker(selection: $selected, maxSelectionCount: max(0, 9-albums.array.count), matching: .images) { Label("选择现场照片", systemImage: "photo.badge.plus") }.disabled(uploading || preview || albums.array.count >= 9)
         .onChange(of: selected) { Task { await upload() } }
+        .errorDialog($error, title: "照片上传失败", clearsOnClose: true)
         if uploading { ProgressView("正在上传照片…") }
-        if let error { Text(error).foregroundStyle(.red) }
     }
     private func upload() async {
         guard !preview, !selected.isEmpty, !uploading else { return }
@@ -553,11 +588,10 @@ struct OriginalERPForm: View {
                     }
                 }
             } header: { RequiredLabel(title: "出库物料 · \(model.data["erpMaterialOutbounds"]?.array.count ?? 0) 项") }
-            Section { VStack(alignment: .leading, spacing: 8) { TextField("请输入用途", text: text("remark"), axis: .vertical).lineLimit(3...6).onChange(of: model.data.text("remark")) { _, value in model.data["remark"] = .string(limitedText(value, limit: 140)) }; CharacterCount(text: model.data.text("remark"), limit: 140) } } header: { RequiredLabel(title: "用途") }
+            Section { EntryField(placeholder: "请输入用途", text: text("remark"), limit: 140, axis: .vertical, lines: 3...6) } header: { RequiredLabel(title: "用途") }
             if model.assignees.contains(where: { ["ASSIGN", "SUPERVISOR"].contains($0.text("assignType")) }) {
                 Section("审批人") { AssigneesFields(elements: model.assignees, selections: $model.selections) }
             }
-            if let error = model.error { Section { Text(error).foregroundStyle(.red); if !model.ready && !model.loading { Button("重试") { Task { await model.load(session, existing: existing, referenceSn: referenceSn) } } } } }
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(model.loading || model.saving)
@@ -588,8 +622,9 @@ struct OriginalERPForm: View {
                 if let existing { model.data["project"] = .object(["projectCode": existing["projectCode"] ?? .null, "projectName": existing["projectDesc"] ?? .null]) }
             }
         }
-        .confirmationDialog(committed ? "提交 ERP 领料单到原系统？" : "保存 ERP 领料单到原系统？", isPresented: $confirming, titleVisibility: .visible) { Button(committed ? "提交" : "保存") { Task { await save() } } }
-        .alert("请检查表单", isPresented: $showValidation) { Button("好", role: .cancel) { model.error = nil } } message: { Text(model.error ?? "") }
+        .keyboardManaged()
+        .confirmDialog(committed ? "提交 ERP 领料单到原系统？" : "保存 ERP 领料单到原系统？", isPresented: $confirming, confirmTitle: committed ? "提交" : "保存") { Task { await save() } }
+        .errorDialog($model.error, title: model.ready ? "提示" : "加载失败", clearsOnClose: true, retry: model.ready ? nil : { Task { await model.load(session, existing: existing, referenceSn: referenceSn) } })
     }
     private func prepare(_ value: Bool) { if let error = model.validationError() { model.error = error; showValidation = true; return }; committed = value; confirming = true }
     private func save() async {
@@ -611,14 +646,16 @@ struct DocumentActions: View {
     var save: (() -> Void)? = nil
     var submitTitle = "提交"
     let submit: () -> Void
+    @EnvironmentObject private var navigation: BottomNavigationModel
+    private var typing: Bool { navigation.keyboardVisible }
     var body: some View {
         HStack(alignment: .center) {
-            if let save { BottomAction(title: "保存", symbol: "tray.and.arrow.down", color: Color(red: 0.92, green: 0.73, blue: 0.24), busy: busy && !submitting, action: save) }
+            if let save { BottomAction(title: "保存", symbol: "tray.and.arrow.down", color: Color(red: 0.92, green: 0.73, blue: 0.24), busy: busy && !submitting, compact: typing, action: save) }
             Spacer()
-            BottomAction(title: submitTitle, symbol: "checkmark.circle", color: .blue, busy: busy && submitting, action: submit)
+            BottomAction(title: submitTitle, symbol: "checkmark.circle", color: .blue, busy: busy && submitting, compact: typing, action: submit)
         }
         .disabled(busy || disabled)
-        .padding(.horizontal, 20).padding(.vertical, 8)
+        .padding(.horizontal, 20).padding(.vertical, typing ? 4 : 8)
     }
 }
 
@@ -667,7 +704,7 @@ enum PreviewReferenceData {
         case .faultTypes:
             return [.object(["key": .string("category-1"), "label": .string("机械故障"), "type": .string("FaultTypeCategory"), "children": .array([.object(["key": .string("1"), "typeName": .string("轴承磨损"), "type": .string("FaultType")]), .object(["key": .string("2"), "typeName": .string("传动异常"), "type": .string("FaultType")])])]), .object(["key": .string("category-2"), "label": .string("电气故障"), "type": .string("FaultTypeCategory"), "children": .array([.object(["key": .string("3"), "typeName": .string("驱动器报警"), "type": .string("FaultType")])])])]
         case .outboundMaterials:
-            return PreviewBusinessData.repairMaterials.map { var line = $0["materialOutbound"].object; line["outbound"] = $0["outbound"]; return .object(line) }
+            return PreviewBusinessData.repairMaterials.map { var line = $0["materialOutbound"].object; line["outbound"] = $0["outbound"]; line["id"] = .object(["outboundId": .number(1), "materialId": $0["material"]["id"]]); return .object(line) }
         }
     }
 }
@@ -691,4 +728,9 @@ enum PreviewBusinessData {
             return .object(["material": line["material"], "materialOutbound": .object(outboundLine), "outbound": .object(["outNumber": .string("CK-DEMO-001"), "recipientUser": .object(["realName": .string("示例维修人")])]), "useNum": line["entryQuantity"]])
         }
     }
+}
+
+/// Identity of one outbound material line: the outbound order plus the material.
+func outboundLineIdentity(_ line: JSONValue) -> String {
+    "\(line["id"]["outboundId"].text)-\(line["id"]["materialId"].text)"
 }

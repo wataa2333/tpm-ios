@@ -57,9 +57,8 @@ struct OriginalRepairForm: View {
                     }
                 }
             }
-            Section { VStack(alignment: .leading, spacing: 8) { TextField("请输入说明", text: text("content"), axis: .vertical).lineLimit(3...8).onChange(of: data.text("content")) { _, value in data["content"] = .string(limitedText(value, limit: 255)) }; CharacterCount(text: data.text("content"), limit: 255) } } header: { RequiredLabel(title: "工作说明") }
+            Section { EntryField(placeholder: "请输入说明", text: text("content"), limit: 255, axis: .vertical, lines: 3...8) } header: { RequiredLabel(title: "工作说明") }
             Section("图片") { OriginalPhotosField(albums: field("albums"), directory: "asset_fault", preview: preview, uploading: $photoUploading) }
-            if let error { Section { Text(error).foregroundStyle(.red); if data.isEmpty { Button("重试") { Task { await load() } } } } }
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(loading || saving)
@@ -75,7 +74,7 @@ struct OriginalRepairForm: View {
                             save: { prepare(false) }, submit: { prepare(true) })
         }
         .task { if data.isEmpty { await load() } }
-        .sheet(isPresented: $choosing) { NavigationStack { ReferencePicker(source: .outboundMaterials, multiple: true) { addMaterial($0) } } }
+        .sheet(isPresented: $choosing) { NavigationStack { ReferencePicker(source: .outboundMaterials, multiple: true, selected: (data["erpRepairMaterials"]?.array ?? []).map { outboundLineIdentity($0["materialOutbound"]) }) { addMaterial($0) } } }
         .sheet(isPresented: $choosingAssistants) {
             NavigationStack { ReferencePicker(source: .users, multiple: true, selected: (data["repairUsers"]?.array ?? []).map { $0["userName"].text }) { user in
                 var people = data["repairUsers"]?.array ?? []
@@ -91,8 +90,9 @@ struct OriginalRepairForm: View {
             } } }
         }
         .sheet(isPresented: $workflow, onDismiss: { Task { await load() } }) { NavigationStack { WorkflowTaskView(task: workflowTask, kind: .fault, onCompleted: { onCompleted?(); dismiss() }) } }
-        .confirmationDialog(submitAfterSave ? "保存维修结果并继续提交审批？" : "保存维修结果到原系统？", isPresented: $confirming, titleVisibility: .visible) { Button(submitAfterSave ? "继续" : "保存") { Task { await save() } } }
-        .alert(failedOnServer ? "保存未完成" : "请检查表单", isPresented: $showValidation) { Button("好", role: .cancel) { if !failedOnServer { error = nil } } } message: { Text(error ?? "") }
+        .keyboardManaged()
+        .confirmDialog(submitAfterSave ? "保存维修结果并继续提交审批？" : "保存维修结果到原系统？", isPresented: $confirming, confirmTitle: submitAfterSave ? "继续" : "保存") { Task { await save() } }
+        .errorDialog($error, title: failedOnServer ? "保存未完成" : "请检查表单", clearsOnClose: true, retry: data.isEmpty ? { Task { await load() } } : nil)
     }
     private func load() async {
         loading = true; error = nil; defer { loading = false }
@@ -222,14 +222,13 @@ struct WorkflowTaskView: View {
                 if assignmentsLoading { ProgressView("正在加载审批人…") }
                 AssigneesFields(elements: assignments.assignees, selections: $assignments.selections)
             } }
-            Section(isReturning ? "退单原因" : isRejecting ? "驳回意见" : "意见") { VStack(alignment: .leading, spacing: 8) { TextField(isReturning ? "请输入退单原因" : isRejecting ? "请输入驳回意见" : "请输入意见", text: $comment, axis: .vertical).lineLimit(3...8).onChange(of: comment) { _, value in comment = limitedText(value, limit: 255) }; CharacterCount(text: comment, limit: 255) } }
-            if let error { Section { Text(error).foregroundStyle(.red); Button("重新加载") { Task { await load() } } } }
+            Section(isReturning ? "退单原因" : isRejecting ? "驳回意见" : "意见") { EntryField(placeholder: isReturning ? "请输入退单原因" : isRejecting ? "请输入驳回意见" : "请输入意见", text: $comment, limit: 255, axis: .vertical, lines: 3...8) }
             if preview { Section { Text("流程页面预览，使用示例数据，不执行真实提交。").font(.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(loading || submitting)
         .initialLoadingContent(loading && state == .null)
         .overlay { AnimatedLoadingOverlay(isPresented: loading || submitting, title: submitting ? "正在提交…" : "正在加载当前节点…") }
-        .navigationTitle(task["name"].text).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .navigationTitle(taskActionTitle(task, kind: kind)).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(submitting) }
             if state["canDelegate"].bool || state["canResolveDelegate"].bool {
@@ -252,8 +251,10 @@ struct WorkflowTaskView: View {
             assignmentsReady = false
             Task { await loadAssignments() }
         }
-        .confirmationDialog("提交当前流程节点？", isPresented: $confirming, titleVisibility: .visible) { Button("提交") { Task { await submit() } } }
-        .alert("提交未完成", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) { Button("好", role: .cancel) {} } message: { Text(failure ?? "") }
+        .keyboardManaged()
+        .confirmDialog("提交当前流程节点？", isPresented: $confirming, confirmTitle: "提交") { Task { await submit() } }
+        .noticeDialog("提交未完成", message: failure ?? "", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } }), copyText: failure)
+        .errorDialog($error, title: "提交未完成", retry: ready ? nil : { Task { await load() } })
         .sheet(isPresented: Binding(get: { handoff != nil }, set: { if !$0 { handoff = nil } })) {
             NavigationStack { TaskHandoffView(taskID: state["taskId"].text, operation: handoff ?? "transfer") { onCompleted?(); dismiss() } }
         }
@@ -351,8 +352,7 @@ struct WorkflowTaskView: View {
             _ = try await session.request("process/commitTask", body: .object(payload))
             onCompleted?(); dismiss()
         } catch {
-            let message = stageFailureMessage("提交流程节点", error)
-            self.error = message; failure = message
+            self.error = stageFailureMessage("提交流程节点", error)
         }
     }
 }
@@ -372,8 +372,7 @@ struct TaskHandoffView: View {
     var body: some View {
         Form {
             if operation != "resolve" { ReferenceField(title: operation == "transfer" ? "转办人" : "委派给", source: .workflowUsers, value: $user) }
-            Section(operation == "resolve" ? "处理说明" : "原因") { TextField("请输入", text: $reason, axis: .vertical).lineLimit(3...8) }
-            if let error { Text(error).foregroundStyle(.red) }
+            Section(operation == "resolve" ? "处理说明" : "原因") { EntryField(placeholder: "请输入", text: $reason, axis: .vertical, lines: 3...8) }
         }
         .navigationTitle(title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .toolbar {
@@ -383,7 +382,9 @@ struct TaskHandoffView: View {
             DocumentActions(busy: saving, submitting: true, disabled: reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (operation != "resolve" && user["userName"].text.isEmpty), submit: { confirming = true })
         }
         .overlay { AnimatedLoadingOverlay(isPresented: saving, title: "正在提交…") }
-        .confirmationDialog("确认\(title)？", isPresented: $confirming, titleVisibility: .visible) { Button("提交") { Task { await save() } } }
+        .keyboardManaged()
+        .confirmDialog("确认\(title)？", isPresented: $confirming, confirmTitle: "提交") { Task { await save() } }
+        .errorDialog($error, title: "提交未完成", clearsOnClose: true)
     }
     private func save() async {
         saving = true; defer { saving = false }

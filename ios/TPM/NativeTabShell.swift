@@ -1,70 +1,51 @@
 import SwiftUI
 
-/// Keep the system tab bar responsible for glass rendering, hit testing,
-/// selection tracking and device safe areas.
-struct NativeTabShell<Content: View>: View {
+/// Keep the system tab bar responsible for glass rendering, hit testing, selection tracking and
+/// device safe areas.
+///
+/// The "new" action is the system's detached circular tab (`role: .search`): the standalone round
+/// icon the system draws at the trailing end of the tab bar, on the same row as the tabs. It is not
+/// a page. Choosing it restores the previous tab at once and opens the new-document sheet, so it
+/// hides and shows together with the tab bar.
+struct NativeTabShell<Home: View, Todo: View, Workspace: View, Mine: View>: View {
     @Binding var selection: Int
     var preview = false
-    @ViewBuilder let content: () -> Content
+    @ViewBuilder let home: () -> Home
+    @ViewBuilder let todo: () -> Todo
+    @ViewBuilder let workspace: () -> Workspace
+    @ViewBuilder let mine: () -> Mine
     @EnvironmentObject private var navigation: BottomNavigationModel
+    @State private var creating: WorkflowKind?
+    private static var newTab: Int { 4 }
+    private var newTitle: String { navigation.newDocument == .erp ? "新建领料单" : "新建报修" }
 
     var body: some View {
-        TabView(selection: $selection) { content() }
-            .onChange(of: selection) {
+        TabView(selection: $selection) {
+            Tab("主页", systemImage: "house", value: 0) { home() }
+            Tab("我的待办", systemImage: "checklist", value: 2) { todo() }
+            Tab("工作台", systemImage: "square.grid.2x2", value: 1) { workspace() }
+            Tab("我的", systemImage: "person.crop.circle", value: 3) { mine() }
+            Tab(newTitle, systemImage: "square.and.pencil", value: Self.newTab, role: .search) { Color.clear }
+        }
+        .onChange(of: selection) { old, new in
+            if new == Self.newTab {
+                selection = old
+                navigation.searchReset = UUID()
+                navigation.presentingDocument = true
+                creating = navigation.newDocument ?? .fault
+            } else {
                 navigation.searchReset = UUID()
                 navigation.hideTabs = false
             }
-    }
-}
-
-/// A round glass "new" button at the bottom-trailing corner, like the compose button in
-/// the system Notes app. It lives in the bottom safe area of each tab's navigation stack,
-/// so it sits above the system tab bar, and it disappears together with the tab bar.
-struct NewDocumentButton: ViewModifier {
-    var preview = false
-    @EnvironmentObject private var navigation: BottomNavigationModel
-    @State private var creating: WorkflowKind?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private var visible: Bool { !navigation.hideTabs && !navigation.keyboardVisible }
-    private var kind: WorkflowKind { navigation.newDocument ?? .fault }
-
-    func body(content: Content) -> some View {
-        content
-            .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 0) {
-                Group {
-                    if visible {
-                        Button {
-                            navigation.searchReset = UUID()
-                            navigation.presentingDocument = true
-                            creating = kind
-                        } label: {
-                            Image(systemName: "square.and.pencil")
-                                .font(.title2.weight(.semibold))
-                                .frame(width: 52, height: 52)
-                        }
-                        .buttonStyle(.glass).buttonBorderShape(.circle)
-                        .accessibilityLabel(kind == .erp ? "新建领料单" : "新建报修")
-                        .padding(.trailing, 20).padding(.bottom, 8)
-                        .transition(.opacity)
-                    }
-                }
-                .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.25), value: visible)
-            }
-            .sheet(item: $creating, onDismiss: {
-                navigation.presentingDocument = false
-                navigation.refresh = UUID()
-            }) { kind in
-                NavigationStack {
-                    if kind == .fault { OriginalFaultForm(preview: preview) }
-                    else { OriginalERPForm(preview: preview) }
-                }.environment(\.documentSearch, true)
-                    .presentationDragIndicator(.visible)
-            }
-    }
-}
-
-extension View {
-    func newDocumentButton(preview: Bool = false) -> some View {
-        modifier(NewDocumentButton(preview: preview))
+        }
+        .sheet(item: $creating, onDismiss: {
+            navigation.presentingDocument = false
+            navigation.refresh = UUID()
+        }) { kind in
+            NavigationStack {
+                if kind == .fault { OriginalFaultForm(preview: preview) }
+                else { OriginalERPForm(preview: preview) }
+            }.presentationDragIndicator(.visible)
+        }
     }
 }

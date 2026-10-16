@@ -47,15 +47,15 @@ struct AssetRecordDetail: View {
     @State private var error: String?
     private var asset: JSONValue { detail == .null ? record : detail }
     var body: some View {
-        VStack(spacing: 0) {
-            HorizontalCategories(titles: tabs, selection: $tab)
         List {
+            HorizontalCategories(titles: tabs, selection: $tab)
+            LoadingRow(isPresented: loading, title: "正在加载" + tabs[tab])
             Section {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: RowMetrics.spacing) {
                     WrappingContent { Text(asset["assetName"].text).font(.headline) }
                     WrappingContent { Text(asset["assetCode"].text).font(.subheadline).foregroundStyle(.secondary) }
-                }.padding(.vertical, 4)
-            }
+                }
+            }.listRowInsets(RowMetrics.insets)
             if tab == 0 {
                 Section("基本信息") { ForEach(assetFields, id: \.0) { key, label in LabeledContent(label, value: assetDisplayValue(asset.at(key), key: key)) } }
             } else if tab == 6 {
@@ -75,20 +75,19 @@ struct AssetRecordDetail: View {
                         Text(row["taskName"].text.isEmpty ? row.object.label : row["taskName"].text).font(.headline)
                         Text(readableDate(row["createTime"])).font(.subheadline).foregroundStyle(.secondary)
                         if !row["content"].text.isEmpty { Text(row["content"].text).font(.subheadline) }
-                    }.padding(.vertical, 6)
-                }
+                    }
+                }.uniformRow()
             }
             if !loading && error == nil && tab != 0 && rows.isEmpty && (tab != 2 || asset["albums"].array.isEmpty) { CompactEmptyState(title: "暂无" + tabs[tab] + "记录") }
-            if let error { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } }
             if preview { Section { DemoNotice() } }
-        }
         }
         .searchPageChrome()
         .navigationTitle("资产详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility())
-        .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载" + tabs[tab] + "…") }
         .onAppear { tab = tabs.firstIndex(of: initialTab) ?? 0 }
         .task(id: tab) { await load() }
+        .errorDialog($error, retry: { Task { await load() } })
+        .reloadsToTop(on: tab)
     }
     private func load() async {
         loading = true; error = nil; rows = []; defer { loading = false }
@@ -114,47 +113,56 @@ struct WarehouseStockView: View {
     var preview = false
     @State private var rows: [JSONValue] = []
     @State private var loading = false
+    @State private var loadingMore = false
     @State private var error: String?
     @State private var query = ""
     @State private var searchField = "material.materialName"
     @State private var searching = false
     @State private var last = true
+    @State private var total: Int?
     var body: some View {
         List {
+            LoadingRow(isPresented: loading && !loadingMore, title: "正在加载库存")
             Section {
                 if searching { Picker("搜索分类", selection: $searchField) { Text("物料名称").tag("material.materialName"); Text("物料编号").tag("material.materialNum"); Text("规格型号").tag("material.materialModel") } }
                 NavigationLink { WarehouseReceiptsView(preview: preview) } label: { Label("入库记录", systemImage: "tray.and.arrow.down") }
             }
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 NavigationLink { WarehouseStockFacts(row: row) } label: {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: RowMetrics.spacing) {
                         HStack { Text(row["material"]["materialName"].text).font(.headline); Spacer(); Text(quantity(row)).font(.subheadline.weight(.medium)) }
                         Text("编号：" + row["material"]["materialNum"].text).font(.subheadline).foregroundStyle(.secondary)
                         Text("仓库：" + row["warehouse"]["warehouseName"].text).font(.subheadline).foregroundStyle(.secondary)
                         Text("记录时间：" + readableDate(row["createTime"])).font(.subheadline).foregroundStyle(.secondary)
-                    }.padding(.vertical, 6)
-                }
+                    }
+                }.uniformRow()
             }
             if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无库存记录") }
-            if !last { Button("加载更多") { Task { await load(more: true) } }.disabled(loading) }
-            if let error { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } }
+            LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await load(more: true) }
             if preview { DemoNotice() }
         }
         .navigationTitle("仓库库存").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索" + (searchField == "material.materialNum" ? "物料编号" : searchField == "material.materialModel" ? "规格型号" : "物料名称"), onSubmit: { Task { await load() } })
         .task(id: searchField + query) { await load() }
+        .reloadsToTop(on: searchField + query)
+        .errorDialog($error, retry: { Task { await load() } })
         .refreshable { await load() }
-        .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载库存…") }
     }
     private func quantity(_ row: JSONValue) -> String { row["amount"].text + " " + (row["material"]["unit"].text.isEmpty ? "PCS" : row["material"]["unit"].text) }
     private func load(more: Bool = false) async {
-        loading = true; error = nil; defer { loading = false }
+        if more { loadingMore = true } else { loading = true }
+        error = nil; defer { loading = false; loadingMore = false }
+        let snapshot = searchField + query
         if preview { rows = PreviewWarehouse.rows.filter { query.isEmpty || $0.at(searchField).text.localizedCaseInsensitiveContains(query) }; return }
         do {
             let result = try await session.page("material/pageMaterialInfo", offset: more ? rows.count : 0, filters: query.isEmpty ? [] : [filter(searchField, query, "like")])
-            try Task.checkCancellation(); rows = more ? rows + result["content"].array : result["content"].array; last = result["last"].bool
-        } catch is CancellationError { } catch { self.error = error.localizedDescription }
+            try Task.checkCancellation()
+            guard snapshot == searchField + query else { return }
+            rows = more ? rows + result["content"].array : result["content"].array; last = result["last"].bool; total = serverPageCount(result)
+        } catch is CancellationError { }
+        catch let urlError as URLError where urlError.code == .cancelled { }
+        catch { self.error = error.localizedDescription }
     }
 }
 
@@ -184,6 +192,7 @@ struct WarehouseReceiptsView: View {
     @State private var error: String?
     var body: some View {
         List {
+            LoadingRow(isPresented: loading && rows.isEmpty, title: "正在加载入库记录")
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 Section(row["entryNumber"].text) {
                     LabeledContent("入库时间", value: readableDate(row["warehousingTime"]))
@@ -192,10 +201,9 @@ struct WarehouseReceiptsView: View {
                     LabeledContent("申请日期", value: readableDate(row["applyDate"]))
                 }
             }
-            if let error { Text(error).foregroundStyle(.red) }
             if preview { DemoNotice() }
         }.navigationTitle("入库记录").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
-            .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载入库记录…") }
+            .errorDialog($error, clearsOnClose: true)
             .task {
                 if preview { rows = [.object(["entryNumber": .string("RK-DEMO-001"), "warehousingTime": .string("2026-10-15 14:30"), "applyDate": .string("2026-10-15"), "warehouse": .object(["warehouseName": .string("备件仓")]), "user": PreviewIdentity.user])]; return }
                 loading = true; defer { loading = false }

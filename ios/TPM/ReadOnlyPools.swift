@@ -6,7 +6,10 @@ enum ReadOnlyPoolKind: String {
     var page: String { rawValue + (self == .maintenance ? "/pageMaintain" : "/pagePrecise") }
     var nameKey: String { rawValue + "Name" }
     var stateKey: String { rawValue + "State" }
-    var color: Color { self == .maintenance ? .teal : .purple }
+    /// "待接单" is the same situation as a repair order waiting to be grabbed.
+    var color: Color { FaultState.received.color }
+    /// Orders waiting to be taken: the original pools default to the RECEIVED state.
+    var waitingFilters: [JSONValue] { [filter(stateKey, "RECEIVED")] }
 }
 
 /// The original pools default to RECEIVED. These entries read server records;
@@ -19,11 +22,14 @@ struct ReadOnlyPoolView: View {
     @State private var byAsset = false
     @State private var searching = false
     @State private var loading = true
+    @State private var refreshing = false
     @State private var moreLoading = false
     @State private var last = true
+    @State private var total: Int?
     @State private var error: String?
     var body: some View {
         List {
+            LoadingRow(isPresented: loading && !refreshing, title: "正在加载工单")
             if searching {
                 Picker("搜索分类", selection: $byAsset) {
                     Text("工单名称").tag(false)
@@ -46,21 +52,17 @@ struct ReadOnlyPoolView: View {
                     .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
                 }
             }
-            if !last {
-                Button { Task { await load(more: true) } } label: {
-                    HStack { Text("加载更多"); if moreLoading { ProgressView() } }
-                }.disabled(moreLoading)
-            }
-            if let error { Section { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } } }
             if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无待接单工单") }
+            LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || moreLoading, loaded: rows.count, total: total) { await load(more: true) }
         }
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: byAsset ? "搜索资产编码" : "搜索工单名称", onSubmit: { Task { await load() } })
         .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(ListTabVisibility())
-        .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载工单…") }
+        .reloadsToTop(on: "\(byAsset)-\(query)")
+        .errorDialog($error, retry: { Task { await load() } })
         .task(id: "\(byAsset)-\(query)") { await load() }
-        .refreshable { await load() }
+        .refreshable { refreshing = true; await load(); refreshing = false }
     }
     private func facts(_ row: JSONValue) -> [(String, String)] {
         [("单号", row["sn"].text), ("资产编码", row["asset"]["assetCode"].text),
@@ -74,13 +76,18 @@ struct ReadOnlyPoolView: View {
         if more { moreLoading = true } else { loading = true }
         defer { loading = false; moreLoading = false }
         error = nil
+        let snapshot = "\(byAsset)-\(query)"
         do {
-            var filters = [filter(kind.stateKey, "RECEIVED")]
+            var filters = kind.waitingFilters
             if !query.isEmpty { filters.append(filter(byAsset ? "asset.assetCode" : kind.nameKey, query, "like")) }
             let page = try await session.page(kind.page, offset: more ? rows.count : 0, filters: filters)
             try Task.checkCancellation()
+            guard snapshot == "\(byAsset)-\(query)" else { return }
             rows = more ? rows + page["content"].array : page["content"].array
             last = page["last"].bool
-        } catch is CancellationError { } catch { self.error = error.localizedDescription }
+            total = serverPageCount(page)
+        } catch is CancellationError { }
+        catch let urlError as URLError where urlError.code == .cancelled { }
+        catch { self.error = error.localizedDescription }
     }
 }

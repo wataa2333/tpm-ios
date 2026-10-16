@@ -129,11 +129,11 @@ final class PreviewTests: XCTestCase {
         app.launch()
         for _ in 0..<2 {
             app.buttons["order-title-FA-CNC-008"].firstMatch.tap()
-            XCTAssertTrue(app.buttons["领取工单"].waitForExistence(timeout: 10))
-            app.buttons["领取工单"].tap()
+            XCTAssertTrue(app.buttons["抢单"].waitForExistence(timeout: 10))
+            app.buttons["抢单"].tap()
             XCTAssertTrue(app.buttons["提交"].waitForExistence(timeout: 10))
             app.buttons["提交"].tap()
-            app.sheets.buttons["提交"].tap()
+            app.buttons["dialog-primary"].tap()
             let returned = expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: app.navigationBars["故障报修"])
             wait(for: [returned], timeout: 10)
             XCTAssertFalse(app.navigationBars["报修详情"].isHittable)
@@ -192,17 +192,17 @@ final class PreviewTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "home"]
         app.launch()
-        let menu = app.buttons["切换厂区，当前示例一厂"]
+        let menu = app.descendants(matching: .any)["切换厂区，当前示例一厂"].firstMatch
         XCTAssertTrue(menu.waitForExistence(timeout: 20))
         menu.tap()
         XCTAssertTrue(app.buttons["示例二厂"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["示例一厂"].isEnabled, "当前厂区不能重复选择")
         app.buttons["示例二厂"].tap()
         // No full-screen chooser, no confirmation: the toolbar simply shows the new factory.
-        XCTAssertTrue(app.buttons["切换厂区，当前示例二厂"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["切换厂区，当前示例二厂"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertFalse(app.navigationBars["切换厂区"].exists)
-        XCTAssertFalse(app.sheets.firstMatch.exists)
-        XCTAssertFalse(app.alerts.firstMatch.exists)
+        XCTAssertFalse(app.buttons["dialog-primary"].exists)
+        XCTAssertFalse(app.navigationBars["切换厂区"].exists)
     }
     func testSigningInKeepsTheOrderOpenOnItsNextStepAndBackReturnsOnce() {
         let app = XCUIApplication()
@@ -217,7 +217,7 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(signNow.waitForExistence(timeout: 5))
         signNow.tap()
         // The next step is shown on the same order, not the stale 待签到 page.
-        XCTAssertTrue(app.buttons["维修处理"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["完成任务"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.navigationBars["报修详情"].isHittable)
         app.navigationBars.buttons.firstMatch.tap()
         let listReturned = expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: app.navigationBars["故障报修"])
@@ -284,10 +284,10 @@ final class PreviewTests: XCTestCase {
         XCTAssertLessThan(app.buttons["保存"].frame.midX, app.buttons["提交"].frame.midX)
         XCTAssertLessThan(abs(app.buttons["提交"].frame.midY - app.buttons["保存"].frame.midY), 3)
         app.buttons["提交"].tap()
-        XCTAssertTrue(app.alerts["请检查表单"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.alerts.staticTexts["请填写或选择报修名称"].exists)
+        XCTAssertTrue(app.staticTexts["提示"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["请填写或选择报修名称"].exists)
         capture(app, "Required field validation")
-        app.alerts.buttons["好"].tap()
+        app.buttons["dialog-primary"].tap()
         app.swipeUp(); app.swipeUp()
         capture(app, "Fault form lower fields")
     }
@@ -299,11 +299,18 @@ final class PreviewTests: XCTestCase {
         let add = app.buttons["新建报修"]
         XCTAssertTrue(add.waitForExistence(timeout: 20))
         let mine = app.buttons["我的"].firstMatch
-        // A real TabView places actions in its system accessory above the bar.
-        XCTAssertLessThanOrEqual(add.frame.maxY, mine.frame.minY + 2)
+        // The system's detached round tab sits on the same row as the tabs, to the right of "我的".
+        XCTAssertLessThan(abs(add.frame.midY - mine.frame.midY), 24)
+        XCTAssertGreaterThan(add.frame.minX, mine.frame.maxX - 2)
         XCTAssertGreaterThan(add.frame.midX, app.frame.midX)
         XCTAssertTrue(add.isHittable)
         XCTAssertEqual(app.buttons.matching(identifier: "我的").count, 1)
+        // Choosing it opens the form and leaves the previously selected tab selected.
+        add.tap()
+        XCTAssertTrue(app.buttons["取消"].waitForExistence(timeout: 10))
+        app.buttons["取消"].tap()
+        XCTAssertTrue(app.buttons["新建报修"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars["故障报修"].exists)
     }
 
     func testAcceptanceRejectAndReturnScreens() {
@@ -369,17 +376,35 @@ final class PreviewTests: XCTestCase {
         wait(for: [enabled], timeout: 10)
         // Nothing chosen: submitting is refused and names the next node; no confirmation sheet opens.
         submit.tap()
-        XCTAssertTrue(app.alerts["提交未完成"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.alerts.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "【维修】确认")).firstMatch.exists)
-        XCTAssertFalse(app.sheets.buttons["提交"].exists)
-        app.alerts.buttons["好"].tap()
+        XCTAssertTrue(app.staticTexts["提交未完成"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "审批人")).firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["提交当前流程节点？"].exists)
+        app.buttons["dialog-primary"].tap()
         // Choose the approver, then the normal confirmation is offered.
         approver.tap()
         app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "示例审批人")).firstMatch.tap()
         XCTAssertTrue(approver.waitForExistence(timeout: 5))
         submit.tap()
-        XCTAssertTrue(app.sheets.buttons["提交"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.alerts["提交未完成"].exists)
+        XCTAssertTrue(app.staticTexts["提交当前流程节点？"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["提交未完成"].exists)
+    }
+
+    func testLongTextBoxIsCompactAndCopyable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "faults"]
+        app.launch()
+        let expand = expansionControl(app)
+        XCTAssertTrue(expand.waitForExistence(timeout: 15)); expand.tap()
+        let fact = factElement(app, "故障描述")
+        for _ in 0..<6 where !fact.isHittable { scrollUpSmall(app) }
+        fact.tap()
+        XCTAssertTrue(app.buttons["copy-button"].waitForExistence(timeout: 5))
+        // Short text: the box is nowhere near half of the screen.
+        let sheetBar = app.navigationBars["故障描述"]
+        XCTAssertTrue(sheetBar.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(sheetBar.frame.minY, app.frame.height * 0.45)
+        app.buttons["copy-button"].tap()
+        XCTAssertTrue(app.buttons["已复制"].waitForExistence(timeout: 3))
     }
 
     func testSearchDoesNotFollowNewSheetAndNativeDateControlsFit() {

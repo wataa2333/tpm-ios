@@ -15,6 +15,9 @@ struct DashboardCard: View {
     let subtitle: String
     let symbol: String
     let palette: Int
+    /// Number of orders behind the card; nil while it is still being fetched or unavailable.
+    var count: Int? = nil
+    var countLabel = ""
     @ScaledMetric private var height = 170.0
     private var colors: [Color] {
         switch palette {
@@ -28,12 +31,19 @@ struct DashboardCard: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: symbol).font(.system(size: 27, weight: .medium))
-                .frame(width: 40, height: 40, alignment: .leading)
+            HStack(alignment: .top) {
+                Image(systemName: symbol).font(.system(size: 27, weight: .medium))
+                    .frame(width: 40, height: 40, alignment: .leading)
+                Spacer(minLength: 8)
+                if let count {
+                    Text("\(count)").font(.system(.title, design: .rounded, weight: .bold)).monospacedDigit()
+                        .accessibilityIdentifier("dashboard-count-" + title)
+                }
+            }
             Spacer(minLength: 14)
             Text(title).font(.headline).lineLimit(nil).multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(subtitle).font(.caption).foregroundStyle(.white.opacity(0.88))
+            Text(count == nil || countLabel.isEmpty ? subtitle : countLabel).font(.caption).foregroundStyle(.white.opacity(0.88))
                 .lineLimit(nil).multilineTextAlignment(.leading)
         }
         .foregroundStyle(.white)
@@ -76,25 +86,38 @@ private struct DashboardWave: Shape {
 
 struct DashboardHome: View {
     var preview = false
+    @EnvironmentObject private var session: LiveSession
+    @EnvironmentObject private var navigation: BottomNavigationModel
+    @EnvironmentObject private var store: DemoStore
+    /// Server totals per card: "pending", "pool", "maintenance", "precision".
+    @State private var counts: [String: Int] = [:]
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: 16)]
+    private func count(_ key: String) -> Int? {
+        guard preview else { return counts[key] }
+        switch key {
+        case "pending": return store.faults.filter { $0.state == .reported }.count
+        case "pool": return store.faults.filter { $0.state == .received }.count
+        default: return nil
+        }
+    }
     var body: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 16) {
                 NavigationLink {
                     if preview { FaultListView(initialState: .reported) } else { LiveWorkflowList(kind: .fault, initialState: "REPORTED") }
-                } label: { DashboardCard(title: "待受理", subtitle: "查看与受理报修", symbol: "tray", palette: 3) }
+                } label: { DashboardCard(title: "待受理", subtitle: "查看与受理报修", symbol: "tray", palette: 3, count: count("pending"), countLabel: "个待受理") }
                 NavigationLink {
                     if preview { OrderPoolView(kind: "维修") } else { LiveWorkflowList(kind: .fault, initialState: "RECEIVED") }
-                } label: { DashboardCard(title: "维修工单池", subtitle: "查看并领取工单", symbol: "wrench.and.screwdriver", palette: 0) }
+                } label: { DashboardCard(title: "维修工单池", subtitle: "查看并领取工单", symbol: "wrench.and.screwdriver", palette: 0, count: count("pool"), countLabel: "个待接单") }
                 NavigationLink {
                     if preview { OrderPoolView(kind: "保养") } else { ReadOnlyPoolView(kind: .maintenance) }
                 } label: {
-                    DashboardCard(title: "保养工单池", subtitle: "保养任务", symbol: "oilcan", palette: 2)
+                    DashboardCard(title: "保养工单池", subtitle: "保养任务", symbol: "oilcan", palette: 2, count: count("maintenance"), countLabel: "个待接单")
                 }
                 NavigationLink {
                     if preview { OrderPoolView(kind: "精密度检查") } else { ReadOnlyPoolView(kind: .precision) }
                 } label: {
-                    DashboardCard(title: "精密度检查工单池", subtitle: "精密度检查任务", symbol: "ruler", palette: 1)
+                    DashboardCard(title: "精密度检查工单池", subtitle: "精密度检查任务", symbol: "ruler", palette: 1, count: count("precision"), countLabel: "个待接单")
                 }
             }.buttonStyle(DashboardPressStyle()).padding(20)
             if preview { DemoNotice().padding(.horizontal, 20) }
@@ -103,9 +126,35 @@ struct DashboardHome: View {
         .contentMargins(.bottom, 104, for: .scrollContent)
         .navigationTitle("主页").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
         .modifier(ListTabVisibility())
+        .reloadsToTop(on: navigation.refresh)
+        .task(id: navigation.refresh) { await loadCounts() }
+        .refreshable { await loadCounts() }
         .toolbar { ToolbarItem(placement: .topBarTrailing) {
             if preview { PreviewFactoryButton() } else { FactorySwitcherButton() }
         } }
+    }
+    /// One request per card, each asking for a single row: only `totalElements` is used.
+    private func loadCounts() async {
+        guard !preview else { return }
+        let api = session
+        let queries: [(String, String, [JSONValue])] = [
+            ("pending", "fault/pageAssetFault", [filter("faultState", "REPORTED")]),
+            ("pool", "fault/pageAssetFault", [filter("faultState", "RECEIVED")]),
+            ("maintenance", ReadOnlyPoolKind.maintenance.page, ReadOnlyPoolKind.maintenance.waitingFilters),
+            ("precision", ReadOnlyPoolKind.precision.page, ReadOnlyPoolKind.precision.waitingFilters)
+        ]
+        await withTaskGroup(of: (String, Int?).self) { group in
+            for (key, path, filters) in queries {
+                group.addTask {
+                    do { return (key, serverPageCount(try await api.page(path, filters: filters, limit: 1))) }
+                    catch { return (key, nil) }
+                }
+            }
+            for await (key, value) in group {
+                guard !Task.isCancelled else { return }
+                if let value { counts[key] = value }
+            }
+        }
     }
 }
 

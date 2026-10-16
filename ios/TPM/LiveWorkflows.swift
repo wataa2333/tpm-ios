@@ -19,18 +19,19 @@ struct LiveTabs: View {
     @State private var selection = 0
     var body: some View {
         NativeTabShell(selection: $selection) {
-            NavigationStack { DashboardHome() }.newDocumentButton().tabItem { Label("主页", systemImage: "house") }.tag(0)
-            NavigationStack { TodoInboxView() }.newDocumentButton().tabItem { Label("我的待办", systemImage: "checklist") }.tag(2)
-            NavigationStack { DashboardWorkspace() }.newDocumentButton().tabItem { Label("工作台", systemImage: "square.grid.2x2") }.tag(1)
-                NavigationStack {
-                    List {
-                        Section { LabeledContent("账号", value: session.authentication.text("name")); LabeledContent("姓名", value: session.authentication.text("fullName")) }
-                        Section { LabeledContent("当前厂区", value: session.currentFactoryName) }
-                        Section { Button("退出登录", role: .destructive) { session.signOut() } }
-                    }.navigationTitle("我的").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
-                }
-                .newDocumentButton()
-                .tabItem { Label("我的", systemImage: "person.crop.circle") }.tag(3)
+            NavigationStack { DashboardHome() }
+        } todo: {
+            NavigationStack { TodoInboxView() }
+        } workspace: {
+            NavigationStack { DashboardWorkspace() }
+        } mine: {
+            NavigationStack {
+                List {
+                    Section { LabeledContent("账号", value: session.authentication.text("name")); LabeledContent("姓名", value: session.authentication.text("fullName")) }
+                    Section { LabeledContent("当前厂区", value: session.currentFactoryName) }
+                    Section { Button("退出登录", role: .destructive) { session.signOut() } }
+                }.navigationTitle("我的").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
+            }
         }
     }
 }
@@ -44,14 +45,18 @@ struct LiveWorkflowList: View {
     @State private var searchField: FaultSearchField = .name
     @State private var searching = false
     @State private var loading = true
+    @State private var refreshing = false
     @State private var error: String?
     @State private var last = true
     @State private var adding = false
     @State private var loadingMore = false
+    @State private var total: Int?
     @State private var stateCounts: [String: Int] = [:]
     init(kind: WorkflowKind, initialState: String = "RECEIVED") { self.kind = kind; _state = State(initialValue: initialState) }
     var body: some View {
         List {
+            if kind == .fault { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? 2 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
+            LoadingRow(isPresented: loading && !refreshing, title: "正在加载工单")
             if kind == .fault && searching { Section { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } } } }
             ForEach(Array(rows.enumerated()), id: \.offset) { _, item in
                 WorkOrderCard(title: kind == .fault ? item["faultName"].text : erpCardTitle(item),
@@ -68,8 +73,7 @@ struct LiveWorkflowList: View {
                 .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
             }
-            if !last { Button { Task { await reload(more: true) } } label: { HStack { Text("加载更多"); if loadingMore { ProgressView() } } }.disabled(loadingMore) }
-            if let error { Section { Text(error).foregroundStyle(.red); Button("重试") { Task { await reload() } } } }
+            LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await reload(more: true) }
             if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无相关单据") }
         }
         .simultaneousGesture(DragGesture(minimumDistance: 45).onEnded { value in
@@ -77,16 +81,13 @@ struct LiveWorkflowList: View {
             let index = FaultState.allCases.firstIndex { $0.code == state } ?? 2
             state = FaultState.allCases[min(max(index + (value.translation.width < 0 ? 1 : -1), 0), 7)].code
         })
-        // The strip sits in the top safe area so list content scrolls under the system bars.
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if kind == .fault { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? 2 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
-        }
-        .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载工单…") }
         .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号", onSubmit: { Task { await reload() } })
-        
-        .refreshable { await reload(); await reloadCounts() }
+
+        .refreshable { refreshing = true; await reload(); await reloadCounts(); refreshing = false }
+        .reloadsToTop(on: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)")
+        .errorDialog($error, retry: { Task { await reload() } })
         .task(id: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)") { await reload() }
         .task(id: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)") { await reloadCounts() }
         .onAppear {
@@ -102,16 +103,22 @@ struct LiveWorkflowList: View {
         if more { loadingMore = true } else { loading = true }
         error = nil
         defer { loading = false; loadingMore = false }
+        // A page for a filter the user has already left must never be appended to the new list.
+        let snapshot = "\(state)-\(searchField.rawValue)-\(query)"
         do {
             var filters: [JSONValue] = []
             if kind == .fault && !state.isEmpty { filters.append(filter("faultState", state)) }
             if !query.isEmpty { filters.append(filter(kind == .fault ? searchField.key : "outNumber", query, "like")) }
             let data = try await session.page(kind.page, offset: more ? rows.count : 0, filters: filters)
             try Task.checkCancellation()
+            guard snapshot == "\(state)-\(searchField.rawValue)-\(query)" else { return }
             rows = more ? rows + data["content"].array : data["content"].array
             last = data["last"].bool
-            if kind == .fault, let count = serverPageCount(data) { stateCounts[state] = count }
-        } catch { self.error = error.localizedDescription }
+            total = serverPageCount(data)
+            if kind == .fault, let count = total { stateCounts[state] = count }
+        } catch is CancellationError {}
+        catch let urlError as URLError where urlError.code == .cancelled {}
+        catch { self.error = error.localizedDescription }
     }
     private func reloadCounts() async {
         guard kind == .fault else { return }
@@ -210,7 +217,7 @@ struct LiveWorkflowDetail: View {
                             LabeledContent("维修班组", value: detail["userGroup"].object.label)
                             LabeledContent("ERP记账部门", value: detail["division"].object.label)
                         }
-                        if !detail["faultDesc"].text.isEmpty { Section("故障描述") { Text(detail["faultDesc"].text) } }
+                        if !detail["faultDesc"].text.isEmpty { Section("故障描述") { Text(detail["faultDesc"].text).textSelection(.enabled).contextMenu { Button("复制", systemImage: "doc.on.doc") { copyToPasteboard(detail["faultDesc"].text) } } } }
                         if !detail["albums"].array.isEmpty { Section("现场照片") { ForEach(Array(detail["albums"].array.enumerated()), id: \.offset) { _, photo in AttachmentRow(photo: photo) } } }
                     } else {
                         Section("ERP出库详情") {
@@ -234,13 +241,12 @@ struct LiveWorkflowDetail: View {
                             }
                         }
                     }
-                    if let error { Section { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } } }
                 }
                 .refreshable { await load() }
-                .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在刷新…") }
             }
         }
         .navigationTitle(kind == .fault ? "报修详情" : "出库详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .errorDialog($error, retry: { Task { await load() } })
         .modifier(DetailTabVisibility())
         .task { await load() }
         .toolbar {
@@ -250,7 +256,7 @@ struct LiveWorkflowDetail: View {
         }
         .safeAreaInset(edge: .bottom) {
             if !task["id"].text.isEmpty && (taskState["canSubmit"].bool || taskState["canDelegate"].bool || taskState["canResolveDelegate"].bool) {
-                HStack { if returnAvailable { BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) { returning = true }.disabled(loading) }; Spacer(); BottomAction(title: task["name"].text, symbol: "arrow.right.circle") { processing = true }.disabled(loading) }.padding(.horizontal, 20).padding(.vertical, 8)
+                HStack { if returnAvailable { BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) { returning = true }.disabled(loading) }; Spacer(); BottomAction(title: taskActionTitle(task, kind: kind), symbol: "arrow.right.circle") { processing = true }.disabled(loading) }.padding(.horizontal, 20).padding(.vertical, 8)
             }
         }
         .sheet(isPresented: $returning, onDismiss: taskSheetClosed) { NavigationStack { WorkflowTaskView(task: task, kind: kind, previewReturn: true, onCompleted: completed) } }
@@ -311,40 +317,51 @@ struct LiveCatalogView: View {
     @State private var searching = false
     @State private var rows: [JSONValue] = []
     @State private var loading = true
+    @State private var refreshing = false
+    @State private var loadingMore = false
     @State private var error: String?
     @State private var last = true
+    @State private var total: Int?
     var body: some View {
         List {
-            if searching { Section { Toggle("按编号搜索", isOn: $byCode) } }
+            LoadingRow(isPresented: loading && !refreshing, title: "正在加载")
+            if searching { Section { Picker("搜索方式", selection: $byCode) { Text("按名称").tag(false); Text("按编号").tag(true) }.pickerStyle(.segmented).labelsHidden() } }
             ForEach(Array(rows.enumerated()), id: \.offset) { _, record in
                 NavigationLink {
                     if source == .assets { AssetRecordDetail(record: record) }
                     else { List { Section(record["materialDesc"].text) { MaterialFacts(material: record); LabeledContent("库存数量", value: materialQuantity(record["onhandQty"].text, material: record)) } }.navigationTitle("库存详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome().modifier(DetailTabVisibility()) }
-                } label: { VStack(alignment: .leading, spacing: 5) {
+                } label: { VStack(alignment: .leading, spacing: RowMetrics.spacing) {
                     WrappingContent { Text(record.object.label).font(.headline) }
                     WrappingContent { Text(record[source == .assets ? "assetCode" : "materialCode"].text).font(.subheadline).foregroundStyle(.secondary) }
                 } }
+                .uniformRow()
                 .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
             }
-            if !last { Button("加载更多") { Task { await load(more: true) } }.disabled(loading) }
-            if let error { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } }
+            LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await load(more: true) }
         }
-        .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载…") }
         .navigationTitle(source == .assets ? "资产台账" : "库存")
         .modifier(ListTabVisibility())
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: byCode ? "搜索编号" : "搜索名称", onSubmit: { Task { await load() } })
         .onChange(of: byCode) { Task { await load() } }
-        .task { await load() }.refreshable { await load() }
+        .reloadsToTop(on: "\(byCode)-\(query)")
+        .errorDialog($error, retry: { Task { await load() } })
+        .task { await load() }.refreshable { refreshing = true; await load(); refreshing = false }
     }
     private func load(more: Bool = false) async {
-        loading = true; error = nil; defer { loading = false }
+        if more { loadingMore = true } else { loading = true }
+        error = nil; defer { loading = false; loadingMore = false }
+        let snapshot = "\(byCode)-\(query)"
         do {
             let field = byCode ? (source == .assets ? "assetCode" : "materialCode") : source.searchField
             let result = try await session.page(source.pagePath!, offset: more ? rows.count : 0, filters: query.isEmpty ? [] : [filter(field, query, "like")])
-            rows = more ? rows + result["content"].array : result["content"].array; last = result["last"].bool
-        } catch { self.error = error.localizedDescription }
+            try Task.checkCancellation()
+            guard snapshot == "\(byCode)-\(query)" else { return }
+            rows = more ? rows + result["content"].array : result["content"].array; last = result["last"].bool; total = serverPageCount(result)
+        } catch is CancellationError {}
+        catch let urlError as URLError where urlError.code == .cancelled {}
+        catch { self.error = error.localizedDescription }
     }
 }
 
@@ -356,30 +373,16 @@ struct WorkflowNodesView: View {
     @State private var definition: [JSONValue] = []
     @State private var loading = true
     @State private var error: String?
+    @StateObject private var directory = UserDirectory()
     var body: some View {
         List {
+            LoadingRow(isPresented: loading && history.isEmpty && definition.isEmpty, title: "正在加载流程")
             if !history.isEmpty {
-            Section("处理记录") {
-                ForEach(Array(history.enumerated()), id: \.offset) { _, node in
-                    DisclosureGroup {
-                        let assignee = workflowParticipantLabel(node["assignee"].text)
-                        if !assignee.isEmpty { LabeledContent("处理人", value: assignee) }
-                        LabeledContent("开始时间", value: node["startTimeText"].text)
-                        if !node["endTimeText"].text.isEmpty { LabeledContent("完成时间", value: node["endTimeText"].text) }
-                        if !node["condition"].text.isEmpty { LabeledContent("处理结果", value: node["condition"].text) }
-                        if !node["countersignStatusText"].text.isEmpty { Text(node["countersignStatusText"].text) }
-                        ForEach(Array(node["comments"].array.enumerated()), id: \.offset) { _, comment in Text(comment["fullMessage"].text.isEmpty ? comment["message"].text : comment["fullMessage"].text) }
-                        ForEach([("countersignCompletedAssignees", "已处理会签人"), ("countersignPendingAssignees", "待处理会签人")], id: \.0) { key, label in if !node[key].text.isEmpty { LabeledContent(label, value: node[key].text) } }
-                    } label: {
-                        Label {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(node["activityName"].text)
-                                Text("\(node["displayTimePrefix"].text) \(node["displayTimeText"].text)").font(.subheadline).foregroundStyle(.secondary)
-                            }
-                        } icon: { Image(systemName: node["endTime"] == .null && node["activityType"].text == "userTask" ? "circle.inset.filled" : "checkmark.circle").foregroundStyle(.tint) }
+                Section("处理记录") {
+                    ForEach(Array(history.enumerated()), id: \.offset) { _, node in
+                        HistoryNodeRow(node: node, directory: directory)
                     }
                 }
-            }
             }
             if !definition.isEmpty {
             Section("流程节点") {
@@ -395,12 +398,10 @@ struct WorkflowNodesView: View {
             }
             }
             if !loading && history.isEmpty && definition.isEmpty && error == nil { CompactEmptyState(title: "暂无流程记录") }
-            if let error { Text(error).foregroundStyle(.red); Button("重试") { Task { await load() } } }
             if preview { Text("流程结构演示，不是真实工单记录").font(.footnote).foregroundStyle(.secondary) }
         }
-        .initialLoadingContent(loading && history.isEmpty && definition.isEmpty)
-        .overlay { AnimatedLoadingOverlay(isPresented: loading, title: "正在加载流程…") }
         .navigationTitle("处理流程").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .errorDialog($error, retry: { Task { await load() } })
         .modifier(DetailTabVisibility())
         .task { await load() }.refreshable { await load() }
     }
@@ -408,14 +409,16 @@ struct WorkflowNodesView: View {
         loading = true; error = nil; defer { loading = false }
         if preview {
             definition = ["报修", "受理", "抢单", "签到", "维修", "确认", "复线", "完结"].enumerated().map { .object(["taskName": .string($0.element), "taskKey": .string("DEMO-\($0.offset)")]) }
-            history = [.object(["activityName": .string("报修"), "activityId": .string("DEMO-0"), "activityType": .string("userTask"), "endTime": .string("2026-10-15 09:30"), "displayTimePrefix": .string("完成"), "displayTimeText": .string("2026-10-15 09:30")]), .object(["activityName": .string("受理"), "activityId": .string("DEMO-1"), "activityType": .string("userTask"), "endTime": .null, "displayTimePrefix": .string("当前"), "displayTimeText": .string("2026-10-15 09:35")])]
+            history = [.object(["activityName": .string("报修"), "activityId": .string("DEMO-0"), "activityType": .string("userTask"), "assignee": .string("demo1"), "condition": .string("提交"), "endTime": .string("2026-10-15 09:30"), "displayTimePrefix": .string("完成"), "displayTimeText": .string("2026-10-15 09:30"), "durationInMillis": .number(211), "comments": .array([.object(["message": .string("设备异响，请尽快处理")])])]), .object(["activityName": .string("受理"), "activityId": .string("DEMO-1"), "activityType": .string("userTask"), "assignee": .string("demo2"), "endTime": .null, "displayTimePrefix": .string("当前"), "displayTimeText": .string("2026-10-15 09:35")])]
             return
         }
         do {
             let loadedHistory = try await session.request("workflow/getWorkflowHistoryNodesByProcessInstanceId", query: ["processInstanceId": processID]).array
             let loadedDefinition = try await session.request("workflow/getAssigneeElementsByProcessInstanceId", query: ["processInstanceId": processID]).array
-            history = loadedHistory
+            history = orderedHistory(loadedHistory)
             definition = loadedDefinition
+            // Real names are filled in as soon as they arrive; until then the user name shows.
+            await directory.resolve(historyUserNames(history), session: session)
         } catch { self.error = error.localizedDescription }
     }
 }

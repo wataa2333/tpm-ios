@@ -262,8 +262,7 @@ struct NativeLoginView: View {
                         HStack { Text("登录"); Spacer(); if session.signingIn { ProgressView() } }
                     }.disabled(session.signingIn || username.isEmpty || password.isEmpty)
                 }
-                if let error { Section { Text(error).foregroundStyle(.red) } }
-            }.navigationTitle("登录")
+            }.navigationTitle("登录").errorDialog($error, title: "登录失败", clearsOnClose: true)
         }
     }
 }

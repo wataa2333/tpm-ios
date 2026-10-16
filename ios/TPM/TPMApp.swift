@@ -35,11 +35,13 @@ enum FaultState: String, CaseIterable, Identifiable {
     case draft = "报修", reported = "待受理", received = "待抢单", signed = "待签到", working = "待完成", verifying = "待确认", resolved = "待复线", finished = "已完结"
     var id: String { rawValue }
     var actionTitle: String {
-        switch self { case .draft: "提交报修"; case .reported: "受理报修"; case .received: "领取工单"; case .signed: "签到"; case .working: "维修处理"; case .verifying: "确认完成"; case .resolved: "复线确认"; case .finished: "已完结" }
+        switch self { case .draft: "提交报修"; case .reported: "受理派单"; case .received: "抢单"; case .signed: "签到"; case .working: "完成任务"; case .verifying: "确认完成"; case .resolved: "复线确认"; case .finished: "已完结" }
     }
     var code: String { ["UNTREATED", "REPORTED", "RECEIVED", "SIGNED", "REPAIRED", "VERIFIED", "RESOLVED", "FINISHED"][FaultState.allCases.firstIndex(of: self)!] }
-    var color: Color { switch self { case .draft: .purple; case .reported: .orange; case .received: .blue; case .signed: .indigo; case .working: .teal; case .verifying: .pink; case .resolved: .mint; case .finished: .green } }
-    var selectedForeground: Color { switch self { case .reported, .working, .resolved, .finished: .black; default: .white } }
+    /// One system hue per state, in workflow order. Blue and indigo are left out on purpose: blue is
+    /// the app's theme colour (titles, links, buttons), so a status never reads as an action.
+    /// Yellow is left out for poor contrast on white. All of these adapt to light and dark mode.
+    var color: Color { switch self { case .draft: .gray; case .reported: .orange; case .received: .red; case .signed: .purple; case .working: .teal; case .verifying: .pink; case .resolved: .brown; case .finished: .green } }
     var symbol: String { switch self { case .draft: "square.and.pencil"; case .reported: "tray"; case .received: "hand.raised"; case .signed: "location"; case .working: "wrench.and.screwdriver"; case .verifying: "checkmark.bubble"; case .resolved: "arrow.triangle.2.circlepath"; case .finished: "checkmark.circle" } }
 }
 
@@ -136,14 +138,15 @@ struct MainTabs: View {
     init(selection: Int = 0, previewFaultList: Bool = false) { _selection = State(initialValue: selection); self.previewFaultList = previewFaultList }
     var body: some View {
         NativeTabShell(selection: $selection, preview: true) {
-            NavigationStack { HomeView() }.newDocumentButton(preview: true).tabItem { Label("主页", systemImage: "house") }.tag(0)
+            NavigationStack { HomeView() }
+        } todo: {
             NavigationStack {
                 if previewFaultList { FaultListView() } else { TodoInboxView(preview: true) }
             }
-            .newDocumentButton(preview: true)
-            .tabItem { Label("我的待办", systemImage: "checklist") }.tag(2)
-            NavigationStack { WorkspaceView() }.newDocumentButton(preview: true).tabItem { Label("工作台", systemImage: "square.grid.2x2") }.tag(1)
-            NavigationStack { ProfileView() }.newDocumentButton(preview: true).tabItem { Label("我的", systemImage: "person.crop.circle") }.tag(3)
+        } workspace: {
+            NavigationStack { WorkspaceView() }
+        } mine: {
+            NavigationStack { ProfileView() }
         }
     }
 }
@@ -198,6 +201,9 @@ struct FaultListView: View {
     }
     var body: some View {
         List {
+            WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex(of: state)! }, set: { state = FaultState.allCases[$0] }), counts: Dictionary(uniqueKeysWithValues: FaultState.allCases.map { stage in
+                (stage.code, store.faults.filter { $0.state == stage }.count)
+            }))
             if searching { Section {
                 Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }
             } }
@@ -218,11 +224,6 @@ struct FaultListView: View {
             let index = FaultState.allCases.firstIndex(of: state)!
             state = FaultState.allCases[min(max(index + (value.translation.width < 0 ? 1 : -1), 0), FaultState.allCases.count - 1)]
         })
-        .safeAreaInset(edge: .top, spacing: 0) {
-            WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex(of: state)! }, set: { state = FaultState.allCases[$0] }), counts: Dictionary(uniqueKeysWithValues: FaultState.allCases.map { stage in
-                (stage.code, store.faults.filter { $0.state == stage }.count)
-            }))
-        }
         .navigationTitle("故障报修").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索" + searchField.rawValue)
@@ -357,7 +358,7 @@ struct AssetListView: View {
         List {
             Section {
                 ForEach(Asset.samples.filter { query.isEmpty || ($0.id + $0.name + $0.model + $0.location).localizedCaseInsensitiveContains(query) }) { asset in
-                    NavigationLink { AssetDetailView(asset: asset) } label: { AssetRow(asset: asset) }
+                    NavigationLink { AssetDetailView(asset: asset) } label: { AssetRow(asset: asset) }.uniformRow()
                 }
             } footer: { DemoNotice() }
         }
@@ -371,11 +372,11 @@ struct AssetListView: View {
 struct AssetRow: View {
     let asset: Asset
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: RowMetrics.spacing) {
             WrappingContent { Text(asset.name).font(.headline) }
             WrappingContent { Text("\(asset.id) · \(asset.model)").font(.subheadline).foregroundStyle(.secondary) }
             WrappingContent { Text(asset.location).font(.subheadline).foregroundStyle(.secondary) }
-        }.padding(.vertical, 4)
+        }
     }
 }
 
@@ -386,8 +387,8 @@ struct AssetPickerView: View {
     var body: some View {
         List(Asset.samples.filter { query.isEmpty || ($0.id + $0.name + $0.model).localizedCaseInsensitiveContains(query) }) { asset in
             Button { selection = asset; dismiss() } label: {
-                HStack { AssetRow(asset: asset).foregroundStyle(.primary); Spacer(); if selection == asset { Image(systemName: "checkmark") } }
-            }
+                HStack { AssetRow(asset: asset).foregroundStyle(Color.primary); Spacer(); if selection == asset { Image(systemName: "checkmark") } }
+            }.buttonStyle(.plain).uniformRow()
         }
         .navigationTitle("选择设备").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .searchPageChrome()
@@ -444,7 +445,7 @@ struct OrderDetailView: View {
         }
         .navigationTitle("工单详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility())
-        .safeAreaInset(edge: .bottom) { HStack { Spacer(); BottomAction(title: claimed ? "已领取" : "领取工单", symbol: "hand.raised") { confirming = true }.disabled(claimed) }.padding(.horizontal, 20).padding(.vertical, 8) }
+        .safeAreaInset(edge: .bottom) { HStack { Spacer(); BottomAction(title: claimed ? "已抢单" : "抢单", symbol: "hand.raised") { confirming = true }.disabled(claimed) }.padding(.horizontal, 20).padding(.vertical, 8) }
         .confirmationDialog("领取这张模拟工单？", isPresented: $confirming, titleVisibility: .visible) { Button("领取模拟工单") { store.claimedOrders.insert(kind + asset.id) } }
     }
 }
@@ -458,15 +459,15 @@ struct StockListView: View {
                 ForEach(rows) { material in
                     NavigationLink { MaterialDetailView(material: material) } label: {
                         HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: 6) {
+                            VStack(alignment: .leading, spacing: RowMetrics.spacing) {
                                 Text(material.name).font(.headline)
                                 Text(material.specification).font(.subheadline).foregroundStyle(.secondary)
                                 Text(material.shelf).font(.subheadline).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Text("\(material.quantity) \(material.unit)").font(.subheadline.monospacedDigit())
-                        }.padding(.vertical, 5)
-                    }
+                        }
+                    }.uniformRow()
                 }
                 if rows.isEmpty { ContentUnavailableView.search(text: query) }
             } footer: { DemoNotice() }
@@ -604,7 +605,6 @@ struct PreviewScreen: View {
         case "new-fault": NavigationStack { OriginalFaultForm(preview: true) }
         case "erp-form": NavigationStack { OriginalERPForm(preview: true) }
         case "workflow": NavigationStack { WorkflowNodesView(processID: "", preview: true) }
-        case "loading": ZStack { NavigationStack { FaultListView() }; LoadingOverlay(title: "正在加载工单…") }
         case "login": NativeLoginView()
         case "asset-picker": NavigationStack { ReferencePicker(source: .assets, preview: true) { _ in } }
         case "user-picker": NavigationStack { ReferencePicker(source: .users, preview: true) { _ in } }

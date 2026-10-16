@@ -177,3 +177,30 @@ import Foundation
     request.httpMethod = "POST"
     #expect(requestLabel(request) == "POST repair/handleRepair")
 }
+
+@Test func employeeNumbersAreKeptAsProcessHandlers() {
+    #expect(workflowParticipantLabel("C0070034") == "C0070034")
+    #expect(workflowParticipantLabel("IN_USE") == "")
+}
+
+@Test func historyShowsWhoHandledEachNodeAndHowLongItTook() {
+    let node = JSONValue.object(["activityType": .string("userTask"), "assignee": .string("C0070034"), "condition": .string("抢单"), "endTime": .string("2026-10-09 14:54"), "durationInMillis": .number(133_760_197)])
+    #expect(historyAssigneeNames(node) == ["C0070034"])
+    #expect(showsConditionTag(node))
+    #expect(historyTimePrefix(node) == "完成")
+    #expect(historyDuration(133_760_197) == "1天13时9分20.197秒")
+    let running = JSONValue.object(["activityType": .string("userTask"), "condition": .string("提交"), "endTime": .null])
+    #expect(!showsConditionTag(running))
+    #expect(historyTimePrefix(running) == "当前")
+    #expect(historyAssigneeNames(.object(["assignee": .string("${initiator}")])) == ["发起人"])
+}
+
+@Test func historyListsEveryHandlerOnceAndKeepsOrder() {
+    let nodes: [JSONValue] = [
+        .object(["activityId": .string("b"), "activityType": .string("userTask"), "assignee": .string("u2"), "endTime": .string("t"), "sortTime": .number(2)]),
+        .object(["activityId": .string("a"), "activityType": .string("startEvent"), "assignee": .string("u1"), "endTime": .string("t"), "sortTime": .number(1)]),
+        .object(["activityId": .string("c"), "activityType": .string("userTask"), "assignee": .string("u2"), "endTime": .null])
+    ]
+    #expect(orderedHistory(nodes).map { $0["activityId"].text } == ["a", "b", "c"])
+    #expect(historyUserNames(orderedHistory(nodes)) == ["u1", "u2"])
+}

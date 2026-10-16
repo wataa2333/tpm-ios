@@ -56,7 +56,6 @@ struct KeyboardTabVisibility: ViewModifier {
 extension EnvironmentValues {
     @Entry var previewReferences = false
     @Entry var bottomSafeArea: CGFloat = 0
-    @Entry var documentSearch = false
     @Entry var closeWorkOrder: (() -> Void)? = nil
 }
 
@@ -65,98 +64,166 @@ struct BottomAction: View {
     let symbol: String
     var color: Color = .blue
     var busy = false
+    /// While the keyboard is up the button shrinks to a one-line capsule so it leaves room to type.
+    var compact = false
     let action: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 5) {
-                Group { if busy { ProgressView() } else { Image(systemName: symbol).font(.system(size: 28, weight: .medium)) } }
-                    .frame(width: 58, height: 48)
-                    .foregroundStyle(color)
-                Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
-            }.padding(.horizontal, 8).padding(.vertical, 6)
-        }
-        .buttonStyle(.glass).buttonBorderShape(.roundedRectangle(radius: 24))
-        .accessibilityLabel(title)
-        .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.2), value: busy)
-    }
-}
-
-struct LoadingOverlay: View {
-    let title: String
-    var body: some View {
-        ZStack {
-            // Blur and dim everything behind, then show the system activity indicator in the middle.
-            Rectangle().fill(.ultraThinMaterial).ignoresSafeArea()
-            Color.black.opacity(0.18).ignoresSafeArea()
-            VStack(spacing: 14) {
-                ProgressView().controlSize(.large)
-                if !title.isEmpty { Text(title).font(.subheadline).foregroundStyle(.secondary) }
+            if compact {
+                HStack(spacing: 6) {
+                    Group { if busy { ProgressView() } else { Image(systemName: symbol).font(.system(size: 17, weight: .medium)) } }.foregroundStyle(color)
+                    Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
+                }.padding(.horizontal, 12).padding(.vertical, 4)
+            } else {
+                VStack(spacing: 5) {
+                    Group { if busy { ProgressView() } else { Image(systemName: symbol).font(.system(size: 28, weight: .medium)) } }
+                        .frame(width: 58, height: 48)
+                        .foregroundStyle(color)
+                    Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
+                }.padding(.horizontal, 8).padding(.vertical, 6)
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.updatesFrequently)
+        .buttonStyle(.glass).buttonBorderShape(compact ? .capsule : .roundedRectangle(radius: 24))
+        .accessibilityLabel(title)
+        .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.2), value: busy)
+        .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.22), value: compact)
     }
 }
 
+/// Whenever a page reloads for a new reason (refresh, another filter, a search, a changed tab) it
+/// scrolls back to the top, where the loading spinner row is, like the end of a pull-to-refresh.
+/// Loading further pages does not change `trigger`, so it never moves the list.
+struct ReloadsToTop<Trigger: Equatable>: ViewModifier {
+    let trigger: Trigger
+    @State private var position = ScrollPosition(edge: .top)
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func body(content: Content) -> some View {
+        content
+            .scrollPosition($position)
+            .onChange(of: trigger) {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { position.scrollTo(edge: .top) }
+            }
+    }
+}
+
+extension View {
+    func reloadsToTop<Trigger: Equatable>(on trigger: Trigger) -> some View {
+        modifier(ReloadsToTop(trigger: trigger))
+    }
+}
+
+/// Last row of a paged list. When it scrolls into view it loads the next page by itself, with the
+/// system spinner; there is no "load more" button. It re-arms after every page (`loaded` changes),
+/// so a short first page that leaves it on screen keeps loading until the screen is full. After a
+/// failed page it does not retry on its own (the page shows its own error and retry button).
+struct LoadMoreFooter: View {
+    let hasMore: Bool
+    var failed = false
+    var loading = false
+    let loaded: Int
+    var total: Int? = nil
+    let loadMore: () async -> Void
+    var body: some View {
+        Group {
+            if hasMore && !failed {
+                HStack(spacing: 10) { ProgressView(); Text("正在加载更多…").font(.subheadline).foregroundStyle(.secondary) }
+                    .frame(maxWidth: .infinity)
+                    .task(id: loaded) { if !loading { await loadMore() } }
+                    .accessibilityElement(children: .combine)
+            } else if loaded > 0 && !hasMore {
+                Text(total.map { "共 \($0) 单" } ?? "已显示全部 \(loaded) 条")
+                    .font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+            }
+        }
+        .listRowBackground(Color.clear).listRowSeparator(.hidden)
+    }
+}
+
+/// Pull-down style loading: a plain system spinner, never a full-screen cover.
+/// Lists show `LoadingRow` as a row at the top; forms and other pages use this small
+/// top-centred spinner. Neither blocks the page or hides the navigation bars.
 struct AnimatedLoadingOverlay: View {
     let isPresented: Bool
     let title: String
+    var body: some View {
+        VStack(spacing: 0) {
+            if isPresented {
+                ProgressView().padding(.top, 14)
+                    .accessibilityLabel(title)
+                    .transition(.opacity)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .allowsHitTesting(false)
+        .animation(.easeOut(duration: 0.15), value: isPresented)
+    }
+}
+
+/// First row of a list while it loads. Hidden when the system pull-to-refresh spinner is
+/// already showing (`isPresented` is false then), so there are never two spinners.
+struct LoadingRow: View {
+    let isPresented: Bool
+    var title = "正在加载"
+    var body: some View {
+        if isPresented {
+            HStack { Spacer(); ProgressView().accessibilityLabel(title); Spacer() }
+                .padding(.vertical, 10)
+                .listRowBackground(Color.clear).listRowSeparator(.hidden)
+        }
+    }
+}
+
+/// One horizontal row of choices, used for order states, todo categories and asset tabs.
+/// It is a plain fixed-height row placed as the first row of a list, so it scrolls with the
+/// content and can never overlap the large title, the search field or the refresh control.
+struct ChipStrip: View {
+    struct Item: Identifiable { let id: Int; let title: String; var count: Int? = nil; var color: Color = .accentColor; var showsCount = false }
+    let items: [Item]
+    @Binding var selection: Int
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
-        ZStack {
-            if isPresented { LoadingOverlay(title: title).transition(.opacity) }
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                HStack(spacing: 22) {
+                    ForEach(items) { item in
+                        Button { selection = item.id } label: {
+                            VStack(spacing: 6) {
+                                HStack(spacing: 5) {
+                                    Text(item.title).font(.subheadline.weight(selection == item.id ? .semibold : .regular)).lineLimit(1)
+                                    if item.showsCount {
+                                        Text(item.count.map(String.init) ?? "…").font(.caption.weight(.semibold)).monospacedDigit()
+                                    }
+                                }
+                                .foregroundStyle(selection == item.id ? Color.primary : Color.secondary)
+                                Rectangle().fill(selection == item.id ? item.color : .clear).frame(height: 3)
+                            }.fixedSize().frame(minHeight: 44).contentShape(.rect)
+                        }
+                        .buttonStyle(.plain).id(item.id)
+                        .accessibilityLabel(item.title)
+                        .accessibilityValue(item.showsCount ? (item.count.map { "\($0) 单" } ?? "数量尚未获取") : "")
+                        .accessibilityAddTraits(selection == item.id ? [.isSelected] : [])
+                    }
+                }.padding(.horizontal, 16)
+            }
+            .scrollIndicators(.hidden)
+            .onAppear { proxy.scrollTo(selection, anchor: .center) }
+            .onChange(of: selection) { _, index in withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { proxy.scrollTo(index, anchor: .center) } }
         }
-        .allowsHitTesting(isPresented)
-        .animation(.easeInOut(duration: reduceMotion ? 0.12 : 0.2), value: isPresented)
+        .frame(height: 48)
+        .sensoryFeedback(.selection, trigger: selection)
+        .listRowInsets(EdgeInsets()).listRowBackground(Color.clear).listRowSeparator(.hidden)
     }
 }
 
 struct WorkOrderStatusStrip: View {
     @Binding var selection: Int
     var counts: [String: Int] = [:]
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    private var animation: Animation { reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.28) }
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal) {
-                HStack(spacing: 20) {
-                    ForEach(Array(FaultState.allCases.enumerated()), id: \.offset) { index, state in
-                        Button {
-                            selection = index
-                        } label: {
-                            VStack(spacing: 6) {
-                            HStack(spacing: 6) {
-                                // The status colour is a dot and the underline; the words always use the
-                                // primary colour so they stay readable on any background.
-                                Circle().fill(state.color).frame(width: 8, height: 8)
-                                Text(state.rawValue).font(.subheadline.weight(selection == index ? .semibold : .regular)).lineLimit(1)
-                                Text(counts[state.code].map(String.init) ?? "…")
-                                    .font(.caption.weight(.semibold)).monospacedDigit()
-                                    .foregroundStyle(selection == index ? Color.primary : Color.secondary)
-                            }
-                            .foregroundStyle(Color.primary)
-                            Rectangle().fill(selection == index ? state.color : .clear).frame(height: 3)
-                            }.fixedSize(horizontal: true, vertical: false).frame(minHeight: 44)
-                            .contentShape(.rect)
-                        }
-                        .buttonStyle(.plain).id(index)
-                        .accessibilityLabel(state.rawValue)
-                        .accessibilityValue(counts[state.code].map { "\($0) 单" } ?? "数量尚未获取")
-                        .accessibilityAddTraits(selection == index ? [.isSelected] : [])
-                    }
-                }.padding(.horizontal, 16).padding(.vertical, 4)
-            }
-            .scrollIndicators(.hidden)
-            .contentMargins(.all, 0, for: .scrollContent)
-            .onAppear { proxy.scrollTo(selection, anchor: .center) }
-            .onChange(of: selection) { _, index in withAnimation(animation) { proxy.scrollTo(index, anchor: .center) } }
-        }
-        .frame(height: 52).fixedSize(horizontal: false, vertical: true).layoutPriority(1)
-        .background(.bar)
-        .overlay(alignment: .bottom) { Divider() }
-        .sensoryFeedback(.selection, trigger: selection)
+        ChipStrip(items: FaultState.allCases.enumerated().map { index, state in
+            .init(id: index, title: state.rawValue, count: counts[state.code], color: state.color, showsCount: true)
+        }, selection: $selection)
     }
 }
 
@@ -174,37 +241,8 @@ struct CompactEmptyState: View {
 struct HorizontalCategories: View {
     let titles: [String]
     @Binding var selection: Int
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var selectionAnimation
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal) {
-                HStack(spacing: 24) {
-                    ForEach(titles.indices, id: \.self) { index in
-                        Button { withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.25)) { selection = index } } label: {
-                            VStack(spacing: 10) {
-                                Text(titles[index]).font(.body.weight(selection == index ? .semibold : .regular))
-                                    .foregroundStyle(selection == index ? Color.accentColor : Color.secondary)
-                                ZStack {
-                                    Color.clear
-                                    if selection == index { Capsule().fill(Color.accentColor).matchedGeometryEffect(id: "underline", in: selectionAnimation) }
-                                }.frame(height: 3)
-                            }.fixedSize(horizontal: true, vertical: false).padding(.top, 12)
-                        }.buttonStyle(.plain).id(index)
-                            .accessibilityAddTraits(selection == index ? [.isSelected] : [])
-                    }
-                }.padding(.horizontal, 20)
-            }.scrollIndicators(.hidden).contentMargins(.all, 0, for: .scrollContent)
-                .onChange(of: selection) { _, index in withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.25)) { proxy.scrollTo(index, anchor: .center) } }
-                .onAppear { proxy.scrollTo(selection, anchor: .center) }
-        }
-        .frame(height: 54)
-        .padding(.bottom, 8)
-        .frame(maxWidth: .infinity)
-        .background(.bar)
-        .overlay(alignment: .bottom) { Divider() }
-        .clipped()
+        ChipStrip(items: titles.indices.map { .init(id: $0, title: titles[$0]) }, selection: $selection)
     }
 }
 
