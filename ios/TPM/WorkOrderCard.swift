@@ -48,7 +48,7 @@ struct WorkOrderCard<Destination: View>: View {
                 Text(time).font(.subheadline).foregroundStyle(.secondary)
                     .accessibilityIdentifier("order-time-" + reference)
                 Spacer(minLength: 0)
-                Button { expanded.toggle() } label: {
+                Button { withAnimation(reduceMotion ? nil : .smooth(duration: 0.5)) { expanded.toggle() } } label: {
                     HStack(spacing: 4) {
                         Text(expanded ? "收起详情" : "展开详情").font(.subheadline.weight(.medium))
                         Image(systemName: "chevron.down").font(.caption.weight(.semibold)).rotationEffect(.degrees(expanded ? 180 : 0)).animation(reduceMotion ? nil : .smooth(duration: 0.5), value: expanded)
@@ -57,7 +57,7 @@ struct WorkOrderCard<Destination: View>: View {
                     .accessibilityLabel(expanded ? "收起详情" : "展开详情")
                     .accessibilityIdentifier("order-expand-" + reference)
             }
-            ExpandableBox(expanded: expanded) {
+            if expanded {
                 VStack(spacing: 10) {
                     ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
                         ReadableFact(title: fact.0, value: fact.1)
@@ -68,7 +68,9 @@ struct WorkOrderCard<Destination: View>: View {
                             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     }.buttonStyle(.borderless)
                         .accessibilityIdentifier("order-open-" + reference)
-                }.padding(.top, RowMetrics.spacing)
+                }
+                .padding(.top, RowMetrics.spacing)
+                .transition(.opacity)
             }
             }
         }
@@ -77,46 +79,6 @@ struct WorkOrderCard<Destination: View>: View {
         .navigationDestination(isPresented: $opening) {
             destination().environment(\.closeWorkOrder, { opening = false })
                 .modifier(DetailTabVisibility())
-        }
-    }
-}
-
-/// Content that opens and closes by growing and shrinking its own height. The content is always laid
-/// out at its natural height inside a clipped box whose height is animated, so what is above it never
-/// moves, and the new lines are revealed from the top down. Collapsed, it is hidden from accessibility.
-struct ExpandableBox<Content: View>: View {
-    let expanded: Bool
-    @ViewBuilder let content: () -> Content
-    /// The content is built only while the box is open or closing. A card that has never been opened
-    /// costs one empty box, however many cards the list holds.
-    @State private var mounted = false
-    @State private var revealed = false
-    @State private var height: CGFloat = 0
-    var body: some View {
-        Group {
-            if mounted {
-                content()
-                    .fixedSize(horizontal: false, vertical: true)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
-            }
-        }
-        .frame(height: revealed ? height : 0, alignment: .top)
-        .clipped()
-        .opacity(revealed ? 1 : 0)
-        .accessibilityHidden(!expanded)
-        .allowsHitTesting(expanded)
-        .task(id: expanded) {
-            if expanded {
-                // Built first at no height so it can be measured, then opened by animation.
-                mounted = true
-                try? await Task.sleep(for: .milliseconds(60))
-                if Task.isCancelled { return }
-                withAnimation(.smooth(duration: 0.5)) { revealed = true }
-            } else if mounted {
-                withAnimation(.smooth(duration: 0.5)) { revealed = false }
-                try? await Task.sleep(for: .milliseconds(560))
-                if !Task.isCancelled { mounted = false }
-            }
         }
     }
 }

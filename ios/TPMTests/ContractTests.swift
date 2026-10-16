@@ -240,3 +240,23 @@ import Foundation
     await gate.run(key: "list") { loads += 1 }
     #expect(loads == 2)
 }
+
+@Test func peopleAreListedAToZByPinyinWithTheirOwnOrders() {
+    func order(_ id: String, _ name: String, _ user: String) -> JSONValue {
+        .object(["faultId": .string(id), "repairUser": .object(["realName": .string(name), "userName": .string(user)])])
+    }
+    let signed = [order("1", "张三", "z3"), order("2", "李四", "l4")]
+    let working = [order("3", "张三", "z3"), order("4", "阿里", "a1"), order("5", "王五", "w5"), .object(["faultId": .string("6")])]
+    let people = groupWorkers(signed: signed, working: working)
+    #expect(people.map(\.name) == ["阿里", "李四", "王五", "张三"])
+    #expect(people.map(\.initial) == ["A", "L", "W", "Z"])
+    let zhang = people.first { $0.name == "张三" }
+    #expect(zhang?.signed.count == 1 && zhang?.working.count == 1 && zhang?.count == 2)
+    // An order without an executor is listed under nobody.
+    #expect(people.reduce(0) { $0 + $1.count } == 5)
+}
+
+@Test func pinyinKeyIsTonelessAndWithoutSpaces() {
+    #expect(pinyinKey("张三") == "zhangsan")
+    #expect(pinyinKey("Wu Li") == "wuli")
+}

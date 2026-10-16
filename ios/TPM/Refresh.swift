@@ -88,3 +88,15 @@ extension View {
         }
     }
 }
+
+extension EnvironmentValues {
+    /// True while the page is pulled down past its top (the system pull-to-refresh spinner is showing).
+    @Entry var pulledDown = false
+}
+
+extension View {
+    /// Reports whether this scroll view is pulled down past its top edge.
+    func reportsPulledDown(_ pulled: Binding<Bool>) -> some View {
+        onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top < -6 } action: { _, new in pulled.wrappedValue = new }
+    }
+}

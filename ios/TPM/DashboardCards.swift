@@ -22,6 +22,8 @@ struct DashboardCard: View {
     /// Only for cards without a count (workspace entries).
     var subtitle = ""
     var wide = false
+    /// A bigger title, for a card that shows no count (the title is then the whole card).
+    var largeTitle = false
     var seed = 0
     @ScaledMetric private var smallHeight = 112.0
     @ScaledMetric private var wideHeight = 104.0
@@ -29,19 +31,21 @@ struct DashboardCard: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top) {
                 if let count {
-                    Text("\(count)").font(.system(.largeTitle, design: .rounded, weight: .bold)).monospacedDigit()
+                    // One line for up to seven digits with their separators: it shrinks instead of wrapping.
+                    Text("\(count)").font(.system(size: 30, weight: .bold, design: .rounded)).monospacedDigit()
+                        .lineLimit(1).minimumScaleFactor(0.45).layoutPriority(1)
                         .foregroundStyle(.primary)
                         .contentTransition(.numericText()).animation(.smooth(duration: 0.55), value: count)
                         .accessibilityIdentifier("dashboard-count-" + title)
                 } else if subtitle.isEmpty {
                     // Keeps the height steady while the number is still on its way.
-                    Text("0").font(.system(.largeTitle, design: .rounded, weight: .bold)).hidden()
+                    Text("0").font(.system(size: 30, weight: .bold, design: .rounded)).hidden()
                 }
                 Spacer(minLength: 8)
                 Image(systemName: symbol).font(.title2.weight(.semibold)).foregroundStyle(tint)
             }
             Spacer(minLength: 6)
-            Text(title).font(.headline).foregroundStyle(.primary).multilineTextAlignment(.leading)
+            Text(title).font(largeTitle ? .title2.weight(.bold) : .headline).foregroundStyle(.primary).multilineTextAlignment(.leading)
             if !subtitle.isEmpty { Text(subtitle).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.leading) }
         }
         .padding(16)
@@ -99,6 +103,7 @@ struct DashboardHome: View {
     @StateObject private var gate = ReloadGate()
     @State private var loadingCounts = false
     @State private var pulling = false
+    @State private var pulledDown = false
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
 
     /// The repair-order cards: title, state code, symbol and the matching preview state.
@@ -109,22 +114,22 @@ struct DashboardHome: View {
     ]
     private func count(_ key: String, preview state: FaultState? = nil) -> Int? {
         guard preview else { return counts[key] }
-        if key == "all" { return store.faults.count }
+        if key == "all" || key == "FINISHED" { return nil }
         return state.map { s in store.faults.filter { $0.state == s }.count }
     }
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
-                if (loadingCounts || gate.busy) && !pulling { ProgressView().frame(maxWidth: .infinity).transition(.opacity) }
+                if (loadingCounts || gate.busy) && !pulling && !pulledDown { ProgressView().frame(maxWidth: .infinity).transition(.opacity) }
                 DashboardHeading(title: "维修工单")
                 NavigationLink {
                     if preview { FaultListView(initialState: .received) } else { LiveWorkflowList(kind: .fault, initialState: "") }
-                } label: { DashboardCard(title: "所有工单", symbol: "list.bullet.rectangle", tint: .blue, count: count("all"), wide: true, seed: 0) }
+                } label: { DashboardCard(title: "所有工单", symbol: "list.bullet.rectangle", tint: .blue, wide: true, largeTitle: true, seed: 0) }
                 LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(Array(states.enumerated()), id: \.offset) { index, item in
                         NavigationLink {
                             if preview { FaultListView(initialState: item.preview) } else { LiveWorkflowList(kind: .fault, initialState: item.code) }
-                        } label: { DashboardCard(title: item.title, symbol: item.symbol, tint: faultDisplayColor(item.code), count: count(item.code, preview: item.preview), seed: index + 1) }
+                        } label: { DashboardCard(title: item.title, symbol: item.symbol, tint: faultDisplayColor(item.code), count: item.code == "FINISHED" ? nil : count(item.code, preview: item.preview), seed: index + 1) }
                     }
                 }
                 DashboardHeading(title: "保养工单")
@@ -141,6 +146,7 @@ struct DashboardHome: View {
             .buttonStyle(DashboardPressStyle())
             .padding(.horizontal, 16).padding(.vertical, 8)
         }
+        .reportsPulledDown($pulledDown)
         .background(Color(uiColor: .systemGroupedBackground))
         .contentMargins(.bottom, 104, for: .scrollContent)
         .navigationTitle("主页").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
@@ -156,8 +162,9 @@ struct DashboardHome: View {
         guard !preview else { return }
         loadingCounts = true; defer { loadingCounts = false }
         let api = session
-        var queries: [(String, String, [JSONValue])] = [("all", "fault/pageAssetFault", [])]
-        queries += states.map { ($0.code, "fault/pageAssetFault", [filter("faultState", $0.code)]) }
+        // "所有工单" and "已完结" show no count: the server returns no total for them.
+        var queries: [(String, String, [JSONValue])] = []
+        queries += states.filter { $0.code != "FINISHED" }.map { ($0.code, "fault/pageAssetFault", [filter("faultState", $0.code)]) }
         queries += [("maintenance", ReadOnlyPoolKind.maintenance.page, ReadOnlyPoolKind.maintenance.waitingFilters),
                     ("precision", ReadOnlyPoolKind.precision.page, ReadOnlyPoolKind.precision.waitingFilters)]
         await withTaskGroup(of: (String, Int?).self) { group in
@@ -182,10 +189,21 @@ struct DashboardWorkspace: View {
     @EnvironmentObject private var store: DemoStore
     /// Server totals per card: "assets", "outbound" or "stock".
     @State private var counts: [String: Int] = [:]
+    /// People with orders waiting for their sign-in or being repaired, A to Z by pinyin.
+    @State private var workers: [WorkerLoad] = []
     @StateObject private var gate = ReloadGate()
     @State private var loadingCounts = false
     @State private var pulling = false
+    @State private var pulledDown = false
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+    private var workerLetters: [(letter: String, people: [WorkerLoad])] {
+        var groups: [(letter: String, people: [WorkerLoad])] = []
+        for worker in workers {
+            if let last = groups.last, last.letter == worker.initial { groups[groups.count - 1].people.append(worker) }
+            else { groups.append((worker.initial, [worker])) }
+        }
+        return groups
+    }
     private func count(_ key: String) -> Int? {
         guard preview else { return counts[key] }
         switch key {
@@ -197,7 +215,7 @@ struct DashboardWorkspace: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
-                if (loadingCounts || gate.busy) && !pulling { ProgressView().frame(maxWidth: .infinity).transition(.opacity) }
+                if (loadingCounts || gate.busy) && !pulling && !pulledDown { ProgressView().frame(maxWidth: .infinity).transition(.opacity) }
                 DashboardHeading(title: "资产")
                 NavigationLink {
                     if preview { AssetListView() } else { LiveCatalogView(source: .assets) }
@@ -211,11 +229,26 @@ struct DashboardWorkspace: View {
                         if preview { StockListView() } else { LiveCatalogView(source: .materials) }
                     } label: { DashboardCard(title: "ERP 库存", symbol: "square.stack.3d.up", tint: .teal, count: count("stock"), seed: 3) }
                 }
+                if !workers.isEmpty {
+                    DashboardHeading(title: "人员处理中")
+                    ForEach(workerLetters, id: \.letter) { group in
+                        LetterHeading(letter: group.letter)
+                        LazyVGrid(columns: columns, spacing: 12) {
+                            ForEach(group.people) { person in
+                                NavigationLink { WorkerOrdersView(worker: person) } label: {
+                                    DashboardCard(title: person.name, symbol: "person.fill", tint: .indigo, count: person.count,
+                                                  subtitle: "待签到 \(person.signed.count) · 待完成 \(person.working.count)", seed: person.name.unicodeScalars.reduce(0) { $0 + Int($1.value) } % 9)
+                                }
+                            }
+                        }
+                    }
+                }
                 if preview { DemoNotice() }
             }
             .buttonStyle(DashboardPressStyle())
             .padding(.horizontal, 16).padding(.vertical, 8)
         }
+        .reportsPulledDown($pulledDown)
         .background(Color(uiColor: .systemGroupedBackground))
         .contentMargins(.bottom, 104, for: .scrollContent)
         .navigationTitle("工作台").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
@@ -248,5 +281,12 @@ struct DashboardWorkspace: View {
                 if let value { counts[key] = value }
             }
         }
+        // People in progress: the orders of the two states, grouped by executor.
+        async let signed = try? await fetchAllOrders(session: api, state: "SIGNED")
+        async let working = try? await fetchAllOrders(session: api, state: "REPAIRED")
+        let (signedOrders, workingOrders) = await (signed, working)
+        guard !Task.isCancelled else { return }
+        // A failed read keeps the people already shown rather than emptying the section.
+        if let signedOrders, let workingOrders { workers = groupWorkers(signed: signedOrders, working: workingOrders) }
     }
 }

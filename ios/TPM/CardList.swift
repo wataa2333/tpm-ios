@@ -8,11 +8,14 @@ import SwiftUI
 /// A page of cards: a scroll view with the usual grouped background, spaced like an inset list.
 struct CardPage<Content: View>: View {
     @ViewBuilder let content: () -> Content
+    @State private var pulled = false
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 16) { content() }
                 .padding(.top, 8).padding(.bottom, 24)
+                .environment(\.pulledDown, pulled)
         }
+        .reportsPulledDown($pulled)
         .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
     }
 }

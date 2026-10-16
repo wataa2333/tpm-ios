@@ -134,7 +134,7 @@ struct LiveWorkflowList: View {
         let searchFilters = query.isEmpty ? [] : [filter(searchField.key, query, "like")]
         let api = session
         await withTaskGroup(of: (String, Int?).self) { group in
-            for stage in FaultState.allCases {
+            for stage in FaultState.allCases where !["UNTREATED", "FINISHED"].contains(stage.code) {
                 let code = stage.code
                 group.addTask {
                     do {

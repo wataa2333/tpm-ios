@@ -172,8 +172,9 @@ struct AnimatedLoadingOverlay: View {
 struct LoadingRow: View {
     let isPresented: Bool
     var title = "正在加载"
+    @Environment(\.pulledDown) private var pulledDown
     var body: some View {
-        if isPresented {
+        if isPresented && !pulledDown {
             HStack { Spacer(); ProgressView().accessibilityLabel(title); Spacer() }
                 .padding(.vertical, 10)
                 .listRowBackground(Color.clear).listRowSeparator(.hidden)
@@ -228,8 +229,9 @@ struct WorkOrderStatusStrip: View {
     @Binding var selection: Int
     var counts: [String: Int] = [:]
     var body: some View {
+        // The server returns no total for orders being reported or already finished, so those two show none.
         ChipStrip(items: FaultState.allCases.enumerated().map { index, state in
-            .init(id: index, title: state.rawValue, count: counts[state.code], color: state.color, showsCount: true)
+            .init(id: index, title: state.rawValue, count: counts[state.code], color: state.color, showsCount: !["UNTREATED", "FINISHED"].contains(state.code))
         }, selection: $selection)
     }
 }
