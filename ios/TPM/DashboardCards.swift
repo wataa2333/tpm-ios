@@ -191,6 +191,7 @@ struct DashboardWorkspace: View {
     @State private var counts: [String: Int] = [:]
     /// People with orders waiting for their sign-in or being repaired, A to Z by pinyin.
     @State private var workers: [WorkerLoad] = []
+    @State private var workerStatus: WorkerStatus = .idle
     @StateObject private var gate = ReloadGate()
     @State private var loadingCounts = false
     @State private var pulling = false
@@ -229,8 +230,9 @@ struct DashboardWorkspace: View {
                         if preview { StockListView() } else { LiveCatalogView(source: .materials) }
                     } label: { DashboardCard(title: "ERP 库存", symbol: "square.stack.3d.up", tint: .teal, count: count("stock"), seed: 3) }
                 }
-                if !workers.isEmpty {
-                    DashboardHeading(title: "人员处理中")
+                if workerStatus != .idle {
+                    WorkerSectionHeader(status: workerStatus)
+                    if workers.isEmpty, case .done = workerStatus { CompactEmptyState(title: "暂无处理中的工单") }
                     ForEach(workerLetters, id: \.letter) { group in
                         LetterHeading(letter: group.letter)
                         LazyVGrid(columns: columns, spacing: 12) {
@@ -253,8 +255,10 @@ struct DashboardWorkspace: View {
         .contentMargins(.bottom, 104, for: .scrollContent)
         .navigationTitle("工作台").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
         .modifier(ListTabVisibility())
-        .reloadsToTop(on: gate.id("\(navigation.refresh)"))
-        .task(id: gate.id("\(navigation.refresh)")) { await gate.run(key: "\(navigation.refresh)") { await loadCounts() } }
+        // Loads by itself only the first time, when nothing is shown yet. After that it is manual only:
+        // the refresh button or pulling the page down.
+        .reloadsToTop(on: gate.id("workspace"))
+        .task(id: gate.id("workspace")) { await gate.run(key: "workspace") { await loadCounts() } }
         .refreshable { pulling = true; await loadCounts(); pulling = false }
         .animation(.smooth(duration: 0.45), value: loadingCounts || gate.busy)
         .rootTopBar(preview: preview, busy: loadingCounts || gate.busy) { gate.request() }
@@ -281,12 +285,24 @@ struct DashboardWorkspace: View {
                 if let value { counts[key] = value }
             }
         }
-        // People in progress: the orders of the two states, grouped by executor.
-        async let signed = try? await fetchAllOrders(session: api, state: "SIGNED")
-        async let working = try? await fetchAllOrders(session: api, state: "REPAIRED")
-        let (signedOrders, workingOrders) = await (signed, working)
-        guard !Task.isCancelled else { return }
-        // A failed read keeps the people already shown rather than emptying the section.
-        if let signedOrders, let workingOrders { workers = groupWorkers(signed: signedOrders, working: workingOrders) }
+        // People in progress: the orders of the two states, grouped by executor. The first time they
+        // appear page by page; on a refresh the old people stay until the new list is complete, so the
+        // numbers do not shrink and grow again.
+        let reader = WorkerOrderReader()
+        let firstLoad = workers.isEmpty
+        workerStatus = .reading(0)
+        do {
+            let people = try await reader.read(session: api, progress: { found, read in
+                if firstLoad { workers = found }
+                workerStatus = .reading(read)
+            })
+            guard !Task.isCancelled else { workerStatus = .idle; return }
+            workers = people
+            workerStatus = .done(Date(), orders: people.reduce(0) { $0 + $1.count }, people: people.count)
+        } catch {
+            // A failed read keeps whatever is already shown, and says so.
+            workerStatus = Task.isCancelled ? .idle : .failed
+        }
+        if counts.isEmpty && workers.isEmpty { gate.markIncomplete("main") }
     }
 }

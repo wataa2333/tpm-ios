@@ -14,6 +14,7 @@ final class ReloadGate: ObservableObject {
     private var running = 0
     private var loaded: [String: String] = [:]
     private var manualPending = false
+    private var incomplete: Set<String> = []
 
     /// The refresh button.
     func request() {
@@ -42,13 +43,17 @@ final class ReloadGate: ObservableObject {
         running += 1; busy = true
         await load()
         if !Task.isCancelled {
-            loaded[slot] = full
+            // A load that got nothing useful is not remembered, so the page tries again when it reappears.
+            if incomplete.remove(slot) == nil { loaded[slot] = full }
             let remaining = Self.minimumBusy - (ContinuousClock.now - started)
             if remaining > .zero { try? await Task.sleep(for: remaining) }
         }
         running -= 1
         if running == 0 { busy = false }
     }
+
+    /// Called from inside a load that found nothing to show: the next appearance of the page loads again.
+    func markIncomplete(_ slot: String = "main") { incomplete.insert(slot) }
 
     /// Task id for `.task(id:)`: changes with the page's own key and with each manual refresh.
     func id(_ key: String) -> String { key + "|" + token.uuidString }

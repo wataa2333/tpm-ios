@@ -12,8 +12,12 @@ struct WorkerLoad: Identifiable, Hashable {
     var working: [JSONValue]
     var id: String { userName.isEmpty ? name : userName }
     var count: Int { signed.count + working.count }
-    /// Sort key: the name in pinyin, so people are listed A to Z.
-    var pinyin: String { pinyinKey(name) }
+    /// Sort key: the name in pinyin, so people are listed A to Z. Worked out once, not on every sort or redraw.
+    let pinyin: String
+    init(name: String, userName: String, signed: [JSONValue], working: [JSONValue]) {
+        self.name = name; self.userName = userName; self.signed = signed; self.working = working
+        self.pinyin = pinyinKey(name)
+    }
     /// A–Z, or "#" for a name that does not start with a letter in pinyin.
     var initial: String {
         guard let first = pinyin.uppercased().first, first.isASCII, first.isLetter else { return "#" }
@@ -47,15 +51,72 @@ func groupWorkers(signed: [JSONValue], working: [JSONValue]) -> [WorkerLoad] {
     return people.values.sorted { a, b in a.pinyin == b.pinyin ? a.name < b.name : a.pinyin < b.pinyin }
 }
 
-/// All orders in one state, read 100 at a time. Stops at the last page, with a cap against runaway lists.
-func fetchAllOrders(session: LiveSession, state: String) async throws -> [JSONValue] {
-    var orders: [JSONValue] = []
-    for _ in 0..<30 {
-        let page = try await session.page("fault/pageAssetFault", offset: orders.count, filters: [filter("faultState", state)], limit: 100)
-        orders += page["content"].array
-        if page["last"].bool || page["content"].array.isEmpty { break }
+/// Reads the orders waiting for sign-in and those being repaired, 100 at a time, and groups them by
+/// executor. After every page it reports the people found so far, so the first people appear as soon as
+/// the first page is in and the rest follow, instead of the whole section waiting for the last page.
+@MainActor
+final class WorkerOrderReader {
+    private var signed: [JSONValue] = []
+    private var working: [JSONValue] = []
+
+    func read(session: LiveSession, progress: (([WorkerLoad], Int) -> Void)? = nil) async throws -> [WorkerLoad] {
+        for (state, isSigned) in [("SIGNED", true), ("REPAIRED", false)] {
+            var offset = 0
+            // Capped against a runaway list.
+            while offset < 3000 {
+                let page = try await session.page("fault/pageAssetFault", offset: offset, filters: [filter("faultState", state)], limit: 100)
+                let rows = page["content"].array
+                if isSigned { signed += rows } else { working += rows }
+                offset += rows.count
+                if let progress { progress(groupWorkers(signed: signed, working: working), signed.count + working.count) }
+                if page["last"].bool || rows.isEmpty { break }
+            }
+        }
+        return groupWorkers(signed: signed, working: working)
     }
-    return orders
+}
+
+/// Where the people section is in its reading, so it is always clear whether more is still arriving.
+enum WorkerStatus: Equatable {
+    case idle
+    case reading(Int)
+    case done(Date, orders: Int, people: Int)
+    case failed
+}
+
+/// The section heading with its status on the right: a spinner and the number of orders read so far while
+/// it is still reading, and a clear "完成" with the time once the last page is in.
+struct WorkerSectionHeader: View {
+    let status: WorkerStatus
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("人员处理中").font(.title3.weight(.semibold)).foregroundStyle(.primary)
+            Spacer(minLength: 8)
+            statusView.font(.footnote).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
+        }
+        .padding(.top, 8).accessibilityElement(children: .combine).accessibilityAddTraits(.isHeader)
+        .animation(.smooth(duration: 0.4), value: status)
+    }
+    @ViewBuilder private var statusView: some View {
+        switch status {
+        case .idle: EmptyView()
+        case .reading(let n):
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("读取中 · 已读 \(n) 单").contentTransition(.numericText())
+            }
+        case .done(let date, let orders, let people):
+            HStack(spacing: 5) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Text("已刷新完成 · \(people) 人 \(orders) 单 · ") + Text(date, format: .dateTime.hour().minute().second())
+            }
+        case .failed:
+            HStack(spacing: 5) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Text("读取失败，请点右上角刷新")
+            }
+        }
+    }
 }
 
 /// Letter headings between the people, as in a contacts list.
