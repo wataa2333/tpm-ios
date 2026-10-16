@@ -333,3 +333,83 @@ import Foundation
     #expect(store.drafts(scope: "wang@一厂").count == 3)
     #expect(forA.subtitle == "单号 BX-A · A单")
 }
+
+@Test func pinsAreLimitedToTenAndRecentsShowThreeWithoutRepeatingPins() {
+    func entry(_ n: Int) -> PickerEntry { PickerEntry(key: "k\(n)", label: "项\(n)", value: .object(["userName": .string("k\(n)")])) }
+    var lists = PickerLists()
+    for n in 1...10 { #expect(PickerRules.pin(entry(n), in: &lists)) }
+    #expect(lists.pins.count == 10)
+    // The eleventh is refused; pinning one that is already pinned is harmless.
+    #expect(!PickerRules.pin(entry(11), in: &lists))
+    #expect(PickerRules.pin(entry(3), in: &lists))
+    #expect(lists.pins.count == 10)
+    // The newest pin is on top, and unpinning frees a place.
+    #expect(lists.pins.first?.key == "k10")
+    PickerRules.unpin(key: "k5", in: &lists)
+    #expect(PickerRules.pin(entry(11), in: &lists) && lists.pins.first?.key == "k11")
+
+    var recent = PickerLists()
+    #expect(PickerRules.shownRecents(recent).isEmpty)
+    for n in [1, 2, 3, 4, 2] { PickerRules.record(entry(n), in: &recent) }
+    #expect(PickerRules.shownRecents(recent).map(\.key) == ["k2", "k4", "k3"])
+    // What is pinned is not repeated among the recent ones; the next recent one takes its place.
+    _ = PickerRules.pin(entry(2), in: &recent)
+    #expect(PickerRules.shownRecents(recent).map(\.key) == ["k4", "k3", "k1"])
+}
+
+@Test func pinsRecentsAndDefaultsArePerAccountAndFactoryAndSurviveRestart() {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("prefs-" + UUID().uuidString).appendingPathComponent("picker-prefs.json")
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    let person = PickerEntry(key: "A0095970", label: "柯龙杰", value: .object(["userName": .string("A0095970"), "realName": .string("柯龙杰")]))
+    let store = PickerPrefsStore(url: url)
+    var lists = PickerLists(); _ = PickerRules.pin(person, in: &lists)
+    store.save(lists, scope: "wang@一厂", source: .users)
+    store.setDefault(person, source: .users, scope: "wang@一厂", field: "fault.user")
+    // A new store reads the same file: the choices are still there after the app is closed and opened.
+    let reopened = PickerPrefsStore(url: url)
+    #expect(reopened.lists(scope: "wang@一厂", source: .users).pins.map(\.key) == ["A0095970"])
+    #expect(reopened.defaultChoice(scope: "wang@一厂", field: "fault.user")?.entry.label == "柯龙杰")
+    #expect(reopened.defaultChoice(scope: "wang@一厂", field: "fault.user")?.source == .users)
+    // Another account, another factory, another kind of list: nothing leaks across.
+    #expect(reopened.lists(scope: "li@一厂", source: .users).pins.isEmpty)
+    #expect(reopened.lists(scope: "wang@二厂", source: .users).pins.isEmpty)
+    #expect(reopened.lists(scope: "wang@一厂", source: .departments).pins.isEmpty)
+    #expect(reopened.defaultChoice(scope: "wang@一厂", field: "fault.applyUser") == nil)
+    reopened.setDefault(nil, source: .users, scope: "wang@一厂", field: "fault.user")
+    #expect(reopened.defaultChoice(scope: "wang@一厂", field: "fault.user") == nil)
+    // A store without a file keeps its choices in memory only.
+    let memory = PickerPrefsStore(url: nil)
+    memory.save(lists, scope: "x", source: .users)
+    #expect(memory.lists(scope: "x", source: .users).pins.count == 1)
+    #expect(PickerPrefsStore(url: nil).lists(scope: "x", source: .users).pins.isEmpty)
+}
+
+@Test func aDefaultApproverIsOnlyAllowedWhereThePersonChoosesTheApprover() {
+    #expect(allowsApproverDefault(["variableName": .string("confirmUser"), "assignees": .null]))
+    #expect(allowsApproverDefault(["variableName": .string("confirmUser"), "assignees": .array([])]))
+    #expect(allowsApproverDefault(["variableName": .string("confirmUser"), "assignees": .string("")]))
+    #expect(!allowsApproverDefault(["variableName": .string("confirmUser"), "assignees": .array([.object(["userName": .string("A001")])])]))
+    #expect(!allowsApproverDefault(["variableName": .string("confirmUser"), "assignees": .string("[\"A001\"]")]))
+    // A saved default is ignored for a step the process fills in itself.
+    let model = OriginalFormModel(kind: "ASSET_FAULT")
+    model.assignees = [["variableName": .string("suggested"), "assignType": .string("ASSIGN"), "assignees": .array([.object(["userName": .string("S1")])])],
+                       ["variableName": .string("chosen"), "assignType": .string("ASSIGN"), "assignees": .null]]
+    model.selections = ["suggested": ["S1"], "chosen": []]
+    let store = PickerPrefsStore(url: nil)
+    let person = PickerEntry(key: "D1", label: "默认人", value: .object(["userName": .string("D1")]))
+    store.setDefault(person, source: .users, scope: "s", field: "assignee.fault.suggested")
+    store.setDefault(person, source: .users, scope: "s", field: "assignee.fault.chosen")
+    model.applyApproverDefaults(prefix: "assignee.fault", scope: "s", store: store)
+    #expect(model.selections["suggested"] == ["S1"])
+    #expect(model.selections["chosen"] == ["D1"])
+}
+
+@Test func everyKindOfRowHasAStableKey() {
+    #expect(referenceKey(.users, .object(["userName": .string("C0342038"), "userId": .number(5)])) == "C0342038")
+    #expect(referenceKey(.departments, .object(["value": .number(7), "label": .string("设备科")])) == "7")
+    #expect(referenceKey(.faultTypes, .object(["key": .string("12")])) == "12")
+    #expect(referenceKey(.assets, .object(["assetId": .number(3), "assetCode": .string("EWPT-1")])) == "3")
+    #expect(referenceKey(.groups, .object(["groupId": .number(2)])) == "2")
+    // Without any id the name still tells rows apart.
+    #expect(referenceKey(.divisions, .object(["divisionDesc": .string("记账部")])) == "记账部")
+}

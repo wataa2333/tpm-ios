@@ -220,7 +220,7 @@ struct WorkflowTaskView: View {
             }
             if condition == "agree" && (assignmentsLoading || !assignments.assignees.isEmpty) { Section("审批人") {
                 if assignmentsLoading { ProgressView("正在加载审批人…") }
-                AssigneesFields(elements: assignments.assignees, selections: $assignments.selections)
+                AssigneesFields(elements: assignments.assignees, selections: $assignments.selections, defaultPrefix: approverDefaultPrefix)
             } }
             Section(isReturning ? "退单原因" : isRejecting ? "驳回意见" : "意见") { EntryField(placeholder: isReturning ? "请输入退单原因" : isRejecting ? "请输入驳回意见" : "请输入意见", text: $comment, limit: 255, axis: .vertical, lines: 3...8) }
             if preview { Section { Text("流程页面预览，使用示例数据，不执行真实提交。").font(.footnote).foregroundStyle(.secondary) } }
@@ -296,11 +296,14 @@ struct WorkflowTaskView: View {
             ready = true
         } catch { self.error = stageFailureMessage("加载当前节点", error) }
     }
+    /// Defaults for the next approver are kept per kind of order ("维修完成" and "领料完成" each have their own).
+    private var approverDefaultPrefix: String { "assignee.task." + kind.rawValue }
     private func fetchAssignments() async throws {
         if preview {
             // Sanitized fixture of the original "完成任务" window: next node 【维修】确认, user-selected assignee.
             assignments.assignees = task["category"].text == "REPAIRED" && condition == "agree" ? [PreviewBusinessData.repairConfirmNode] : []
             assignments.selections = [:]
+            assignments.applyApproverDefaults(prefix: approverDefaultPrefix, scope: "preview", store: .preview)
             assignmentsReady = true
             return
         }
@@ -313,6 +316,8 @@ struct WorkflowTaskView: View {
         assignments.assignees = values.array.map(\.object)
         assignments.selections = [:]
         for node in assignments.assignees { assignments.selections[node.text("variableName")] = usernames(node["assignees"] ?? .null) }
+        // The approver the person set as the default for this step wins over the process's own suggestion.
+        assignments.applyApproverDefaults(prefix: approverDefaultPrefix, scope: session.draftScope, store: .shared)
         assignmentsReady = true
     }
     // A failed approver lookup keeps the submit button disabled (assignmentsReady stays false);

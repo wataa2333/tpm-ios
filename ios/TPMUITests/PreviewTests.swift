@@ -76,6 +76,24 @@ final class PreviewTests: XCTestCase {
         XCTAssertFalse(app.buttons["keyboard-dismiss"].waitForExistence(timeout: 2))
     }
 
+    func testSwipeMenuPinsAnOptionToTheTopOfThePicker() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "user-picker"]
+        app.launch()
+        let row = app.buttons["示例申请人"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["置顶 · 1/10"].exists)
+        row.swipeLeft()
+        XCTAssertTrue(app.buttons["置顶"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["设为默认"].exists)
+        app.buttons["置顶"].tap()
+        XCTAssertTrue(app.staticTexts["置顶 · 1/10"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["全部"].exists)
+        // Long press offers the same choices.
+        app.buttons.matching(identifier: "示例申请人").firstMatch.press(forDuration: 1.0)
+        XCTAssertTrue(app.buttons["取消置顶"].waitForExistence(timeout: 5))
+    }
+
     func testReferenceSelectionsSurviveReturningToForm() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "new-fault"]

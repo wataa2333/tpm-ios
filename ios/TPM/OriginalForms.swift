@@ -149,7 +149,10 @@ struct ReferencePicker: View {
     var multiple = false
     var selected: [String] = []
     var preview = false
+    /// The form field this page fills ("fault.dept"): lets "设为默认" remember a choice for it.
+    var defaultField: String? = nil
     let choose: (JSONValue) -> Void
+    @StateObject private var menu = ReferenceMenuModel()
     @State private var values: [JSONValue] = []
     @State private var query = ""
     @State private var searchByCode = false
@@ -181,6 +184,13 @@ struct ReferencePicker: View {
             if source.pagePath != nil && searching {
                 Section { Picker("搜索方式", selection: $searchByCode) { Text("按名称").tag(false); Text("按编号").tag(true) }.pickerStyle(.segmented).labelsHidden() }
             }
+            if menu.enabled, query.isEmpty, !menu.pins.isEmpty {
+                Section { ForEach(menu.pins) { entry in optionRow(entry.value) } } header: { Text("置顶 · \(menu.pins.count)/\(PickerLists.pinLimit)") }
+            }
+            if menu.enabled, query.isEmpty, !menu.recents.isEmpty {
+                Section { ForEach(menu.recents) { entry in optionRow(entry.value) } } header: { Text("最近使用") }
+            }
+            Section {
             if source == .faultTypes {
                 FaultTypeTree(nodes: visible) { value in Task { await select(value) } }
             } else if source == .departments {
@@ -191,26 +201,14 @@ struct ReferencePicker: View {
                     if !users.isEmpty {
                         DisclosureGroup {
                             ForEach(Array(users.enumerated()), id: \.offset) { _, user in
-                                Button { Task { await select(user) } } label: { WrappingContent { Text(user.object.label).foregroundStyle(Color.primary) } }.buttonStyle(.plain)
+                                Button { Task { await select(user) } } label: { HStack { WrappingContent { Text(user.object.label).foregroundStyle(Color.primary) }; ReferenceBadges(value: user) } }.buttonStyle(.plain)
+                                    .referenceMenu(for: user)
                             }
                         } label: { WrappingContent { Text(group["groupName"].text) } }
                     }
                 }
-            } else { ForEach(Array(visible.enumerated()), id: \.offset) { _, value in
-                Button { Task { await select(value) } } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: RowMetrics.spacing) {
-                            WrappingContent { Text(label(value)).foregroundStyle(Color.primary) }
-                            ForEach(Array(subtitleLines(value).enumerated()), id: \.offset) { _, line in
-                                WrappingContent { Text(line).font(.subheadline).foregroundStyle(source == .outboundMaterials && available(value) < 1 ? Color.red : Color.secondary) }
-                            }
-                        }
-                        Spacer()
-                        if picked.contains(identity(value)) { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
-                    }
-                }.buttonStyle(.plain).uniformRow()
-            }
-            }
+            } else { ForEach(Array(visible.enumerated()), id: \.offset) { _, value in optionRow(value) } }
+            } header: { if menu.enabled, query.isEmpty, !menu.pins.isEmpty || !menu.recents.isEmpty { Text("全部") } }
             if source.pagePath != nil {
                 LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: values.count) { await load(more: true) }
             }
@@ -220,9 +218,20 @@ struct ReferencePicker: View {
         .reloadsToTop(on: "\(query)-\(searchByCode)-\(userMode)")
         .errorDialog($error, retry: { Task { await load() } })
         .errorDialog($notice, title: "不能选择", clearsOnClose: true)
+        .errorDialog(Binding(get: { menu.notice }, set: { menu.notice = $0 }), title: "不能置顶", clearsOnClose: true)
+        .environmentObject(menu)
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索", onSubmit: { Task { await load() } })
-        .task { picked = Set(selected); await load() }
+        .task {
+            picked = Set(selected)
+            // Materials are picked by quantity, not by preference: no menu there. The demo screens keep their
+            // pins in memory and never record "recent" choices, so they behave the same on every launch.
+            if !menu.enabled, ![.materials, .outboundMaterials].contains(source) {
+                menu.configure(source: source, defaultField: defaultField, allowsRecents: !multiple && !preview,
+                               scope: preview ? "preview" : session.draftScope, store: preview ? .preview : .shared)
+            }
+            await load()
+        }
         .onChange(of: searchByCode) { Task { await load() } }
         .toolbar { if multiple { ToolbarItem(placement: .confirmationAction) { Button("完成") { finishPicking() } } } }
         // The top "完成" is replaced by the search bar while searching, so multi-select also keeps a
@@ -238,6 +247,25 @@ struct ReferencePicker: View {
             }
         }
         .sensoryFeedback(.selection, trigger: picked.count)
+    }
+    /// One choosable row, with its tags, and the menu for swipe and long press.
+    @ViewBuilder private func optionRow(_ value: JSONValue) -> some View {
+        Button { Task { await select(value) } } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: RowMetrics.spacing) {
+                    HStack(spacing: 8) {
+                        WrappingContent { Text(label(value)).foregroundStyle(Color.primary) }
+                        ReferenceBadges(value: value)
+                    }
+                    ForEach(Array(subtitleLines(value).enumerated()), id: \.offset) { _, line in
+                        WrappingContent { Text(line).font(.subheadline).foregroundStyle(source == .outboundMaterials && available(value) < 1 ? Color.red : Color.secondary) }
+                    }
+                }
+                Spacer()
+                if picked.contains(identity(value)) { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
+            }
+        }.buttonStyle(.plain).uniformRow()
+            .referenceMenu(for: value)
     }
     private func finishPicking() { endEditing(); searching = false; dismiss() }
     private func label(_ value: JSONValue) -> String {
@@ -267,11 +295,8 @@ struct ReferencePicker: View {
         selecting = true
         defer { selecting = false }
         do {
-            let result: JSONValue
-            if source == .departments { result = try await session.request("dept/getDeptById", query: ["deptId": value["value"].text]) }
-            else if source == .users { result = try await session.request("user/getUserDeptByUserId", query: ["userId": value["userId"].text]) }
-            else if source == .faultTypes { result = try await session.request("faultType/getFaultTypeById", query: ["typeId": value["key"].text]) }
-            else { result = value }
+            let result = try await resolveReference(source, value, session: session)
+            if !multiple { menu.record(value) }
             choose(result)
             if multiple {
                 if [.materials, .outboundMaterials].contains(source) { picked.insert(identity(value)) }
@@ -345,10 +370,12 @@ struct ReferenceField: View {
     let source: ReferenceSource
     @Binding var value: JSONValue
     var required = false
+    /// Names the field for "设为默认" ("fault.dept"); leave out where a default makes no sense.
+    var defaultField: String? = nil
     var selected: ((JSONValue) -> Void)? = nil
     var body: some View {
         NavigationLink {
-            ReferencePicker(source: source, preview: preview) { result in value = result; selected?(result) }
+            ReferencePicker(source: source, preview: preview, defaultField: defaultField) { result in value = result; selected?(result) }
         } label: {
             LabeledContent { Text(value.object.isEmpty ? "请选择" : value.object.label) }
             label: { if required { RequiredLabel(title: title) } else { Text(title) } }
@@ -391,12 +418,14 @@ struct AssigneesFields: View {
     @Environment(\.previewReferences) private var preview
     let elements: [Fields]
     @Binding var selections: [String: [String]]
+    /// Makes "设为默认" available on each approver field ("assignee.fault" + the node's variable name).
+    var defaultPrefix: String? = nil
     var body: some View {
         ForEach(Array(elements.enumerated()), id: \.offset) { _, element in
             if ["ASSIGN", "SUPERVISOR"].contains(element.text("assignType")) {
                 let key = element.text("variableName")
                 NavigationLink {
-                    ReferencePicker(source: .users, multiple: isCountersign(element) || element["assigneeMultiple"]?.bool == true, selected: selections[key, default: []], preview: preview) { user in
+                    ReferencePicker(source: .users, multiple: isCountersign(element) || element["assigneeMultiple"]?.bool == true, selected: selections[key, default: []], preview: preview, defaultField: allowsApproverDefault(element) ? defaultPrefix.map { $0 + "." + key } : nil) { user in
                         let name = user["userName"].text
                         if isCountersign(element) || element["assigneeMultiple"]?.bool == true {
                             if selections[key, default: []].contains(name) { selections[key]?.removeAll { $0 == name } }
@@ -477,23 +506,23 @@ struct OriginalFaultForm: View {
                 ServerDateField(title: "故障时间", value: field("faultTime"), required: true)
             } header: { RequiredFormHeader(title: "故障报修") }
             Section("申请与受理") {
-                ReferenceField(title: "故障申请人", source: .users, value: field("applyUser"), required: true) { user in
+                ReferenceField(title: "故障申请人", source: .users, value: field("applyUser"), required: true, defaultField: "fault.applyUser") { user in
                     model.data["applyDept"] = user["depts"].array.first ?? .null
                 }
-                ReferenceField(title: "申请部门", source: .departments, value: field("applyDept"), required: true)
-                ReferenceField(title: "受理部门", source: .departments, value: field("dept"), required: true) { model.selectReceiverDepartment($0) }
-                ReferenceField(title: "维修受理人", source: .users, value: field("user"), required: true) { user in
+                ReferenceField(title: "申请部门", source: .departments, value: field("applyDept"), required: true, defaultField: "fault.applyDept")
+                ReferenceField(title: "受理部门", source: .departments, value: field("dept"), required: true, defaultField: "fault.dept") { model.selectReceiverDepartment($0) }
+                ReferenceField(title: "维修受理人", source: .users, value: field("user"), required: true, defaultField: "fault.user") { user in
                     if let department = user["depts"].array.first { model.data["dept"] = department }
                 }
                 if !(model.data["dept"]?.object.isEmpty ?? true) && (model.data["user"]?.object.isEmpty ?? true) {
                     Text("该部门未设置默认受理人，请手动选择维修受理人").font(.footnote).foregroundStyle(.secondary)
                 }
                 VStack(alignment: .leading, spacing: 8) { RequiredLabel(title: "报修人联系电话"); EntryField(placeholder: "请输入联系电话", text: text("userPhone"), limit: 32, keyboard: .phonePad) }.fullSeparator()
-                ReferenceField(title: "维修班组", source: .groups, value: field("userGroup"), required: true)
-                ReferenceField(title: "ERP记账部门", source: .divisions, value: field("division"), required: true)
+                ReferenceField(title: "维修班组", source: .groups, value: field("userGroup"), required: true, defaultField: "fault.userGroup")
+                ReferenceField(title: "ERP记账部门", source: .divisions, value: field("division"), required: true, defaultField: "fault.division")
             }
             if model.assignees.contains(where: { ["ASSIGN", "SUPERVISOR"].contains($0.text("assignType")) }) {
-                Section("审批人") { AssigneesFields(elements: model.assignees, selections: $model.selections) }
+                Section("审批人") { AssigneesFields(elements: model.assignees, selections: $model.selections, defaultPrefix: existing == nil ? "assignee.fault" : nil) }
             }
             Section("故障描述") { EntryField(placeholder: "请输入故障描述", text: text("faultDesc"), limit: 255, axis: .vertical, lines: 3...6) }
             Section("现场照片") { OriginalPhotosField(albums: field("albums"), directory: "asset_fault", preview: preview, uploading: $photoUploading) }
@@ -533,6 +562,7 @@ struct OriginalFaultForm: View {
             if preview { model.loading = false; model.ready = true; model.data = ["faultTime": .string("2026-10-16 09:30"), "albums": .array([]), "applyUser": PreviewIdentity.user, "applyDept": PreviewIdentity.department, "userPhone": .string("13800000000")] }
             else {
                 await model.load(session, existing: existing)
+                if existing == nil, model.ready { await model.applyDefaults(session) }
                 loadedData = model.data; loadedSelections = model.selections
                 // The form opens with what was saved last time for the same order (a new report: the last
                 // new report). A draft chosen on purpose wins; a draft of another order is never offered.
@@ -625,7 +655,7 @@ struct OriginalERPForm: View {
     var body: some View {
         Form {
             Section {
-                ReferenceField(title: "申请人", source: .users, value: field("user"), required: true)
+                ReferenceField(title: "申请人", source: .users, value: field("user"), required: true, defaultField: "erp.user")
                 ServerDateField(title: "申请日期", value: field("applyDate"), dateOnly: true, required: true)
                 ReferenceField(title: "项目号", source: .projects, value: field("project"), required: true) { project in model.data["projectCode"] = project["projectCode"]; model.data["projectDesc"] = project["projectName"] }
                 LabeledContent("关联单号", value: model.data.text("referenceSn"))
@@ -633,9 +663,9 @@ struct OriginalERPForm: View {
                     .accessibilityLabel("关联单号")
                     .accessibilityValue(model.data.text("referenceSn"))
                     .accessibilityIdentifier("erp-reference-sn")
-                ReferenceField(title: "领用人", source: .users, value: field("recipientUser"), required: true)
-                ReferenceField(title: "领用部门", source: .departments, value: field("dept"), required: true)
-                ReferenceField(title: "ERP记账部门", source: .divisions, value: field("division"), required: true)
+                ReferenceField(title: "领用人", source: .users, value: field("recipientUser"), required: true, defaultField: "erp.recipientUser")
+                ReferenceField(title: "领用部门", source: .departments, value: field("dept"), required: true, defaultField: "erp.dept")
+                ReferenceField(title: "ERP记账部门", source: .divisions, value: field("division"), required: true, defaultField: "erp.division")
                 ServerDateField(title: "出库时间", value: field("outboundTime"), required: true)
             } header: { RequiredFormHeader(title: "领料申请") }
             Section {
@@ -657,7 +687,7 @@ struct OriginalERPForm: View {
             } header: { RequiredLabel(title: "出库物料 · \(model.data["erpMaterialOutbounds"]?.array.count ?? 0) 项") }
             Section { EntryField(placeholder: "请输入用途", text: text("remark"), limit: 140, axis: .vertical, lines: 3...6) } header: { RequiredLabel(title: "用途") }
             if model.assignees.contains(where: { ["ASSIGN", "SUPERVISOR"].contains($0.text("assignType")) }) {
-                Section("审批人") { AssigneesFields(elements: model.assignees, selections: $model.selections) }
+                Section("审批人") { AssigneesFields(elements: model.assignees, selections: $model.selections, defaultPrefix: existing == nil ? "assignee.erp" : nil) }
             }
             if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
         }
@@ -686,6 +716,7 @@ struct OriginalERPForm: View {
                 if let referenceSn { model.data["referenceSn"] = .string(referenceSn) }
             } else {
                 await model.load(session, existing: existing, referenceSn: referenceSn)
+                if existing == nil, model.ready { await model.applyDefaults(session) }
                 if let existing { model.data["project"] = .object(["projectCode": existing["projectCode"] ?? .null, "projectName": existing["projectDesc"] ?? .null]) }
             }
         }

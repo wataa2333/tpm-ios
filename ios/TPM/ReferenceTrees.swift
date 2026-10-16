@@ -31,7 +31,8 @@ struct FaultTypeNode: View {
                     FaultTypeTree(nodes: node["children"].array, choose: choose)
                 } label: { WrappingContent { Text(node.object.label) } }
             } else if node["type"].text == "FaultType" && !node["disabled"].bool {
-                Button { choose(node) } label: { WrappingContent { Text(node.object.label).foregroundStyle(Color.primary) } }.buttonStyle(.plain)
+                Button { choose(node) } label: { HStack(spacing: 8) { WrappingContent { Text(node.object.label).foregroundStyle(Color.primary) }; ReferenceBadges(value: node) } }.buttonStyle(.plain)
+                    .referenceMenu(for: node)
             }
         }
     }
@@ -56,7 +57,8 @@ struct DepartmentNode: View {
             if !node["children"].array.isEmpty {
                 DisclosureGroup(isExpanded: $expanded) { DepartmentTree(nodes: node["children"].array, choose: choose) } label: { WrappingContent { Text(node.object.label) } }
             } else if !node["disabled"].bool && node["value"].text != "root" {
-                Button { choose(node) } label: { WrappingContent { Text(node.object.label).foregroundStyle(Color.primary) } }.buttonStyle(.plain)
+                Button { choose(node) } label: { HStack(spacing: 8) { WrappingContent { Text(node.object.label).foregroundStyle(Color.primary) }; ReferenceBadges(value: node) } }.buttonStyle(.plain)
+                    .referenceMenu(for: node)
             }
         }
     }
