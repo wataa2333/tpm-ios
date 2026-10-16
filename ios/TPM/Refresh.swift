@@ -57,3 +57,16 @@ extension View {
         toolbar { ToolbarItem(placement: .topBarTrailing) { RefreshButton(busy: busy, action: action) } }
     }
 }
+
+extension View {
+    /// The top-right group of the four root tabs: refresh button (when the tab has something to
+    /// refresh) and the factory menu. Navigation bars cannot animate from one tab's items to another's,
+    /// so every root tab shows the same group in the same place; switching tabs then changes nothing
+    /// up there. A tab without data passes no `busy`, which leaves out only the refresh button.
+    func rootTopBar(preview: Bool = false, busy: Bool? = nil, refresh: @escaping () -> Void = {}) -> some View {
+        toolbar {
+            if let busy { ToolbarItem(placement: .topBarTrailing) { RefreshButton(busy: busy, action: refresh) } }
+            ToolbarItem(placement: .topBarTrailing) { if preview { PreviewFactoryButton() } else { FactorySwitcherButton() } }
+        }
+    }
+}

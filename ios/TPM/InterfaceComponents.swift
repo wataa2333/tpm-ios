@@ -37,22 +37,6 @@ struct InitialLoadingContent: ViewModifier {
     }
 }
 
-struct KeyboardTabVisibility: ViewModifier {
-    @EnvironmentObject private var navigation: BottomNavigationModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    func body(content: Content) -> some View {
-        content
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
-                let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
-                withAnimation(.easeInOut(duration: reduceMotion ? 0.12 : duration)) { navigation.keyboardVisible = true }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
-                let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
-                withAnimation(.easeInOut(duration: reduceMotion ? 0.12 : duration)) { navigation.keyboardVisible = false }
-            }
-    }
-}
-
 extension EnvironmentValues {
     @Entry var previewReferences = false
     @Entry var bottomSafeArea: CGFloat = 0
@@ -64,46 +48,68 @@ struct BottomAction: View {
     let symbol: String
     var color: Color = .blue
     var busy = false
-    /// While the keyboard is up the button shrinks to a one-line capsule so it leaves room to type.
-    var compact = false
     let action: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         Button(action: action) {
-            if compact {
-                HStack(spacing: 6) {
-                    Group { if busy { ProgressView() } else { Image(systemName: symbol).font(.system(size: 17, weight: .medium)) } }.foregroundStyle(color)
-                    Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
-                }.padding(.horizontal, 12).padding(.vertical, 4)
-            } else {
-                VStack(spacing: 5) {
-                    Group { if busy { ProgressView() } else { Image(systemName: symbol).font(.system(size: 28, weight: .medium)) } }
-                        .frame(width: 58, height: 48)
-                        .foregroundStyle(color)
-                    Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
-                }.padding(.horizontal, 8).padding(.vertical, 6)
-            }
+            VStack(spacing: 5) {
+                Group { if busy { ProgressView() } else { Image(systemName: symbol).font(.system(size: 28, weight: .medium)) } }
+                    .frame(width: 58, height: 48)
+                    .foregroundStyle(color)
+                Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
+            }.padding(.horizontal, 8).padding(.vertical, 6)
         }
-        .buttonStyle(.glass).buttonBorderShape(compact ? .capsule : .roundedRectangle(radius: 24))
+        .buttonStyle(.glass).buttonBorderShape(.roundedRectangle(radius: 24))
         .accessibilityLabel(title)
         .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.2), value: busy)
-        .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.22), value: compact)
     }
 }
 
-/// Whenever a page reloads for a new reason (refresh, another filter, a search, a changed tab) it
-/// scrolls back to the top, where the loading spinner row is, like the end of a pull-to-refresh.
-/// Loading further pages does not change `trigger`, so it never moves the list.
+/// Scrolls the list or scroll view of the page it is attached to back to its top whenever `trigger`
+/// changes (a manual refresh, another filter, a search, a changed tab). It finds the page's real
+/// scroll view in UIKit and animates it, which works for List and ScrollView alike. Loading further
+/// pages does not change `trigger`, so it never moves the list.
 struct ReloadsToTop<Trigger: Equatable>: ViewModifier {
     let trigger: Trigger
-    @State private var position = ScrollPosition(edge: .top)
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
-        content
-            .scrollPosition($position)
-            .onChange(of: trigger) {
-                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { position.scrollTo(edge: .top) }
-            }
+        content.background(ScrollToTopAnchor(trigger: trigger).frame(width: 0, height: 0).allowsHitTesting(false))
+    }
+}
+
+private struct ScrollToTopAnchor<Trigger: Equatable>: UIViewRepresentable {
+    let trigger: Trigger
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeUIView(context: Context) -> UIView { UIView() }
+    func updateUIView(_ view: UIView, context: Context) {
+        defer { context.coordinator.last = trigger }
+        guard let last = context.coordinator.last, last != trigger else { return }
+        // After the update has been laid out, so the scroll view exists and has its final insets.
+        DispatchQueue.main.async { [weak view] in
+            guard let view, let scroll = Self.scrollView(near: view) else { return }
+            scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: -scroll.adjustedContentInset.top), animated: !UIAccessibility.isReduceMotionEnabled)
+        }
+    }
+    final class Coordinator { var last: Trigger? }
+
+    /// The scroll view that belongs to the same page: searched upward from the anchor, level by level.
+    private static func scrollView(near view: UIView) -> UIScrollView? {
+        var ancestor: UIView? = view.superview
+        var depth = 0
+        while let current = ancestor, depth < 8 {
+            if let found = firstScrollView(in: current, excluding: view) { return found }
+            ancestor = current.superview; depth += 1
+        }
+        return nil
+    }
+    private static func firstScrollView(in root: UIView, excluding: UIView) -> UIScrollView? {
+        var queue: [UIView] = [root]
+        while !queue.isEmpty {
+            let current = queue.removeFirst()
+            if let scroll = current as? UIScrollView, scroll.isScrollEnabled, scroll.window != nil, scroll.bounds.height > 100,
+               scroll.contentSize.width <= scroll.bounds.width + 1 || scroll is UICollectionView { return scroll }
+            queue.append(contentsOf: current.subviews.filter { $0 !== excluding })
+        }
+        return nil
     }
 }
 
@@ -194,6 +200,7 @@ struct ChipStrip: View {
                                     Text(item.title).font(.subheadline.weight(selection == item.id ? .semibold : .regular)).lineLimit(1)
                                     if item.showsCount {
                                         Text(item.count.map(String.init) ?? "…").font(.caption.weight(.semibold)).monospacedDigit()
+                                            .contentTransition(.numericText()).animation(.smooth(duration: 0.3), value: item.count)
                                     }
                                 }
                                 .foregroundStyle(selection == item.id ? Color.primary : Color.secondary)

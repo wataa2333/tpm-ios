@@ -21,9 +21,11 @@ struct TodoInboxView: View {
 
     var body: some View {
         List {
-            ChipStrip(items: categories.indices.map { .init(id: $0, title: categories[$0], count: counts[keys[$0]], showsCount: !preview) },
-                      selection: Binding(get: { keys.firstIndex(of: category) ?? 0 }, set: { category = keys[$0] }))
-            LoadingRow(isPresented: loading && !refreshing, title: "正在加载待办")
+            Section {
+                ChipStrip(items: categories.indices.map { .init(id: $0, title: categories[$0], count: counts[keys[$0]], showsCount: !preview) },
+                          selection: Binding(get: { keys.firstIndex(of: category) ?? 0 }, set: { category = keys[$0] }))
+                LoadingRow(isPresented: loading && !refreshing, title: "正在加载待办")
+            }
                 if preview {
                     Section {
                         if category != "ERP_OUTBOUND" {
@@ -36,6 +38,7 @@ struct TodoInboxView: View {
                         }
                     } footer: { DemoNotice() }
                 } else {
+                    Section {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, task in
                         let data = task["data"]
                         let kind = taskKind(task)
@@ -55,15 +58,17 @@ struct TodoInboxView: View {
                         }
                     }
                     if rows.isEmpty && !loading && error == nil { CompactEmptyState(title: "暂无待办") }
-                    LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await load(more: true) }
+                    }.opacity(loading && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.22), value: loading)
+                    Section { LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await load(more: true) } }
                 }
             }
         .navigationTitle("我的待办")
+        .modifier(ListTabVisibility())
         .searchPageChrome(largeTitle: true)
         .nativeSearchable(text: $query, prompt: "搜索待办名称")
         .reloadsToTop(on: gate.id("\(navigation.refresh)-\(category)-\(query)"))
         .animation(.snappy(duration: 0.3), value: loading)
-        .refreshButton(busy: loading || loadingMore) { gate.request() }
+        .rootTopBar(preview: preview, busy: loading || loadingMore) { gate.request() }
         .errorDialog($error, retry: { Task { await load() } })
         .task(id: gate.id("\(navigation.refresh)-\(category)-\(query)")) { await gate.run(key: "\(navigation.refresh)-\(category)-\(query)") { await load() } }
         .task(id: gate.id("counts-\(navigation.refresh)-\(query)")) { await gate.run("counts", key: "counts-\(navigation.refresh)-\(query)") { await loadCounts() } }

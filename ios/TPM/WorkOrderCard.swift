@@ -22,12 +22,13 @@ struct WorkOrderCard<Destination: View>: View {
     @ViewBuilder let destination: () -> Destination
     @State private var expanded = false
     @State private var opening = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Only the status word takes the state's colour; titles, links and buttons use the theme colour.
     private var emphasis: Color { FaultState.allCases.first { $0.rawValue == status }?.color ?? color }
     private var theme: Color { .accentColor }
     var body: some View {
-        // One uniform 8pt rhythm for every line; no system disclosure padding, no animation:
-        // expanding simply extends the row downward.
+        // One uniform 8pt rhythm for every line, with no system disclosure padding. Expanding grows the
+        // row downward with a short smooth animation while the extra lines fade in; collapsing reverses it.
         VStack(alignment: .leading, spacing: RowMetrics.spacing) {
             Button { opening = true } label: {
                 HStack(alignment: .top, spacing: 12) {
@@ -46,10 +47,10 @@ struct WorkOrderCard<Destination: View>: View {
                 Text(time).font(.subheadline).foregroundStyle(.secondary)
                     .accessibilityIdentifier("order-time-" + reference)
                 Spacer(minLength: 0)
-                Button { expanded.toggle() } label: {
+                Button { withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { expanded.toggle() } } label: {
                     HStack(spacing: 4) {
                         Text(expanded ? "收起详情" : "展开详情").font(.subheadline.weight(.medium))
-                        Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.caption.weight(.semibold))
+                        Image(systemName: "chevron.down").font(.caption.weight(.semibold)).rotationEffect(.degrees(expanded ? 180 : 0))
                     }.foregroundStyle(theme).frame(minHeight: 24).contentShape(.rect)
                 }.buttonStyle(.borderless)
                     .accessibilityLabel(expanded ? "收起详情" : "展开详情")
@@ -62,12 +63,14 @@ struct WorkOrderCard<Destination: View>: View {
                     }
                 }
                 .accessibilityElement(children: .contain)
+                .transition(.opacity)
                 Button { opening = true } label: {
                     Label("打开工单", systemImage: "arrow.up.right.square")
                         .font(.subheadline.weight(.semibold)).foregroundStyle(theme)
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }.buttonStyle(.borderless)
                     .accessibilityIdentifier("order-open-" + reference)
+                    .transition(.opacity)
             }
         }
         .uniformRow()
@@ -175,10 +178,11 @@ struct CharacterCount: View {
     var body: some View { Text("\(text.utf16.count)/\(limit) 字符").font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing) }
 }
 
+/// A detail screen always wants the tab bar hidden, whatever the screens around it do.
 struct DetailTabVisibility: ViewModifier {
     @EnvironmentObject private var navigation: BottomNavigationModel
     func body(content: Content) -> some View {
-        content.background { NativeTabVisibility(hidden: navigation.hideTabs).frame(width: 0, height: 0) }
+        content.background { NativeTabVisibility(hidden: true).frame(width: 0, height: 0) }
             .onAppear { navigation.hideTabs = true }
     }
 }
@@ -188,7 +192,7 @@ struct DetailTabVisibility: ViewModifier {
 struct ListTabVisibility: ViewModifier {
     @EnvironmentObject private var navigation: BottomNavigationModel
     func body(content: Content) -> some View {
-        content.background { NativeTabVisibility(hidden: navigation.hideTabs).frame(width: 0, height: 0) }
+        content.background { NativeTabVisibility(hidden: false).frame(width: 0, height: 0) }
             .onAppear { navigation.hideTabs = false }
     }
 }

@@ -24,6 +24,14 @@ struct NativeTabVisibility: UIViewControllerRepresentable {
             super.viewWillAppear(animated)
             applyVisibility(animated: animated)
         }
+        override func viewWillDisappear(_ animated: Bool) {
+            super.viewWillDisappear(animated)
+            // A back swipe that is let go half way brings this screen back: it asserts its own state again,
+            // because the screen behind has already asked for the opposite while the swipe was running.
+            transitionCoordinator?.notifyWhenInteractionChanges { [weak self] context in
+                if context.isCancelled { self?.applyVisibility(animated: true) }
+            }
+        }
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
             applyVisibility(animated: animated)

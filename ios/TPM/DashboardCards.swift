@@ -37,6 +37,7 @@ struct DashboardCard: View {
                 Spacer(minLength: 8)
                 if let count {
                     Text("\(count)").font(.system(.title, design: .rounded, weight: .bold)).monospacedDigit()
+                        .contentTransition(.numericText()).animation(.smooth(duration: 0.3), value: count)
                         .accessibilityIdentifier("dashboard-count-" + title)
                 }
             }
@@ -134,11 +135,7 @@ struct DashboardHome: View {
         .task(id: gate.id("\(navigation.refresh)")) { await gate.run(key: "\(navigation.refresh)") { await loadCounts() } }
         .refreshable { pulling = true; await loadCounts(); pulling = false }
         .animation(.snappy(duration: 0.3), value: loadingCounts)
-        // One row: the refresh button next to the factory menu.
-        .toolbar {
-            if !preview { ToolbarItem(placement: .topBarTrailing) { RefreshButton(busy: loadingCounts) { gate.request() } } }
-            ToolbarItem(placement: .topBarTrailing) { if preview { PreviewFactoryButton() } else { FactorySwitcherButton() } }
-        }
+        .rootTopBar(preview: preview, busy: loadingCounts) { gate.request() }
     }
     /// One request per card, each asking for a single row: only `totalElements` is used.
     private func loadCounts() async {
@@ -189,6 +186,7 @@ struct DashboardWorkspace: View {
         .background(Color(uiColor: .systemGroupedBackground))
         .contentMargins(.bottom, 104, for: .scrollContent)
         .navigationTitle("工作台").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
+        .rootTopBar(preview: preview)
         .modifier(ListTabVisibility())
     }
 }

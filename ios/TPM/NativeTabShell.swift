@@ -19,24 +19,29 @@ struct NativeTabShell<Home: View, Todo: View, Workspace: View, Mine: View>: View
     private static var newTab: Int { 4 }
     private var newTitle: String { navigation.newDocument == .erp ? "新建领料单" : "新建报修" }
 
+    /// Choosing the "new" tab never changes the selection: it only opens the form. The selected tab
+    /// stays where it was, so the tab bar does not flip to the new tab and back.
+    private var tabSelection: Binding<Int> {
+        Binding(get: { selection }, set: { value in
+            if value == Self.newTab {
+                navigation.searchReset = UUID()
+                navigation.presentingDocument = true
+                creating = navigation.newDocument ?? .fault
+            } else {
+                selection = value
+                navigation.searchReset = UUID()
+                navigation.hideTabs = false
+            }
+        })
+    }
+
     var body: some View {
-        TabView(selection: $selection) {
+        TabView(selection: tabSelection) {
             Tab("主页", systemImage: "house", value: 0) { home() }
             Tab("我的待办", systemImage: "checklist", value: 2) { todo() }
             Tab("工作台", systemImage: "square.grid.2x2", value: 1) { workspace() }
             Tab("我的", systemImage: "person.crop.circle", value: 3) { mine() }
             Tab(newTitle, systemImage: "square.and.pencil", value: Self.newTab, role: .search) { Color.clear }
-        }
-        .onChange(of: selection) { old, new in
-            if new == Self.newTab {
-                selection = old
-                navigation.searchReset = UUID()
-                navigation.presentingDocument = true
-                creating = navigation.newDocument ?? .fault
-            } else {
-                navigation.searchReset = UUID()
-                navigation.hideTabs = false
-            }
         }
         .sheet(item: $creating, onDismiss: {
             navigation.presentingDocument = false

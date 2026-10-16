@@ -9,7 +9,7 @@ struct TPMApp: App {
     var body: some Scene {
         WindowGroup {
             GeometryReader { geometry in
-                PreviewRouter().modifier(KeyboardTabVisibility())
+                PreviewRouter()
                     .environment(\.bottomSafeArea, geometry.safeAreaInsets.bottom)
                     .environmentObject(store).environmentObject(session).environmentObject(navigation)
                     .labeledContentStyle(SafeFactsStyle())
@@ -201,9 +201,11 @@ struct FaultListView: View {
     }
     var body: some View {
         List {
-            WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex(of: state)! }, set: { state = FaultState.allCases[$0] }), counts: Dictionary(uniqueKeysWithValues: FaultState.allCases.map { stage in
-                (stage.code, store.faults.filter { $0.state == stage }.count)
-            }))
+            Section {
+                WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex(of: state)! }, set: { state = FaultState.allCases[$0] }), counts: Dictionary(uniqueKeysWithValues: FaultState.allCases.map { stage in
+                    (stage.code, store.faults.filter { $0.state == stage }.count)
+                }))
+            }
             if searching { Section {
                 Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }
             } }
@@ -219,12 +221,8 @@ struct FaultListView: View {
                 HStack { Text(state.rawValue); Spacer(); Text("\(rows.count) 单").monospacedDigit() }
             }
         }
-        .simultaneousGesture(DragGesture(minimumDistance: 45).onEnded { value in
-            guard abs(value.translation.width) > abs(value.translation.height) * 1.5 else { return }
-            let index = FaultState.allCases.firstIndex(of: state)!
-            state = FaultState.allCases[min(max(index + (value.translation.width < 0 ? 1 : -1), 0), FaultState.allCases.count - 1)]
-        })
         .navigationTitle("故障报修").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .modifier(ListTabVisibility())
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索" + searchField.rawValue)
         // Reassert the list chrome whenever a pushed detail/workflow returns.
@@ -233,7 +231,6 @@ struct FaultListView: View {
         // the keyboard state latched after a nested pop.
         .onAppear {
             navigation.newDocument = .fault
-            navigation.keyboardVisible = false
             navigation.hideTabs = false
             // Orders advanced inside an open detail join their new step only now that the list is back.
             for (id, next) in navigation.pendingAdvance {
@@ -567,6 +564,7 @@ struct ProfileView: View {
             Section { Text("账号、工厂和业务权限将在对接原服务器后显示。").foregroundStyle(.secondary) }
         }
         .navigationTitle("我的").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
+        .rootTopBar(preview: true)
     }
 }
 

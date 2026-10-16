@@ -30,13 +30,16 @@ struct ReadOnlyPoolView: View {
     @State private var error: String?
     var body: some View {
         List {
-            LoadingRow(isPresented: loading && !refreshing, title: "正在加载工单")
+            Section { LoadingRow(isPresented: loading && !refreshing, title: "正在加载工单") }
             if searching {
-                Picker("搜索分类", selection: $byAsset) {
-                    Text("工单名称").tag(false)
-                    Text("资产编码").tag(true)
+                Section {
+                    Picker("搜索分类", selection: $byAsset) {
+                        Text("工单名称").tag(false)
+                        Text("资产编码").tag(true)
+                    }
                 }
             }
+            Section {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 WorkOrderCard(title: row[kind.nameKey].text, status: "待接单", color: kind.color,
                     reference: row["asset"]["assetCode"].text,
@@ -54,7 +57,8 @@ struct ReadOnlyPoolView: View {
                 }
             }
             if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无待接单工单") }
-            LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || moreLoading, loaded: rows.count, total: total) { await load(more: true) }
+            }.opacity(loading && !moreLoading ? 0.4 : 1).animation(.easeInOut(duration: 0.22), value: loading)
+            Section { LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || moreLoading, loaded: rows.count, total: total) { await load(more: true) } }
         }
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: byAsset ? "搜索资产编码" : "搜索工单名称", onSubmit: { Task { await load() } })

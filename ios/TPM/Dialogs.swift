@@ -33,13 +33,15 @@ struct DialogSheet: View {
                 Button(role: primaryRole) { dismiss(); onPrimary() } label: {
                     Text(primary).font(.headline).frame(maxWidth: .infinity, minHeight: 28)
                 }
-                .buttonStyle(.borderedProminent).controlSize(.large)
+                .buttonStyle(.glassProminent).controlSize(.large)
                 .tint(primaryRole == .destructive ? .red : .accentColor)
                 .accessibilityIdentifier("dialog-primary")
-                if let copyText, !copyText.isEmpty { CopyButton(text: copyText, title: "复制全部文字").buttonStyle(.bordered).controlSize(.large).frame(maxWidth: .infinity) }
+                // Copying is for sending a server or network error to someone; a plain "please choose
+                // an approver" has nothing worth copying.
+                if let copyText, looksLikeServerError(copyText) { CopyButton(text: copyText, title: "复制错误信息").buttonStyle(.glass).controlSize(.large).frame(maxWidth: .infinity) }
                 if showsCancel {
                     Button { dismiss() } label: { Text("取消").font(.headline).frame(maxWidth: .infinity, minHeight: 28) }
-                        .buttonStyle(.bordered).controlSize(.large)
+                        .buttonStyle(.glass).controlSize(.large)
                         .accessibilityIdentifier("dialog-cancel")
                 }
             }
@@ -82,13 +84,6 @@ extension View {
     /// for fields that have no return key (numbers, phone numbers).
     func keyboardManaged() -> some View {
         scrollDismissesKeyboard(.interactively)
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("收起键盘", systemImage: "keyboard.chevron.compact.down") { endEditing() }
-                        .accessibilityIdentifier("keyboard-dismiss-toolbar")
-                }
-            }
     }
 }
 
@@ -112,15 +107,15 @@ struct EntryField: View {
             .focused($focused)
             .onChange(of: text) { _, value in if let limit { text = limitedText(value, limit: limit) } }
             HStack {
-                if focused {
-                    Button { focused = false } label: { Label("收起键盘", systemImage: "keyboard.chevron.compact.down").font(.footnote) }
-                        .buttonStyle(.bordered).controlSize(.small)
-                        .accessibilityIdentifier("keyboard-dismiss")
-                        .transition(.opacity)
-                }
+                // Always laid out and only faded, so showing it never changes the form's height
+                // while the keyboard is animating in.
+                Button { focused = false } label: { Label("收起键盘", systemImage: "keyboard.chevron.compact.down").font(.footnote) }
+                    .buttonStyle(.bordered).controlSize(.small)
+                    .opacity(focused ? 1 : 0).allowsHitTesting(focused).accessibilityHidden(!focused)
+                    .accessibilityIdentifier("keyboard-dismiss")
                 Spacer()
                 if let limit { Text("\(text.utf16.count)/\(limit) 字符").font(.footnote).foregroundStyle(.secondary) }
-            }.animation(.easeOut(duration: 0.15), value: focused)
+            }
         }
     }
 }
@@ -146,4 +141,9 @@ struct ErrorDialog: ViewModifier {
                             copyText: error ?? shownMessage, showsCancel: retry != nil, onPrimary: { retry?() })
             }
     }
+}
+
+/// Messages made by the network layer: a failed request, a server status or a lost connection.
+func looksLikeServerError(_ message: String) -> Bool {
+    ["请求失败", "HTTP ", "网络错误", "服务器"].contains { message.contains($0) }
 }

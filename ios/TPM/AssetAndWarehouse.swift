@@ -49,8 +49,10 @@ struct AssetRecordDetail: View {
     private var asset: JSONValue { detail == .null ? record : detail }
     var body: some View {
         List {
-            HorizontalCategories(titles: tabs, selection: $tab)
-            LoadingRow(isPresented: loading, title: "正在加载" + tabs[tab])
+            Section {
+                HorizontalCategories(titles: tabs, selection: $tab)
+                LoadingRow(isPresented: loading, title: "正在加载" + tabs[tab])
+            }
             Section {
                 VStack(alignment: .leading, spacing: RowMetrics.spacing) {
                     WrappingContent { Text(asset["assetName"].text).font(.headline) }
@@ -126,11 +128,12 @@ struct WarehouseStockView: View {
     @State private var total: Int?
     var body: some View {
         List {
-            LoadingRow(isPresented: loading && !loadingMore, title: "正在加载库存")
+            Section { LoadingRow(isPresented: loading && !loadingMore, title: "正在加载库存") }
             Section {
                 if searching { Picker("搜索分类", selection: $searchField) { Text("物料名称").tag("material.materialName"); Text("物料编号").tag("material.materialNum"); Text("规格型号").tag("material.materialModel") } }
                 NavigationLink { WarehouseReceiptsView(preview: preview) } label: { Label("入库记录", systemImage: "tray.and.arrow.down") }
             }
+            Section {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 NavigationLink { WarehouseStockFacts(row: row) } label: {
                     VStack(alignment: .leading, spacing: RowMetrics.spacing) {
@@ -142,10 +145,12 @@ struct WarehouseStockView: View {
                 }.uniformRow()
             }
             if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无库存记录") }
-            LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await load(more: true) }
+            }.opacity(loading && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.22), value: loading)
+            Section { LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await load(more: true) } }
             if preview { DemoNotice() }
         }
         .navigationTitle("仓库库存").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .modifier(ListTabVisibility())
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索" + (searchField == "material.materialNum" ? "物料编号" : searchField == "material.materialModel" ? "规格型号" : "物料名称"), onSubmit: { Task { await load() } })
         .task(id: gate.id(searchField + query)) { await gate.run(key: searchField + query) { await load() } }

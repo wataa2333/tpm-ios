@@ -232,7 +232,7 @@ struct ReferencePicker: View {
                 Button { finishPicking() } label: {
                     Text(picked.isEmpty ? "完成" : "完成（已选 \(picked.count) 项）").font(.headline).frame(maxWidth: .infinity, minHeight: 28)
                 }
-                .buttonStyle(.borderedProminent).controlSize(.large)
+                .buttonStyle(.glassProminent).controlSize(.large)
                 .padding(.horizontal, 20).padding(.vertical, 8)
                 .accessibilityIdentifier("picker-done")
             }
@@ -646,16 +646,14 @@ struct DocumentActions: View {
     var save: (() -> Void)? = nil
     var submitTitle = "提交"
     let submit: () -> Void
-    @EnvironmentObject private var navigation: BottomNavigationModel
-    private var typing: Bool { navigation.keyboardVisible }
     var body: some View {
         HStack(alignment: .center) {
-            if let save { BottomAction(title: "保存", symbol: "tray.and.arrow.down", color: Color(red: 0.92, green: 0.73, blue: 0.24), busy: busy && !submitting, compact: typing, action: save) }
+            if let save { BottomAction(title: "保存", symbol: "tray.and.arrow.down", color: Color(red: 0.92, green: 0.73, blue: 0.24), busy: busy && !submitting, action: save) }
             Spacer()
-            BottomAction(title: submitTitle, symbol: "checkmark.circle", color: .blue, busy: busy && submitting, compact: typing, action: submit)
+            BottomAction(title: submitTitle, symbol: "checkmark.circle", color: .blue, busy: busy && submitting, action: submit)
         }
         .disabled(busy || disabled)
-        .padding(.horizontal, 20).padding(.vertical, typing ? 4 : 8)
+        .padding(.horizontal, 20).padding(.vertical, 8)
     }
 }
 

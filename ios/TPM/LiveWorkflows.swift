@@ -31,6 +31,7 @@ struct LiveTabs: View {
                     Section { LabeledContent("当前厂区", value: session.currentFactoryName) }
                     Section { Button("退出登录", role: .destructive) { session.signOut() } }
                 }.navigationTitle("我的").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
+                    .rootTopBar()
             }
         }
     }
@@ -56,9 +57,12 @@ struct LiveWorkflowList: View {
     init(kind: WorkflowKind, initialState: String = "RECEIVED") { self.kind = kind; _state = State(initialValue: initialState) }
     var body: some View {
         List {
-            if kind == .fault { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? 2 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
-            LoadingRow(isPresented: loading && !refreshing, title: "正在加载工单")
+            Section {
+                if kind == .fault { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? 2 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
+                LoadingRow(isPresented: loading && !refreshing, title: "正在加载工单")
+            }
             if kind == .fault && searching { Section { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } } } }
+            Section {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, item in
                 WorkOrderCard(title: kind == .fault ? item["faultName"].text : erpCardTitle(item),
                     status: kind == .fault ? faultStateName(item["faultState"].text) : approvalStateName(item["approvalState"].text),
@@ -74,15 +78,12 @@ struct LiveWorkflowList: View {
                 .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
             }
-            LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await reload(more: true) }
             if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无相关单据") }
+            }.opacity(loading && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.22), value: loading)
+            Section { LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await reload(more: true) } }
         }
-        .simultaneousGesture(DragGesture(minimumDistance: 45).onEnded { value in
-            guard kind == .fault, abs(value.translation.width) > abs(value.translation.height) * 1.5 else { return }
-            let index = FaultState.allCases.firstIndex { $0.code == state } ?? 2
-            state = FaultState.allCases[min(max(index + (value.translation.width < 0 ? 1 : -1), 0), 7)].code
-        })
         .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .modifier(ListTabVisibility())
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号", onSubmit: { Task { await reload() } })
 
@@ -332,8 +333,9 @@ struct LiveCatalogView: View {
     @StateObject private var gate = ReloadGate()
     var body: some View {
         List {
-            LoadingRow(isPresented: loading && !refreshing, title: "正在加载")
+            Section { LoadingRow(isPresented: loading && !refreshing, title: "正在加载") }
             if searching { Section { Picker("搜索方式", selection: $byCode) { Text("按名称").tag(false); Text("按编号").tag(true) }.pickerStyle(.segmented).labelsHidden() } }
+            Section {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, record in
                 NavigationLink {
                     if source == .assets { AssetRecordDetail(record: record) }
@@ -346,7 +348,8 @@ struct LiveCatalogView: View {
                 .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
             }
-            LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await load(more: true) }
+            }.opacity(loading && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.22), value: loading)
+            Section { LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await load(more: true) } }
         }
         .navigationTitle(source == .assets ? "资产台账" : "库存")
         .modifier(ListTabVisibility())
