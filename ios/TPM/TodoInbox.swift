@@ -14,6 +14,7 @@ struct TodoInboxView: View {
     @State private var last = true
     @State private var total: Int?
     @State private var counts: [String: Int] = [:]
+    @StateObject private var gate = ReloadGate()
     @State private var error: String?
     private let categories = ["全部", "故障报修", "ERP 出库"]
     private let keys = ["", "ASSET_FAULT", "ERP_OUTBOUND"]
@@ -60,10 +61,12 @@ struct TodoInboxView: View {
         .navigationTitle("我的待办")
         .searchPageChrome(largeTitle: true)
         .nativeSearchable(text: $query, prompt: "搜索待办名称")
-        .reloadsToTop(on: "\(navigation.refresh)-\(category)-\(query)")
+        .reloadsToTop(on: gate.id("\(navigation.refresh)-\(category)-\(query)"))
+        .animation(.snappy(duration: 0.3), value: loading)
+        .refreshButton(busy: loading || loadingMore) { gate.request() }
         .errorDialog($error, retry: { Task { await load() } })
-        .task(id: "\(navigation.refresh)-\(category)-\(query)") { await load() }
-        .task(id: "counts-\(navigation.refresh)-\(query)") { await loadCounts() }
+        .task(id: gate.id("\(navigation.refresh)-\(category)-\(query)")) { await gate.run(key: "\(navigation.refresh)-\(category)-\(query)") { await load() } }
+        .task(id: gate.id("counts-\(navigation.refresh)-\(query)")) { await gate.run("counts", key: "counts-\(navigation.refresh)-\(query)") { await loadCounts() } }
         .refreshable { refreshing = true; await load(); await loadCounts(); refreshing = false }
         .onAppear {
             navigation.newDocument = .fault; navigation.hideTabs = false

@@ -45,6 +45,7 @@ struct AssetRecordDetail: View {
     @State private var rows: [JSONValue] = []
     @State private var loading = false
     @State private var error: String?
+    @StateObject private var gate = ReloadGate()
     private var asset: JSONValue { detail == .null ? record : detail }
     var body: some View {
         List {
@@ -85,9 +86,11 @@ struct AssetRecordDetail: View {
         .navigationTitle("资产详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility())
         .onAppear { tab = tabs.firstIndex(of: initialTab) ?? 0 }
-        .task(id: tab) { await load() }
+        .task(id: gate.id("\(tab)")) { await gate.run(key: "\(tab)") { await load() } }
+        .refreshButton(busy: loading) { gate.request() }
+        .animation(.snappy(duration: 0.3), value: loading)
         .errorDialog($error, retry: { Task { await load() } })
-        .reloadsToTop(on: tab)
+        .reloadsToTop(on: gate.id("\(tab)"))
     }
     private func load() async {
         loading = true; error = nil; rows = []; defer { loading = false }
@@ -117,6 +120,7 @@ struct WarehouseStockView: View {
     @State private var error: String?
     @State private var query = ""
     @State private var searchField = "material.materialName"
+    @StateObject private var gate = ReloadGate()
     @State private var searching = false
     @State private var last = true
     @State private var total: Int?
@@ -144,8 +148,10 @@ struct WarehouseStockView: View {
         .navigationTitle("仓库库存").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索" + (searchField == "material.materialNum" ? "物料编号" : searchField == "material.materialModel" ? "规格型号" : "物料名称"), onSubmit: { Task { await load() } })
-        .task(id: searchField + query) { await load() }
-        .reloadsToTop(on: searchField + query)
+        .task(id: gate.id(searchField + query)) { await gate.run(key: searchField + query) { await load() } }
+        .reloadsToTop(on: gate.id(searchField + query))
+        .animation(.snappy(duration: 0.3), value: loading)
+        .refreshButton(busy: loading || loadingMore) { gate.request() }
         .errorDialog($error, retry: { Task { await load() } })
         .refreshable { await load() }
     }
@@ -190,9 +196,10 @@ struct WarehouseReceiptsView: View {
     @State private var rows: [JSONValue] = []
     @State private var loading = false
     @State private var error: String?
+    @StateObject private var gate = ReloadGate()
     var body: some View {
         List {
-            LoadingRow(isPresented: loading && rows.isEmpty, title: "正在加载入库记录")
+            LoadingRow(isPresented: loading, title: "正在加载入库记录")
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 Section(row["entryNumber"].text) {
                     LabeledContent("入库时间", value: readableDate(row["warehousingTime"]))
@@ -204,11 +211,14 @@ struct WarehouseReceiptsView: View {
             if preview { DemoNotice() }
         }.navigationTitle("入库记录").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
             .errorDialog($error, clearsOnClose: true)
-            .task {
+            .reloadsToTop(on: gate.token)
+            .animation(.snappy(duration: 0.3), value: loading)
+            .refreshButton(busy: loading) { gate.request() }
+            .task(id: gate.id("receipts")) { await gate.run(key: "receipts") {
                 if preview { rows = [.object(["entryNumber": .string("RK-DEMO-001"), "warehousingTime": .string("2026-10-15 14:30"), "applyDate": .string("2026-10-15"), "warehouse": .object(["warehouseName": .string("备件仓")]), "user": PreviewIdentity.user])]; return }
                 loading = true; defer { loading = false }
                 do { rows = try await session.page("warehouse/pageWarehousing")["content"].array } catch { self.error = error.localizedDescription }
-            }
+            } }
     }
 }
 

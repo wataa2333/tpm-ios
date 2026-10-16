@@ -23,6 +23,7 @@ struct ReadOnlyPoolView: View {
     @State private var searching = false
     @State private var loading = true
     @State private var refreshing = false
+    @StateObject private var gate = ReloadGate()
     @State private var moreLoading = false
     @State private var last = true
     @State private var total: Int?
@@ -59,9 +60,11 @@ struct ReadOnlyPoolView: View {
         .nativeSearchable(text: $query, isPresented: $searching, prompt: byAsset ? "搜索资产编码" : "搜索工单名称", onSubmit: { Task { await load() } })
         .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(ListTabVisibility())
-        .reloadsToTop(on: "\(byAsset)-\(query)")
+        .reloadsToTop(on: gate.id("\(byAsset)-\(query)"))
+        .animation(.snappy(duration: 0.3), value: loading)
+        .refreshButton(busy: loading || moreLoading) { gate.request() }
         .errorDialog($error, retry: { Task { await load() } })
-        .task(id: "\(byAsset)-\(query)") { await load() }
+        .task(id: gate.id("\(byAsset)-\(query)")) { await gate.run(key: "\(byAsset)-\(query)") { await load() } }
         .refreshable { refreshing = true; await load(); refreshing = false }
     }
     private func facts(_ row: JSONValue) -> [(String, String)] {

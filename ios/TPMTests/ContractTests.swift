@@ -204,3 +204,39 @@ import Foundation
     #expect(orderedHistory(nodes).map { $0["activityId"].text } == ["a", "b", "c"])
     #expect(historyUserNames(orderedHistory(nodes)) == ["u1", "u2"])
 }
+
+@Test @MainActor func returningToAPageDoesNotReloadButTheRefreshButtonDoes() async {
+    let gate = ReloadGate()
+    var loads = 0
+    await gate.run(key: "list") { loads += 1 }
+    #expect(loads == 1)
+    // The page reappears after a detail page (its task restarts with the same key): nothing loads.
+    await gate.run(key: "list") { loads += 1 }
+    #expect(loads == 1)
+    // Another filter is a different request.
+    await gate.run(key: "list-other") { loads += 1 }
+    #expect(loads == 2)
+    // The refresh button loads again, even for the same key.
+    gate.request()
+    await gate.run(key: "list") { loads += 1 }
+    #expect(loads == 3)
+    await gate.run(key: "list") { loads += 1 }
+    #expect(loads == 3)
+}
+
+@Test @MainActor func aLoadThatWasInterruptedIsFinishedOnReturn() async {
+    let gate = ReloadGate()
+    var loads = 0
+    let task = Task { @MainActor in
+        await gate.run(key: "list") {
+            loads += 1
+            try? await Task.sleep(for: .seconds(5))
+        }
+    }
+    try? await Task.sleep(for: .milliseconds(50))
+    task.cancel()
+    await task.value
+    #expect(loads == 1)
+    await gate.run(key: "list") { loads += 1 }
+    #expect(loads == 2)
+}

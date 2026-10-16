@@ -91,6 +91,9 @@ struct DashboardHome: View {
     @EnvironmentObject private var store: DemoStore
     /// Server totals per card: "pending", "pool", "maintenance", "precision".
     @State private var counts: [String: Int] = [:]
+    @StateObject private var gate = ReloadGate()
+    @State private var loadingCounts = false
+    @State private var pulling = false
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: 16)]
     private func count(_ key: String) -> Int? {
         guard preview else { return counts[key] }
@@ -102,6 +105,7 @@ struct DashboardHome: View {
     }
     var body: some View {
         ScrollView {
+            if loadingCounts && !pulling { ProgressView().frame(maxWidth: .infinity).padding(.top, 12).transition(.opacity) }
             LazyVGrid(columns: columns, spacing: 16) {
                 NavigationLink {
                     if preview { FaultListView(initialState: .reported) } else { LiveWorkflowList(kind: .fault, initialState: "REPORTED") }
@@ -126,16 +130,20 @@ struct DashboardHome: View {
         .contentMargins(.bottom, 104, for: .scrollContent)
         .navigationTitle("主页").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
         .modifier(ListTabVisibility())
-        .reloadsToTop(on: navigation.refresh)
-        .task(id: navigation.refresh) { await loadCounts() }
-        .refreshable { await loadCounts() }
-        .toolbar { ToolbarItem(placement: .topBarTrailing) {
-            if preview { PreviewFactoryButton() } else { FactorySwitcherButton() }
-        } }
+        .reloadsToTop(on: gate.id("\(navigation.refresh)"))
+        .task(id: gate.id("\(navigation.refresh)")) { await gate.run(key: "\(navigation.refresh)") { await loadCounts() } }
+        .refreshable { pulling = true; await loadCounts(); pulling = false }
+        .animation(.snappy(duration: 0.3), value: loadingCounts)
+        // One row: the refresh button next to the factory menu.
+        .toolbar {
+            if !preview { ToolbarItem(placement: .topBarTrailing) { RefreshButton(busy: loadingCounts) { gate.request() } } }
+            ToolbarItem(placement: .topBarTrailing) { if preview { PreviewFactoryButton() } else { FactorySwitcherButton() } }
+        }
     }
     /// One request per card, each asking for a single row: only `totalElements` is used.
     private func loadCounts() async {
         guard !preview else { return }
+        loadingCounts = true; defer { loadingCounts = false }
         let api = session
         let queries: [(String, String, [JSONValue])] = [
             ("pending", "fault/pageAssetFault", [filter("faultState", "REPORTED")]),

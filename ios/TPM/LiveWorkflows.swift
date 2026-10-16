@@ -52,6 +52,7 @@ struct LiveWorkflowList: View {
     @State private var loadingMore = false
     @State private var total: Int?
     @State private var stateCounts: [String: Int] = [:]
+    @StateObject private var gate = ReloadGate()
     init(kind: WorkflowKind, initialState: String = "RECEIVED") { self.kind = kind; _state = State(initialValue: initialState) }
     var body: some View {
         List {
@@ -86,10 +87,12 @@ struct LiveWorkflowList: View {
         .nativeSearchable(text: $query, isPresented: $searching, prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号", onSubmit: { Task { await reload() } })
 
         .refreshable { refreshing = true; await reload(); await reloadCounts(); refreshing = false }
-        .reloadsToTop(on: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)")
+        .reloadsToTop(on: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)"))
+        .animation(.snappy(duration: 0.3), value: loading)
+        .refreshButton(busy: loading || loadingMore) { gate.request() }
         .errorDialog($error, retry: { Task { await reload() } })
-        .task(id: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)") { await reload() }
-        .task(id: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)") { await reloadCounts() }
+        .task(id: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)")) { await gate.run(key: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)") { await reload() } }
+        .task(id: gate.id("counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)")) { await gate.run("counts", key: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)") { await reloadCounts() } }
         .onAppear {
             navigation.newDocument = kind; navigation.hideTabs = false
             if navigation.pendingListRefresh { navigation.pendingListRefresh = false; navigation.refresh = UUID() }
@@ -166,6 +169,7 @@ struct LiveWorkflowDetail: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var navigation: BottomNavigationModel
     @State private var returnToList = false
+    @StateObject private var gate = ReloadGate()
     private func completed() {
         returnToList = true
         processing = false; returning = false; editing = false
@@ -243,15 +247,18 @@ struct LiveWorkflowDetail: View {
                     }
                 }
                 .refreshable { await load() }
+                .reloadsToTop(on: gate.token)
+                .animation(.snappy(duration: 0.3), value: loading)
             }
         }
         .navigationTitle(kind == .fault ? "报修详情" : "出库详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .errorDialog($error, retry: { Task { await load() } })
         .modifier(DetailTabVisibility())
-        .task { await load() }
+        .task(id: gate.id("detail")) { await gate.run(key: "detail") { await load() } }
         .toolbar {
-            if canEdit {
-                ToolbarItem(placement: .topBarTrailing) { Button("编辑") { editing = true } }
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if canEdit { Button("编辑") { editing = true } }
+                RefreshButton(busy: loading) { gate.request() }
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -322,6 +329,7 @@ struct LiveCatalogView: View {
     @State private var error: String?
     @State private var last = true
     @State private var total: Int?
+    @StateObject private var gate = ReloadGate()
     var body: some View {
         List {
             LoadingRow(isPresented: loading && !refreshing, title: "正在加载")
@@ -345,9 +353,12 @@ struct LiveCatalogView: View {
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: byCode ? "搜索编号" : "搜索名称", onSubmit: { Task { await load() } })
         .onChange(of: byCode) { Task { await load() } }
-        .reloadsToTop(on: "\(byCode)-\(query)")
+        .reloadsToTop(on: gate.id("\(byCode)-\(query)"))
+        .animation(.snappy(duration: 0.3), value: loading)
+        .refreshButton(busy: loading || loadingMore) { gate.request() }
         .errorDialog($error, retry: { Task { await load() } })
-        .task { await load() }.refreshable { refreshing = true; await load(); refreshing = false }
+        .task(id: gate.id("\(byCode)-\(query)")) { await gate.run(key: "\(byCode)-\(query)") { await load() } }
+        .refreshable { refreshing = true; await load(); refreshing = false }
     }
     private func load(more: Bool = false) async {
         if more { loadingMore = true } else { loading = true }
@@ -374,9 +385,10 @@ struct WorkflowNodesView: View {
     @State private var loading = true
     @State private var error: String?
     @StateObject private var directory = UserDirectory()
+    @StateObject private var gate = ReloadGate()
     var body: some View {
         List {
-            LoadingRow(isPresented: loading && history.isEmpty && definition.isEmpty, title: "正在加载流程")
+            LoadingRow(isPresented: loading, title: "正在加载流程")
             if !history.isEmpty {
                 Section("处理记录") {
                     ForEach(Array(history.enumerated()), id: \.offset) { _, node in
@@ -403,7 +415,11 @@ struct WorkflowNodesView: View {
         .navigationTitle("处理流程").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .errorDialog($error, retry: { Task { await load() } })
         .modifier(DetailTabVisibility())
-        .task { await load() }.refreshable { await load() }
+        .reloadsToTop(on: gate.token)
+        .task(id: gate.id("flow")) { await gate.run(key: "flow") { await load() } }
+        .refreshable { await load() }
+        .animation(.snappy(duration: 0.3), value: loading)
+        .refreshButton(busy: loading) { gate.request() }
     }
     private func load() async {
         loading = true; error = nil; defer { loading = false }
