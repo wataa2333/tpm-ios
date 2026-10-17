@@ -43,7 +43,7 @@ struct NewDocumentButton: ViewModifier {
         content
             .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 0) {
                 Group {
-                    if !navigation.hideTabs {
+                    if !navigation.hideTabs && !navigation.selectingBatch {
                         Button {
                             navigation.searchReset = UUID()
                             navigation.presentingDocument = true
@@ -57,7 +57,7 @@ struct NewDocumentButton: ViewModifier {
                         .transition(.opacity)
                     }
                 }
-                .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.4), value: navigation.hideTabs)
+                .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.4), value: navigation.hideTabs || navigation.selectingBatch)
             }
             .sheet(item: $creating, onDismiss: {
                 navigation.presentingDocument = false

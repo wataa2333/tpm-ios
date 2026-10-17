@@ -11,6 +11,8 @@ final class BottomNavigationModel: ObservableObject {
     @Published var refresh = UUID()
     @Published var searchReset = UUID()
     @Published var presentingDocument = false
+    /// A list is in selection mode: the "new" button steps aside for the batch bar.
+    @Published var selectingBatch = false
     /// An order moved to its next step while its detail is open. The list behind must not
     /// reload yet (the row may leave the filtered list and take the detail with it); it
     /// applies this when it reappears.

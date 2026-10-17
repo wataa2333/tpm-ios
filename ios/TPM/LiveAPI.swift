@@ -188,6 +188,7 @@ final class LiveSession: ObservableObject {
         authentication["factoryId"] = factories.first { $0["factoryId"].text == factoryID }?["factoryId"] ?? .string(factoryID)
         do { try persist() } catch { authentication = previous; throw error }
         scopeRevision = UUID()
+        rememberFactory()
     }
     func request(_ path: String, query: [String: String] = [:], body: JSONValue? = nil) async throws -> JSONValue {
         var components = URLComponents(url: root.appendingPathComponent("rest").appendingPathComponent(path), resolvingAgainstBaseURL: false)!
@@ -263,6 +264,7 @@ extension LiveSession {
     /// Signs in and, when asked, remembers the password in the Keychain for quick switching.
     func signIn(username: String, password: String, remember: Bool) async throws {
         try await login(username: username, password: password)
+        await restoreLastFactory()
         if remember {
             let name = authentication.text("fullName")
             try? AccountVault.save(username: username, password: password, displayName: name.isEmpty ? username : name)

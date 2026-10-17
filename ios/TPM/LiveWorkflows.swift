@@ -26,6 +26,8 @@ struct AuthenticatedRoot: View {
         .animation(.easeInOut(duration: 0.7), value: session.scopeRevision)
         .animation(.easeInOut(duration: 0.4), value: session.switchingFactory)
         .animation(.easeInOut(duration: 0.45), value: session.signedIn)
+        // Pins, defaults and drafts saved under the old "name@factory name" scope move to the id-based one.
+        .task(id: session.scopeRevision) { session.migrateLegacyScope() }
     }
 }
 
@@ -81,6 +83,8 @@ struct LiveWorkflowList: View {
     @State private var choosingDates = false
     @State private var stateCounts: [String: Int] = [:]
     @StateObject private var gate = ReloadGate()
+    /// Selection mode lives here, in the list, so opening a peek or a batch sheet never reloads or resets it.
+    @StateObject private var batch = BatchSelection()
     private let customTitle: String?
     private let initialQuery: String
     /// `initialQuery` and `initialField` open the list already searching, as the quick-query cards do.
@@ -108,7 +112,8 @@ struct LiveWorkflowList: View {
             if kind == .fault && searching { CardGroup { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }.padding(.horizontal, 16).padding(.vertical, 6) } }
             CardGroup {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, item in
-                    LiveOrderRow(kind: kind, item: item).equatable()
+                    let entry = batchItem(kind: kind, item: item)
+                    LiveOrderRow(kind: kind, item: item, selectionMode: batch.active, selected: batch.contains(entry.id), selectable: batch.isSelectable(entry), batch: batch).equatable()
                 }
                 if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无相关单据") }
             }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
@@ -131,7 +136,8 @@ struct LiveWorkflowList: View {
             }
         }
         .refreshButton(busy: loading || loadingMore || gate.busy) { gate.request() }
-        .sheet(isPresented: $choosingDates) { DateRangeSheet(range: $dateRange) }
+        .batchHost(batch) { rows.map { batchItem(kind: kind, item: $0) } }
+        .onChange(of: state) { batch.clear() } { DateRangeSheet(range: $dateRange) }
         .errorDialog($error, retry: { Task { await reload() } })
         .task(id: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)-\(dateKey)")) { await gate.run(key: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)-\(dateKey)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await reload() }) }
         .task(id: gate.id("counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)-\(dateKey)")) { await gate.run("counts", key: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)-\(dateKey)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await reloadCounts() }) }
@@ -192,16 +198,30 @@ struct LiveWorkflowList: View {
 struct LiveOrderRow: View, Equatable {
     let kind: WorkflowKind
     let item: JSONValue
+    /// Selection mode of the list this card is in; the closures live in `batch`, only these values are compared.
+    var selectionMode = false
+    var selected = false
+    var selectable = true
+    var batch: BatchSelection? = nil
+    @EnvironmentObject private var session: LiveSession
+    static func == (a: LiveOrderRow, b: LiveOrderRow) -> Bool {
+        a.kind == b.kind && a.item == b.item && a.selectionMode == b.selectionMode && a.selected == b.selected && a.selectable == b.selectable
+    }
     var body: some View {
+        let entry = batchItem(kind: kind, item: item)
         WorkOrderCard(title: kind == .fault ? item["faultName"].text : erpCardTitle(item),
-            status: kind == .fault ? faultStateName(item["faultState"].text) : approvalStateName(item["approvalState"].text),
+            status: kind == .fault ? faultStateLabel(item) : approvalStateName(item["approvalState"].text),
             color: kind == .fault ? faultDisplayColor(item["faultState"].text) : approvalDisplayColor(item["approvalState"].text),
             reference: kind == .fault ? item["asset"]["assetCode"].text : item["outNumber"].text,
             referenceTitle: kind == .fault ? "资产编码" : "出库单号",
             machine: kind == .fault ? item["asset"]["addressCode"].text : "",
             time: readableDate(item[kind == .fault ? "faultTime" : "applyDate"]),
             summaryFacts: kind == .fault ? [] : [("领用人", item["recipientUser"]["realName"].text), ("领用部门", item["dept"]["deptName"].text)],
-            facts: kind == .fault ? faultCardFacts(item) : erpCardFacts(item)) {
+            statusNote: [],
+            facts: (kind == .fault ? faultCardFacts(item) : erpCardFacts(item)),
+            selecting: selectionMode ? batch.map { batch in
+                CardSelecting(selected: selected, enabled: selectable, toggle: { batch.toggle(entry) }, peek: { batch.peeking = entry })
+            } : nil) {
             LiveWorkflowDetail(kind: kind, id: item[kind.idKey].text)
         }
     }
@@ -262,6 +282,9 @@ struct LiveWorkflowDetail: View {
     @State private var processing = false
     @State private var returning = false
     @State private var returnAvailable = false
+    @State private var repairResult: JSONValue = .null
+    @Environment(\.isPeeking) private var peeking
+    @ObservedObject private var directory = UserDirectory.shared
     private var task: JSONValue { detail["taskInfo"] }
     var body: some View {
         Group {
@@ -283,8 +306,10 @@ struct LiveWorkflowDetail: View {
                             LabeledContent("维修班组", value: detail["userGroup"].object.label)
                             LabeledContent("ERP记账部门", value: detail["division"].object.label)
                         }
+                        if let sentBack = faultReturnKind(detail), repairResult != .null || sentBack == "驳回" { ReturnNoteSection(kind: sentBack, repair: repairResult, fault: detail) }
                         if !detail["faultDesc"].text.isEmpty { Section("故障描述") { Text(detail["faultDesc"].text).textSelection(.enabled).contextMenu { Button("复制", systemImage: "doc.on.doc") { copyToPasteboard(detail["faultDesc"].text) } } } }
                         if !detail["albums"].array.isEmpty { Section("现场照片") { ForEach(Array(detail["albums"].array.enumerated()), id: \.offset) { _, photo in AttachmentRow(photo: photo) } } }
+                        if repairResult != .null, faultReturnKind(detail) == nil { RepairResultSection(repair: repairResult) }
                     } else {
                         Section("ERP出库详情") {
                             ForEach([("outNumber", "出库单号"), ("sn", "单号"), ("user.realName", "申请人"), ("applyDate", "申请日期"), ("projectCode", "项目号"), ("projectDesc", "项目名称"), ("referenceSn", "关联单号"), ("recipientUser.realName", "领用人"), ("dept.deptName", "领用部门"), ("division.divisionDesc", "ERP记账部门"), ("outboundTime", "出库时间")], id: \.0) { key, label in LabeledContent(label, value: readableDate(detail.at(key))) }
@@ -319,12 +344,12 @@ struct LiveWorkflowDetail: View {
         .task(id: gate.id("detail")) { await gate.run(key: "detail") { await load() } }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                if canEdit { Button("编辑") { editing = true } }
+                if canEdit && !peeking { Button("编辑") { editing = true } }
                 RefreshButton(busy: loading || gate.busy) { gate.request() }
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if !task["id"].text.isEmpty && (taskState["canSubmit"].bool || taskState["canDelegate"].bool || taskState["canResolveDelegate"].bool) {
+            if !peeking && !task["id"].text.isEmpty && (taskState["canSubmit"].bool || taskState["canDelegate"].bool || taskState["canResolveDelegate"].bool) {
                 HStack { if returnAvailable { BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) { returning = true }.disabled(loading) }; Spacer(); BottomAction(title: taskActionTitle(task, kind: kind), symbol: "arrow.right.circle") { processing = true }.disabled(loading) }.bottomBarPadding()
             }
         }
@@ -359,7 +384,18 @@ struct LiveWorkflowDetail: View {
                 let form = try await session.request("workflow/getFormPropertiesConditionsByTaskId", query: ["taskId": task["id"].text])
                 returnAvailable = form["flowConditions"].array.contains { isReturnCondition($0) }
             }
+            // The extras never hold the page up: it is shown as soon as the order itself is loaded.
+            if kind == .fault { Task { await loadExplanations() } }
         } catch { if !isCancellation(error) { self.error = error.localizedDescription } }
+    }
+    /// The repairer's note and the solution: one light request (`repair/getRepairsByFaultId`, as the original
+    /// detail page makes), sent after the page is already on screen and only for states that can have a repair.
+    /// When it cannot be read the page simply does without. The process history is never read for this.
+    private func loadExplanations() async {
+        guard faultMayHaveRepairNote(detail) else { repairResult = .null; return }
+        let answer = try? await session.request("repair/getRepairsByFaultId", query: ["faultId": id])
+        guard !Task.isCancelled else { return }
+        if let answer, let repair = latestRepair(answer), !repair["user"].object.isEmpty || !repair["content"].text.isEmpty { repairResult = repair } else { repairResult = .null }
     }
 }
 

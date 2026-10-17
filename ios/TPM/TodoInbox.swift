@@ -13,6 +13,7 @@ struct TodoInboxView: View {
     @State private var last = true
     @State private var total: Int?
     @StateObject private var gate = ReloadGate()
+    @StateObject private var batch = BatchSelection()
     @State private var error: String?
 
     var body: some View {
@@ -29,7 +30,9 @@ struct TodoInboxView: View {
             } else {
                 CardGroup {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, task in
-                        TodoCardRow(task: task).equatable()
+                        let entry = batchItem(todo: task)
+                        TodoCardRow(task: task, selectionMode: batch.active, selected: entry.map { batch.contains($0.id) } ?? false,
+                                    selectable: entry.map { batch.isSelectable($0) } ?? false, batch: batch).equatable()
                     }
                     if rows.isEmpty && !loading && error == nil { CompactEmptyState(title: "暂无待办") }
                 }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
@@ -43,6 +46,7 @@ struct TodoInboxView: View {
         .reloadsToTop(on: gate.id("\(navigation.refresh)-\(query)"))
         .animation(.smooth(duration: 0.45), value: loading || gate.busy)
         .rootTopBar(preview: preview, busy: loading || loadingMore || gate.busy) { gate.request() }
+        .modifier(TodoBatchHost(enabled: !preview, batch: batch) { rows.compactMap { batchItem(todo: $0) } })
         .errorDialog($error, retry: { Task { await load() } })
         .task(id: gate.id("\(navigation.refresh)-\(query)")) { await gate.run(key: "\(navigation.refresh)-\(query)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await load() }) }
         .refreshable { refreshing = true; await load(); refreshing = false }
@@ -75,17 +79,42 @@ struct TodoInboxView: View {
     }
 }
 
+/// The selection mode of the todo list. In the demo screens it is left out.
+private struct TodoBatchHost: ViewModifier {
+    let enabled: Bool
+    let batch: BatchSelection
+    let candidates: () -> [BatchItem]
+    func body(content: Content) -> some View {
+        if enabled { content.batchHost(batch, candidates: candidates) } else { content }
+    }
+}
+
 /// One todo card. It compares by value, so the page's own state changes do not rebuild every card.
 struct TodoCardRow: View, Equatable {
     let task: JSONValue
+    var selectionMode = false
+    var selected = false
+    var selectable = true
+    var batch: BatchSelection? = nil
+    @EnvironmentObject private var session: LiveSession
+    static func == (a: TodoCardRow, b: TodoCardRow) -> Bool {
+        a.task == b.task && a.selectionMode == b.selectionMode && a.selected == b.selected && a.selectable == b.selectable
+    }
     var body: some View {
         let data = task["data"]
         let kind = todoTaskKind(task)
+        let entry = batchItem(todo: task)
         WorkOrderCard(title: todoTitle(task), status: todoStatusName(task, kind: kind, data: data), color: kind == .erp ? approvalDisplayColor(data["approvalState"].text) : faultDisplayColor(data["faultState"].text),
             reference: kind == .fault ? data["asset"]["assetCode"].text : data["outNumber"].text,
             referenceTitle: kind == .fault ? "资产编码" : "出库单号",
             machine: kind == .fault ? data["asset"]["addressCode"].text : "", time: readableDate(task["createTime"]),
-            facts: [("流程类型", kind?.title ?? "其他流程"), ("当前节点", task["name"].text)] + (kind == .fault ? faultCardFacts(data) : erpCardFacts(data))) {
+            statusNote: [],
+            facts: [("流程类型", kind?.title ?? "其他流程"), ("当前节点", task["name"].text)] + (kind == .fault ? faultCardFacts(data) : erpCardFacts(data)),
+            selecting: selectionMode ? batch.map { batch in
+                CardSelecting(selected: selected, enabled: selectable,
+                              toggle: { if let entry { batch.toggle(entry) } else { batch.notice = "这类待办暂不支持批量处理" } },
+                              peek: { if let entry { batch.peeking = entry } else { batch.notice = "此类流程暂未开放查看" } })
+            } : nil) {
             if let kind {
                 LiveWorkflowDetail(kind: kind, id: task["businessKey"].text)
             } else {
@@ -106,7 +135,7 @@ func todoTaskKind(_ task: JSONValue) -> WorkflowKind? {
 /// workflow node ("完成任务"); the node name stays in the card's expanded "当前节点" line.
 func todoStatusName(_ task: JSONValue, kind: WorkflowKind?, data: JSONValue) -> String {
     if task["suspended"].bool { return "挂起" }
-    let named = kind == .erp ? approvalStateName(data["approvalState"].text) : faultStateName(data["faultState"].text)
+    let named = kind == .erp ? approvalStateName(data["approvalState"].text) : faultStateLabel(data)
     return named.isEmpty || named == "状态待核对" || named == "全部" ? task["name"].text : named
 }
 func todoTitle(_ task: JSONValue) -> String {

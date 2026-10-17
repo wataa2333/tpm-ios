@@ -75,6 +75,24 @@ final class PickerPrefsStore: @unchecked Sendable {
         file.defaults[defaultKey(scope, field)] = entry.map { StoredDefault(source: source.rawValue, entry: $0) }
         persist()
     }
+    /// Moves pins, recents and defaults saved under an older scope name to the current one. What the current
+    /// scope already holds wins; nothing is overwritten.
+    func migrate(from old: String, to new: String) {
+        guard old != new else { return }
+        lock.lock(); defer { lock.unlock() }
+        var changed = false
+        for (key, value) in file.lists where key.hasPrefix(old + "|") {
+            let target = new + String(key.dropFirst(old.count))
+            if file.lists[target] == nil { file.lists[target] = value }
+            file.lists[key] = nil; changed = true
+        }
+        for (key, value) in file.defaults where key.hasPrefix(old + "|") {
+            let target = new + String(key.dropFirst(old.count))
+            if file.defaults[target] == nil { file.defaults[target] = value }
+            file.defaults[key] = nil; changed = true
+        }
+        if changed { persist() }
+    }
 }
 
 /// The pure rules, so they can be tested without a screen.

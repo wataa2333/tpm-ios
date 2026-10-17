@@ -18,6 +18,8 @@ struct OriginalRepairForm: View {
     @State private var workflow = false
     @State private var confirming = false
     @State private var submitAfterSave = false
+    @State private var draftID: UUID?
+    @State private var toast: String?
     @State private var showValidation = false
     /// True when the alert reports a failed server call rather than a form validation problem.
     @State private var failedOnServer = false
@@ -38,8 +40,8 @@ struct OriginalRepairForm: View {
                 Button { choosingAssistants = true } label: { LabeledContent("辅助维修人", value: (data["repairUsers"]?.array ?? []).map { $0["realName"].text }.joined(separator: "、")) }
             } header: { RequiredFormHeader(title: "维修任务信息") }
             Section("ERP 出库") {
-                Button("新建出库单", systemImage: "plus") { creatingERP = true }.fullSeparator()
-                Button("添加出库物料", systemImage: "shippingbox") { choosing = true }.disabled(preview).fullSeparator()
+                FullRowButton("新建出库单", systemImage: "plus") { creatingERP = true }
+                FullRowButton("添加出库物料", systemImage: "shippingbox") { choosing = true }.disabled(preview)
                 ForEach(Array((data["erpRepairMaterials"]?.array ?? []).enumerated()), id: \.offset) { index, row in
                     DisclosureGroup {
                         LabeledContent("出库单号", value: row["outbound"]["outNumber"].text)
@@ -71,9 +73,11 @@ struct OriginalRepairForm: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             DocumentActions(busy: saving, submitting: submitAfterSave,
                             disabled: loading || photoUploading || data.isEmpty,
-                            save: { prepare(false) }, submit: { prepare(true) })
+                            // "保存" keeps what is typed on this phone: nothing is sent and nothing is required.
+                            save: { keepDraft() }, submit: { prepare(true) })
         }
-        .task { if data.isEmpty { await load() } }
+        .toast($toast)
+        .task { if data.isEmpty { await load(); applyDraft() } }
         .sheet(isPresented: $choosing) { NavigationStack { ReferencePicker(source: .outboundMaterials, multiple: true, selected: (data["erpRepairMaterials"]?.array ?? []).map { outboundLineIdentity($0["materialOutbound"]) }) { addMaterial($0) } } }
         .sheet(isPresented: $choosingAssistants) {
             NavigationStack { ReferencePicker(source: .users, multiple: true, selected: (data["repairUsers"]?.array ?? []).map { $0["userName"].text }) { user in
@@ -91,7 +95,6 @@ struct OriginalRepairForm: View {
         }
         .sheet(isPresented: $workflow, onDismiss: { Task { await load() } }) { NavigationStack { WorkflowTaskView(task: workflowTask, kind: .fault, onCompleted: { onCompleted?(); dismiss() }) } }
         .keyboardManaged()
-        .confirmDialog(submitAfterSave ? "保存维修结果并继续提交审批？" : "保存维修结果到原系统？", isPresented: $confirming, confirmTitle: submitAfterSave ? "继续" : "保存") { Task { await save() } }
         .errorDialog($error, title: failedOnServer ? "保存未完成" : "请检查表单", clearsOnClose: true, retry: data.isEmpty ? { Task { await load() } } : nil)
     }
     private func load() async {
@@ -118,6 +121,24 @@ struct OriginalRepairForm: View {
         rows.append(.object(["material": material["material"], "outbound": material["outbound"], "materialOutbound": material, "useNum": .number(1)]))
         data["erpRepairMaterials"] = .array(rows)
     }
+    /// What this form holds that is worth keeping: the registered repair fields and the ERP lines.
+    private var draftKeys: [String] { repairSubmissionKeys + ["erpRepairMaterials"] }
+    private func keepDraft() {
+        guard !preview, !loading, !data.isEmpty else { return }
+        var kept: Fields = [:]
+        for key in draftKeys { if let value = data[key] { kept[key] = value } }
+        let draft = FaultDraft(id: draftID ?? UUID(), savedAt: Date(), data: kept, selections: [:], orderID: faultID, orderSN: data.text("assetFault.sn"))
+        do { try DraftStore.shared.save(draft, scope: session.repairDraftScope); draftID = draft.id; dismiss() }
+        catch { failedOnServer = false; self.error = "草稿没有保存成功：" + error.localizedDescription }
+    }
+    /// A draft of this order's repair result is put back over the freshly loaded record.
+    private func applyDraft() {
+        guard !preview, !data.isEmpty, !faultID.isEmpty,
+              let draft = DraftStore.shared.drafts(scope: session.repairDraftScope, for: .order(faultID)).first else { return }
+        for key in draftKeys { if let value = draft.data[key] { data[key] = value } }
+        draftID = draft.id
+        toast = "已加载上次保存的草稿（" + draft.title + "）"
+    }
     private func prepare(_ submit: Bool) {
         failedOnServer = false
         showValidation = true
@@ -129,7 +150,7 @@ struct OriginalRepairForm: View {
         for line in data["erpRepairMaterials"]?.array ?? [] {
             if line["useNum"].number < 1 || line["useNum"].number > line["materialOutbound"]["actualQuantity"].number - line["materialOutbound"]["usedQuantity"].number { error = "使用数量超出可用范围"; return }
         }
-        showValidation = false; submitAfterSave = submit; confirming = true
+        showValidation = false; submitAfterSave = submit; Task { await save() }
     }
     private func save() async {
         guard !preview, !saving else { return }
@@ -143,6 +164,8 @@ struct OriginalRepairForm: View {
             // Same body as the original client: registered form fields + repairId + ERP lines,
             // not the whole record returned by getLatestRepairByFaultId.
             _ = try await session.request("repair/handleRepair", body: .object(repairSubmissionPayload(data, repairID: repairID)))
+            // The server has it now: the local copy has done its job.
+            if let draftID { DraftStore.shared.remove(id: draftID, scope: session.repairDraftScope); self.draftID = nil }
             if submitAfterSave { workflow = true } else { onCompleted?(); dismiss() }
         } catch {
             self.error = stageFailureMessage("保存维修结果", error)
@@ -252,7 +275,6 @@ struct WorkflowTaskView: View {
             Task { await loadAssignments() }
         }
         .keyboardManaged()
-        .confirmDialog("提交当前流程节点？", isPresented: $confirming, confirmTitle: "提交") { Task { await submit() } }
         .noticeDialog("提交未完成", message: failure ?? "", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } }), copyText: failure)
         .errorDialog($error, title: "提交未完成", retry: ready ? nil : { Task { await load() } })
         .sheet(isPresented: Binding(get: { handoff != nil }, set: { if !$0 { handoff = nil } })) {
@@ -328,7 +350,7 @@ struct WorkflowTaskView: View {
     }
     private func requestSubmit() {
         if let message = missingAssignee { failure = message; return }
-        if task["category"].text == "SIGNED" && condition == "agree" { Task { await submit() } } else { confirming = true }
+        Task { await submit() }
     }
     private func submit() async {
         if let message = missingAssignee { failure = message; return }
@@ -384,14 +406,14 @@ struct TaskHandoffView: View {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving) }
         }
         .safeAreaInset(edge: .bottom) {
-            DocumentActions(busy: saving, submitting: true, disabled: reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (operation != "resolve" && user["userName"].text.isEmpty), submit: { confirming = true })
+            DocumentActions(busy: saving, submitting: true, disabled: reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (operation != "resolve" && user["userName"].text.isEmpty), submit: { Task { await save() } })
         }
         .overlay { AnimatedLoadingOverlay(isPresented: saving, title: "正在提交…") }
         .keyboardManaged()
-        .confirmDialog("确认\(title)？", isPresented: $confirming, confirmTitle: "提交") { Task { await save() } }
         .errorDialog($error, title: "提交未完成", clearsOnClose: true)
     }
     private func save() async {
+        guard !saving else { return }
         saving = true; defer { saving = false }
         do {
             var body: Fields = ["taskId": .string(taskID)]

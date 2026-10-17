@@ -71,7 +71,7 @@ final class PreviewTests: XCTestCase {
         let dismiss = app.buttons["keyboard-dismiss"]
         XCTAssertTrue(dismiss.waitForExistence(timeout: 10))
         let save = app.buttons["保存"], submit = app.buttons["提交"]
-        XCTAssertTrue(dismiss.frame.minX > save.frame.maxX && dismiss.frame.maxX < submit.frame.minX, "收起键盘应在保存和提交之间")
+        XCTAssertTrue(dismiss.frame.minY >= submit.frame.maxY - 2 && !(dismiss.frame.minX > save.frame.maxX && dismiss.frame.maxX < submit.frame.minX), "收起键盘应贴着键盘，不在保存和提交这一行")
         dismiss.tap()
         XCTAssertFalse(app.buttons["keyboard-dismiss"].waitForExistence(timeout: 2))
     }
@@ -171,7 +171,8 @@ final class PreviewTests: XCTestCase {
             app.buttons["抢单"].tap()
             XCTAssertTrue(app.buttons["提交"].waitForExistence(timeout: 10))
             app.buttons["提交"].tap()
-            app.buttons["dialog-primary"].tap()
+            // No confirmation sheet: submitting is the confirmation.
+            XCTAssertFalse(app.buttons["dialog-primary"].waitForExistence(timeout: 1))
             let returned = expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: app.navigationBars["故障报修"])
             wait(for: [returned], timeout: 10)
             XCTAssertFalse(app.navigationBars["报修详情"].isHittable)
@@ -442,12 +443,12 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "审批人")).firstMatch.exists)
         XCTAssertFalse(app.staticTexts["提交当前流程节点？"].exists)
         app.buttons["dialog-primary"].tap()
-        // Choose the approver, then the normal confirmation is offered.
+        // Choose the approver: submitting then goes straight through, with no confirmation sheet.
         approver.tap()
         app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "示例审批人")).firstMatch.tap()
         XCTAssertTrue(approver.waitForExistence(timeout: 5))
         submit.tap()
-        XCTAssertTrue(app.staticTexts["提交当前流程节点？"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["提交当前流程节点？"].exists)
         XCTAssertFalse(app.staticTexts["提交未完成"].exists)
     }
 

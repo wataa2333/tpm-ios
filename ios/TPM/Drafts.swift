@@ -99,11 +99,55 @@ struct DraftStore {
         all[scope] = list.isEmpty ? nil : list
         try? writeAll(all)
     }
+    /// Moves what was stored under an older scope name to the current one (merging, never overwriting).
+    func migrate(from old: String, to new: String) {
+        guard old != new else { return }
+        var all = readAll()
+        guard let moved = all[old], !moved.isEmpty else { return }
+        var kept = all[new] ?? []
+        for draft in moved where !kept.contains(where: { $0.id == draft.id }) { kept.append(draft) }
+        all[new] = kept
+        all[old] = nil
+        try? writeAll(all)
+    }
 }
 
 extension LiveSession {
-    /// Drafts belong to one account in one factory, like the orders they will become.
-    var draftScope: String { authentication.text("name") + "@" + currentFactoryName }
+    /// Drafts, pins and defaults belong to one account in one factory, like the orders they will become.
+    /// Both halves are ids that never change: the account's user id (its login name when the server sent
+    /// none) and the factory id, so renaming a factory or a missing factory list cannot move the data.
+    var draftScope: String { accountKey + "#" + currentFactoryID }
+    /// The account half of `draftScope`, lower-cased so "Tom" and "tom" are one account.
+    var accountKey: String {
+        let id = authentication.text("id").trimmingCharacters(in: .whitespaces)
+        return (id.isEmpty ? authentication.text("name") : "id:" + id).lowercased()
+    }
+    /// What `draftScope` was before 0.7.x: login name, "@", factory name.
+    var legacyDraftScope: String { authentication.text("name") + "@" + currentFactoryName }
+    /// Brings data saved under the old scope name into the current scope. Safe to call any number of times.
+    func migrateLegacyScope() {
+        guard signedIn, !currentFactoryID.isEmpty else { return }
+        DraftStore.shared.migrate(from: legacyDraftScope, to: draftScope)
+        PickerPrefsStore.shared.migrate(from: legacyDraftScope, to: draftScope)
+    }
+
+    /// The repair-result form and the ERP form keep their own local drafts, apart from the repair-report drafts
+    /// of the draft box: same store, separate scopes.
+    var repairDraftScope: String { draftScope + "|repair" }
+    var erpDraftScope: String { draftScope + "|erp" }
+
+    private var lastFactoryKey: String { "lastFactory." + accountKey }
+    /// Remembered whenever the person changes factory, per account, so signing in again can return there.
+    func rememberFactory() {
+        guard signedIn, !currentFactoryID.isEmpty else { return }
+        UserDefaults.standard.set(currentFactoryID, forKey: lastFactoryKey)
+    }
+    /// After a sign-in the server picks its own default factory; go back to the one this account used last.
+    func restoreLastFactory() async {
+        guard let last = UserDefaults.standard.string(forKey: lastFactoryKey), last != currentFactoryID,
+              factories.contains(where: { $0["factoryId"].text == last }) else { rememberFactory(); return }
+        do { try await changeFactory(to: last) } catch { rememberFactory() }
+    }
 }
 
 /// The list of drafts. Choosing one hands it to `onPick`; swiping removes it.

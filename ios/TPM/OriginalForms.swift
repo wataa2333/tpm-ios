@@ -581,12 +581,13 @@ struct OriginalFaultForm: View {
             draftCount = DraftStore.shared.drafts(scope: session.draftScope, for: draftTarget).count
         }
         .keyboardManaged()
-        .confirmDialog(confirming == true ? "提交报修单到原系统？" : "保存报修单到原系统？", isPresented: $showConfirmation, confirmTitle: confirming == true ? "提交" : "保存") { Task { await save() } }
         .errorDialog($model.error, title: model.ready ? "提示" : "加载失败", clearsOnClose: true, retry: model.ready ? nil : { Task { await model.load(session, existing: existing) } })
     }
     private func prepare(_ committed: Bool) {
         if let error = model.validationError() { model.error = error; showValidation = true; return }
-        confirming = committed; showConfirmation = true
+        // No "are you sure" dialog: pressing 提交/保存 is the confirmation.
+        confirming = committed
+        Task { await save() }
     }
     private func save() async {
         guard !preview, !model.saving else { return }
@@ -620,7 +621,7 @@ struct OriginalPhotosField: View {
                 Button("删除", role: .destructive) { var values = albums.array; values.remove(at: index); albums = .array(values) }
             }
         }
-        PhotosPicker(selection: $selected, maxSelectionCount: max(0, 9-albums.array.count), matching: .images) { Label("选择现场照片", systemImage: "photo.badge.plus") }.disabled(uploading || preview || albums.array.count >= 9)
+        PhotosPicker(selection: $selected, maxSelectionCount: max(0, 9-albums.array.count), matching: .images) { Label("选择现场照片", systemImage: "photo.badge.plus").fullRow() }.disabled(uploading || preview || albums.array.count >= 9)
         .onChange(of: selected) { Task { await upload() } }
         .errorDialog($error, title: "照片上传失败", clearsOnClose: true)
         if uploading { ProgressView("正在上传照片…") }
@@ -647,6 +648,8 @@ struct OriginalERPForm: View {
     @State private var committed = false
     @State private var confirming = false
     @State private var showValidation = false
+    @State private var draftID: UUID?
+    @State private var toast: String?
     var existing: Fields? = nil
     var referenceSn: String? = nil
     var preview = false
@@ -676,7 +679,7 @@ struct OriginalERPForm: View {
                 ServerDateField(title: "出库时间", value: field("outboundTime"), required: true)
             } header: { RequiredFormHeader(title: "领料申请") }
             Section {
-                Button("添加出库物料", systemImage: "plus") { selecting = true }.disabled(preview).fullSeparator()
+                FullRowButton("添加出库物料", systemImage: "plus") { selecting = true }.disabled(preview)
                 ForEach(Array((model.data["erpMaterialOutbounds"]?.array ?? []).enumerated()), id: \.offset) { index, line in
                     DisclosureGroup {
                         MaterialFacts(material: line["material"])
@@ -708,8 +711,9 @@ struct OriginalERPForm: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             DocumentActions(busy: model.saving, submitting: committed,
                             disabled: !model.ready,
-                            save: { prepare(false) }, submit: { prepare(true) })
+                            save: { keepDraft() }, submit: { prepare(true) })
         }
+        .toast($toast)
         .sheet(isPresented: $selecting) { NavigationStack { ReferencePicker(source: .materials, multiple: true) { model.addMaterial($0) } } }
         .task {
             guard !model.ready else { return }
@@ -725,13 +729,30 @@ struct OriginalERPForm: View {
                 await model.load(session, existing: existing, referenceSn: referenceSn)
                 if existing == nil, model.ready { await model.applyDefaults(session) }
                 if let existing { model.data["project"] = .object(["projectCode": existing["projectCode"] ?? .null, "projectName": existing["projectDesc"] ?? .null]) }
+                if model.ready { applyDraft() }
             }
         }
         .keyboardManaged()
-        .confirmDialog(committed ? "提交 ERP 领料单到原系统？" : "保存 ERP 领料单到原系统？", isPresented: $confirming, confirmTitle: committed ? "提交" : "保存") { Task { await save() } }
         .errorDialog($model.error, title: model.ready ? "提示" : "加载失败", clearsOnClose: true, retry: model.ready ? nil : { Task { await model.load(session, existing: existing, referenceSn: referenceSn) } })
     }
-    private func prepare(_ value: Bool) { if let error = model.validationError() { model.error = error; showValidation = true; return }; committed = value; confirming = true }
+    private func prepare(_ value: Bool) { if let error = model.validationError() { model.error = error; showValidation = true; return }; committed = value; Task { await save() } }
+    /// "保存" keeps the form on this phone: nothing is sent to the server and nothing has to be filled in.
+    private var erpDraftTarget: DraftStore.Target { existing == nil ? .newReport : .order(existing?.text("outboundId") ?? "") }
+    private var erpDraftsAllowed: Bool { existing == nil || !(existing?.text("outboundId") ?? "").isEmpty }
+    private func keepDraft() {
+        guard !preview, model.ready, erpDraftsAllowed else { return }
+        let draft = FaultDraft(id: draftID ?? UUID(), savedAt: Date(), data: model.data, selections: model.selections,
+                               orderID: existing == nil ? nil : existing?.text("outboundId"), orderSN: existing?.text("outNumber"))
+        do { try DraftStore.shared.save(draft, scope: session.erpDraftScope); draftID = draft.id; dismiss() }
+        catch { model.error = "草稿没有保存成功：" + error.localizedDescription }
+    }
+    private func applyDraft() {
+        guard !preview, erpDraftsAllowed, let draft = DraftStore.shared.drafts(scope: session.erpDraftScope, for: erpDraftTarget).first else { return }
+        model.data = draft.data
+        for (key, value) in draft.selections { model.selections[key] = value }
+        draftID = draft.id
+        toast = "已加载上次保存的草稿（" + draft.title + "）"
+    }
     private func save() async {
         guard !preview, !model.saving else { return }
         model.saving = true; model.error = nil
@@ -739,7 +760,9 @@ struct OriginalERPForm: View {
         do {
             var payload = model.payload(committed: committed); payload.removeValue(forKey: "project")
             let result = try await session.request(existing == nil ? "erpOutbound/addErpOutbound" : "erpOutbound/updateErpOutbound", body: .object(payload))
-            onSaved?(result); dismiss()
+            onSaved?(result)
+            if let draftID { DraftStore.shared.remove(id: draftID, scope: session.erpDraftScope) }
+            dismiss()
         } catch { model.error = error.localizedDescription }
     }
 }

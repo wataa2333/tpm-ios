@@ -20,7 +20,11 @@ struct WorkOrderCard<Destination: View>: View {
     var machine = ""
     let time: String
     var summaryFacts: [(String, String)] = []
+    /// Lines in the warning colour under the summary: why the order came back ("退单原因：…").
+    var statusNote: [(String, String)] = []
     let facts: [(String, String)]
+    /// Set while the list is in selection mode: a circle selects the card, the card itself opens a peek.
+    var selecting: CardSelecting? = nil
     @ViewBuilder let destination: () -> Destination
     @State private var expanded = false
     @State private var opening = false
@@ -28,11 +32,36 @@ struct WorkOrderCard<Destination: View>: View {
     /// Only the status word takes the state's colour; titles, links and buttons use the theme colour.
     private var emphasis: Color { FaultState.allCases.first { $0.rawValue == status }?.color ?? color }
     private var theme: Color { .accentColor }
+    /// In selection mode the card never navigates: tapping it shows the order in a sheet instead.
+    private func open() { if let selecting { selecting.peek() } else { opening = true } }
     var body: some View {
         // One uniform 8pt rhythm for every line, with no system disclosure padding. Expanding grows the
         // row downward with a short smooth animation while the extra lines fade in; collapsing reverses it.
+        HStack(alignment: .top, spacing: 0) {
+            if let selecting {
+                Button(action: selecting.toggle) {
+                    Image(systemName: selecting.selected ? "checkmark.circle.fill" : "circle")
+                        .font(.title2).foregroundStyle(selecting.selected ? Color.accentColor : Color.secondary)
+                        .frame(width: 44, height: 44).contentShape(.rect)
+                }
+                .buttonStyle(.borderless)
+                .opacity(selecting.enabled ? 1 : 0.35)
+                .accessibilityLabel(selecting.selected ? "已选择" : "未选择")
+                .accessibilityIdentifier("order-select-" + reference)
+                .transition(.opacity)
+            }
+            cardBody
+        }
+        .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: selecting != nil)
+        .listRowInsets(EdgeInsets())
+        .navigationDestination(isPresented: $opening) {
+            destination().environment(\.closeWorkOrder, { opening = false })
+                .modifier(DetailTabVisibility())
+        }
+    }
+    private var cardBody: some View {
         VStack(alignment: .leading, spacing: RowMetrics.spacing) {
-            Button { opening = true } label: {
+            Button { open() } label: {
                 HStack(alignment: .top, spacing: 12) {
                     WrappingContent { Text(title).font(.headline).foregroundStyle(theme) }
                     if !status.isEmpty { Text(status).font(.subheadline.weight(.semibold)).foregroundStyle(emphasis).frame(maxWidth: 96, alignment: .trailing).fixedSize(horizontal: false, vertical: true) }
@@ -44,6 +73,10 @@ struct WorkOrderCard<Destination: View>: View {
                 .accessibilityIdentifier("order-reference-" + reference)
             ForEach(Array(summaryFacts.enumerated()), id: \.offset) { _, fact in
                 WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(.subheadline).foregroundStyle(.secondary) }
+            }
+            ForEach(Array(statusNote.enumerated()), id: \.offset) { _, fact in
+                WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(.subheadline).foregroundStyle(.orange) }
+                    .accessibilityIdentifier("order-note-" + reference)
             }
             VStack(spacing: 0) {
             HStack(spacing: 12) {
@@ -64,8 +97,8 @@ struct WorkOrderCard<Destination: View>: View {
                     ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
                         ReadableFact(title: fact.0, value: fact.1)
                     }
-                    Button { opening = true } label: {
-                        Label("打开工单", systemImage: "arrow.up.right.square").font(.subheadline.weight(.semibold))
+                    Button { open() } label: {
+                        Label(selecting == nil ? "打开工单" : "查看工单", systemImage: "arrow.up.right.square").font(.subheadline.weight(.semibold))
                             .frame(maxWidth: .infinity, minHeight: 32)
                     }.buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.regular)
                         .accessibilityIdentifier("order-open-" + reference)
@@ -75,12 +108,8 @@ struct WorkOrderCard<Destination: View>: View {
             }
             }
         }
-        .padding(RowMetrics.insets)
-        .listRowInsets(EdgeInsets())
-        .navigationDestination(isPresented: $opening) {
-            destination().environment(\.closeWorkOrder, { opening = false })
-                .modifier(DetailTabVisibility())
-        }
+        .padding(selecting == nil ? RowMetrics.insets : EdgeInsets(top: RowMetrics.insets.top, leading: 0, bottom: RowMetrics.insets.bottom, trailing: RowMetrics.insets.trailing))
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -184,9 +213,14 @@ struct CharacterCount: View {
 /// A detail screen always wants the tab bar hidden, whatever the screens around it do.
 struct DetailTabVisibility: ViewModifier {
     @EnvironmentObject private var navigation: BottomNavigationModel
+    /// A peek sheet has no tab bar of its own and must not change the one under it.
+    @Environment(\.isPeeking) private var peeking
     func body(content: Content) -> some View {
-        content.background { NativeTabVisibility(hidden: true).frame(width: 0, height: 0) }
-            .onAppear { navigation.hideTabs = true }
+        if peeking { content }
+        else {
+            content.background { NativeTabVisibility(hidden: true).frame(width: 0, height: 0) }
+                .onAppear { navigation.hideTabs = true }
+        }
     }
 }
 
