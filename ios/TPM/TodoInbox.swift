@@ -97,7 +97,7 @@ struct TodoCardRow: View, Equatable {
     var selectable = true
     var batch: BatchSelection? = nil
     @EnvironmentObject private var session: LiveSession
-    static func == (a: TodoCardRow, b: TodoCardRow) -> Bool {
+    nonisolated static func == (a: TodoCardRow, b: TodoCardRow) -> Bool {
         a.task == b.task && a.selectionMode == b.selectionMode && a.selected == b.selected && a.selectable == b.selectable
     }
     var body: some View {

@@ -137,7 +137,8 @@ struct LiveWorkflowList: View {
         }
         .refreshButton(busy: loading || loadingMore || gate.busy) { gate.request() }
         .batchHost(batch) { rows.map { batchItem(kind: kind, item: $0) } }
-        .onChange(of: state) { batch.clear() } { DateRangeSheet(range: $dateRange) }
+        .onChange(of: state) { batch.clear() }
+        .sheet(isPresented: $choosingDates) { DateRangeSheet(range: $dateRange) }
         .errorDialog($error, retry: { Task { await reload() } })
         .task(id: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)-\(dateKey)")) { await gate.run(key: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)-\(dateKey)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await reload() }) }
         .task(id: gate.id("counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)-\(dateKey)")) { await gate.run("counts", key: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)-\(dateKey)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await reloadCounts() }) }
@@ -204,7 +205,7 @@ struct LiveOrderRow: View, Equatable {
     var selectable = true
     var batch: BatchSelection? = nil
     @EnvironmentObject private var session: LiveSession
-    static func == (a: LiveOrderRow, b: LiveOrderRow) -> Bool {
+    nonisolated static func == (a: LiveOrderRow, b: LiveOrderRow) -> Bool {
         a.kind == b.kind && a.item == b.item && a.selectionMode == b.selectionMode && a.selected == b.selected && a.selectable == b.selectable
     }
     var body: some View {
