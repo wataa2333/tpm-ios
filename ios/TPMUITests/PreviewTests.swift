@@ -71,7 +71,7 @@ final class PreviewTests: XCTestCase {
         let dismiss = app.buttons["keyboard-dismiss"]
         XCTAssertTrue(dismiss.waitForExistence(timeout: 10))
         let save = app.buttons["保存"], submit = app.buttons["提交"]
-        XCTAssertTrue(dismiss.frame.minY >= submit.frame.maxY - 2 && !(dismiss.frame.minX > save.frame.maxX && dismiss.frame.maxX < submit.frame.minX), "收起键盘应贴着键盘，不在保存和提交这一行")
+        XCTAssertTrue(dismiss.frame.minX > save.frame.maxX && dismiss.frame.maxX < submit.frame.minX, "收起键盘应在保存和提交之间")
         dismiss.tap()
         XCTAssertFalse(app.buttons["keyboard-dismiss"].waitForExistence(timeout: 2))
     }

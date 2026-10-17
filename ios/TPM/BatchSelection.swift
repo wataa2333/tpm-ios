@@ -130,7 +130,13 @@ final class BatchSelection: ObservableObject {
 
 // MARK: - The answers shared by every order of a batch
 
+/// What the repair is answered with, once for the whole batch, exactly the fields the single screens ask for:
+/// - accept ("受理"): the repair group and the date it should be done by; a repairer only to assign it to one;
+/// - complete ("完成任务"): the repair's fault type, the work description and how long it took;
+/// - every step that hands over to a next node the person must name: the approver of that node.
+/// Claim, sign-in and plain approvals ask for nothing else.
 struct BatchPreset: Equatable {
+    /// Complete only: the fault type of the repair result. (Accepting keeps each order's own fault type.)
     var faultType: JSONValue = .null
     /// Accept: the repair group and the date the repair should be done by, and optionally one repairer.
     var group: JSONValue = .null
@@ -139,15 +145,35 @@ struct BatchPreset: Equatable {
     /// Complete: the work description, and how long the work took in minutes (empty: counted from the sign-in).
     var content = ""
     var durationMinutes: Int?
+    /// The next nodes whose approver is chosen by the person, and the chosen user names per node variable.
+    var approverNodes: [Fields] = []
+    var approvers: [String: [String]] = [:]
+
+    /// Assigning a repairer ends the accept step in "指派", which names no approver.
+    func needsApprovers(for action: BatchAction) -> Bool {
+        !approverNodes.isEmpty && !(action == .accept && !assignUser.object.isEmpty)
+    }
 
     func isComplete(for action: BatchAction) -> Bool {
-        guard !faultType.object.isEmpty else { return false }
         switch action {
-        case .accept: return !group.object.isEmpty && !estimated.text.isEmpty
-        case .complete: return !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (durationMinutes ?? 1) >= 1
-        default: return true
+        case .accept:
+            if group.object.isEmpty || estimated.text.isEmpty { return false }
+        case .complete:
+            if faultType.object.isEmpty || content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (durationMinutes ?? 1) < 1 { return false }
+        default: break
         }
+        if needsApprovers(for: action), missingAssigneeMessage(nodes: approverNodes, selections: approvers) != nil { return false }
+        return true
     }
+}
+
+/// What the preset sheet opens with: the approver nodes read from the first selected order.
+struct BatchPresetRequest: Identifiable {
+    let id = UUID()
+    let action: BatchAction
+    let kind: WorkflowKind
+    let nodes: [Fields]
+    let selections: [String: [String]]
 }
 
 /// The date a repair should be done by when nobody says otherwise: the end of today, as in the single form.
@@ -229,7 +255,8 @@ struct BatchHost: ViewModifier {
     let candidates: () -> [BatchItem]
     @EnvironmentObject private var session: LiveSession
     @EnvironmentObject private var navigation: BottomNavigationModel
-    @State private var presetting: BatchAction?
+    @State private var presetting: BatchPresetRequest?
+    @State private var preparing = false
     @State private var pendingRun: BatchRun?
     @State private var run: BatchRun?
     @State private var finishing: BatchRun?
@@ -244,7 +271,7 @@ struct BatchHost: ViewModifier {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if batch.active {
-                    BatchBar(batch: batch, onSelectAll: { batch.selectAll(candidates()) }, onRun: begin)
+                    BatchBar(batch: batch, busy: preparing, onSelectAll: { batch.selectAll(candidates()) }, onRun: begin)
                         .transition(.opacity)
                 }
             }
@@ -254,9 +281,9 @@ struct BatchHost: ViewModifier {
             .toast($batch.notice)
             .sheet(item: $presetting, onDismiss: {
                 if let started = pendingRun { pendingRun = nil; finishing = started; run = started }
-            }) { action in
-                BatchPresetSheet(action: action, count: batch.items.count) { preset in
-                    pendingRun = BatchRun(action: action, items: batch.items, preset: preset)
+            }) { request in
+                BatchPresetSheet(request: request, count: batch.items.count) { preset in
+                    pendingRun = BatchRun(action: request.action, items: batch.items, preset: preset)
                     presetting = nil
                 }
             }
@@ -268,12 +295,27 @@ struct BatchHost: ViewModifier {
             }
     }
 
+    /// Reads, from the first selected order, who the next node's approver has to be, then opens the preset
+    /// sheet when anything has to be answered (accept and complete always; the others only if an approver
+    /// is missing). Otherwise the run starts at once.
     private func begin() {
-        guard let action = batch.action, !batch.items.isEmpty else { return }
-        if action.needsPreset { presetting = action }
-        else {
-            let started = BatchRun(action: action, items: batch.items, preset: BatchPreset())
-            finishing = started; run = started
+        guard let action = batch.action, let first = batch.items.first, !preparing else { return }
+        preparing = true
+        Task {
+            defer { preparing = false }
+            let setup: (nodes: [Fields], selections: [String: [String]])
+            do { setup = try await BatchProcessor.approverSetup(first, session: session) }
+            catch {
+                if !isCancellation(error) { batch.notice = "读取审批人失败：" + error.localizedDescription }
+                return
+            }
+            let choosable = setup.nodes.filter { ["ASSIGN", "SUPERVISOR"].contains($0.text("assignType")) }
+            if action.needsPreset || missingAssigneeMessage(nodes: choosable, selections: setup.selections) != nil {
+                presetting = BatchPresetRequest(action: action, kind: first.kind, nodes: choosable, selections: setup.selections)
+            } else {
+                let started = BatchRun(action: action, items: batch.items, preset: BatchPreset())
+                finishing = started; run = started
+            }
         }
     }
     /// The orders that went through leave the selection; the ones that failed stay selected for another try.
@@ -292,58 +334,82 @@ extension View {
     }
 }
 
-/// The bar at the bottom of a list in selection mode.
+/// The bar at the bottom of a list in selection mode. It sits above the tab bar, on its own bar material:
+/// the count and the status on one line, the action as a full-width button below.
 struct BatchBar: View {
     @ObservedObject var batch: BatchSelection
+    var busy = false
     let onSelectAll: () -> Void
     let onRun: () -> Void
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("已选 \(batch.items.count)/\(BatchSelection.limit)").font(.headline).monospacedDigit()
-                Text(batch.groupTitle).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("已选 \(batch.items.count)/\(BatchSelection.limit)").font(.headline).monospacedDigit()
+                    Text(batch.groupTitle).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Menu {
+                    Button("全选已加载的单据", systemImage: "checkmark.circle", action: onSelectAll)
+                    Button("清空已选", systemImage: "circle", role: .destructive) { batch.clear() }
+                } label: { Text("全选").font(.subheadline.weight(.medium)).padding(.horizontal, 8).frame(minHeight: 28) }
+                    .buttonStyle(.glass).accessibilityIdentifier("batch-select-all")
             }
-            Spacer(minLength: 8)
-            Menu {
-                Button("全选已加载的单据", systemImage: "checkmark.circle", action: onSelectAll)
-                Button("清空已选", systemImage: "circle", role: .destructive) { batch.clear() }
-            } label: { Text("全选").font(.subheadline.weight(.medium)).padding(.horizontal, 6).frame(minHeight: 28) }
-                .buttonStyle(.glass).accessibilityIdentifier("batch-select-all")
             if let action = batch.action {
                 Button(action: onRun) {
-                    Label(action.title, systemImage: action.symbol).font(.headline).padding(.horizontal, 6).frame(minHeight: 28)
+                    HStack(spacing: 8) {
+                        if busy { ProgressView() } else { Image(systemName: action.symbol) }
+                        Text(action.title).lineLimit(1)
+                    }
+                    .font(.headline).frame(maxWidth: .infinity, minHeight: 28)
                 }
-                .buttonStyle(.glassProminent).disabled(batch.items.isEmpty)
+                .buttonStyle(.glassProminent).controlSize(.large)
+                .disabled(batch.items.isEmpty || busy)
                 .accessibilityIdentifier("batch-run")
             }
         }
-        .bottomBarPadding()
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
     }
 }
 
 /// The answers every order of the batch gets. Chosen once, applied to each order as the single form would.
 struct BatchPresetSheet: View {
-    let action: BatchAction
+    let request: BatchPresetRequest
     let count: Int
     let start: (BatchPreset) -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var preset = BatchPreset()
+    @State private var preset: BatchPreset
+    private var action: BatchAction { request.action }
+
+    init(request: BatchPresetRequest, count: Int, start: @escaping (BatchPreset) -> Void) {
+        self.request = request; self.count = count; self.start = start
+        var initial = BatchPreset()
+        initial.approverNodes = request.nodes
+        initial.approvers = request.selections
+        _preset = State(initialValue: initial)
+    }
+
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    ReferenceField(title: "维修故障类型", source: .faultTypes, value: $preset.faultType, required: true)
-                    if action == .accept {
+                if action == .accept {
+                    Section {
                         ReferenceField(title: "维修班组", source: .groups, value: $preset.group, required: true)
                         ServerDateField(title: "预计完成时间", value: $preset.estimated, required: true)
                         ReferenceField(title: "维修人员（选填）", source: .users, value: $preset.assignUser)
+                    } header: { RequiredFormHeader(title: "受理方案") } footer: {
+                        Text("所选 \(count) 张单据都按这个方案受理，各单的故障类型不变。不选维修人员就是派单，选了就按“指派”处理。")
                     }
-                } header: { RequiredFormHeader(title: action == .accept ? "受理预设方案" : "完成预设方案") } footer: {
-                    Text(action == .accept
-                         ? "选好后，所选 \(count) 张单据都按这个方案受理。不选维修人员就是派单，选了就按“指派”处理。"
-                         : "选好后，所选 \(count) 张单据都按这个方案提交维修结果；每张单据原有的维修领料不变，下一步审批人用你设好的默认人。")
                 }
                 if action == .complete {
+                    Section {
+                        ReferenceField(title: "维修故障类型", source: .faultTypes, value: $preset.faultType, required: true)
+                    } header: { RequiredFormHeader(title: "维修结果") } footer: {
+                        Text("所选 \(count) 张单据都按这个方案提交维修结果；每张单据原有的维修领料不变。")
+                    }
                     Section { EntryField(placeholder: "请输入工作说明", text: $preset.content, limit: 255, axis: .vertical, lines: 3...8) } header: { RequiredLabel(title: "工作说明") }
                     Section {
                         HStack {
@@ -352,6 +418,13 @@ struct BatchPresetSheet: View {
                             TextField("留空则从签到时间算起", value: $preset.durationMinutes, format: .number).keyboardType(.numberPad).multilineTextAlignment(.trailing)
                         }
                     } footer: { Text("填写后，每张单据的维修开始时间 = 现在往前推这么多分钟，结束时间为现在。") }
+                }
+                if preset.needsApprovers(for: action) {
+                    Section {
+                        AssigneesFields(elements: preset.approverNodes, selections: $preset.approvers, defaultPrefix: "assignee.task." + request.kind.rawValue)
+                    } header: { Text("审批人") } footer: {
+                        Text("下一步的审批人，所选单据都用这里选的人。")
+                    }
                 }
             }
             .navigationTitle(action.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()

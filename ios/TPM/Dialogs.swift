@@ -97,20 +97,11 @@ extension View {
     /// for fields that have no return key (numbers, phone numbers).
     func keyboardManaged() -> some View {
         scrollDismissesKeyboard(.interactively)
-            // The collapse button lives in the system's own bar on top of the keyboard, right against the keys,
-            // not in the save/submit row.
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button { endEditing() } label: { Label("收起键盘", systemImage: "keyboard.chevron.compact.down") }
-                        .accessibilityIdentifier("keyboard-dismiss")
-                }
-            }
     }
 }
 
-/// A text field with the character count when the field has a limit. The "收起键盘" button is not here: it is the
-/// system keyboard bar's button (see `keyboardManaged`). Limits count UTF-16 units like the server.
+/// A text field with the character count when the field has a limit. The "收起键盘" button is not here: it sits
+/// in the middle of the bottom action bar (see `bottomBarPadding`). Limits count UTF-16 units like the server.
 struct EntryField: View {
     let placeholder: String
     @Binding var text: String
@@ -203,6 +194,17 @@ private struct BottomBarPadding: ViewModifier {
     @State private var keyboardUp = false
     func body(content: Content) -> some View {
         content.padding(.horizontal, 20).padding(.top, 8).padding(.bottom, keyboardUp ? 8 : -14)
+            // In the middle between the left and the right action, only while the keyboard is up.
+            .overlay {
+                if keyboardUp {
+                    Button { endEditing() } label: {
+                        Label("收起键盘", systemImage: "keyboard.chevron.compact.down").font(.subheadline.weight(.medium)).lineLimit(1)
+                    }
+                    .buttonStyle(.glass).controlSize(.regular)
+                    .accessibilityIdentifier("keyboard-dismiss")
+                    .transition(.opacity)
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 var transaction = Transaction(); transaction.disablesAnimations = true
                 withTransaction(transaction) { keyboardUp = true }

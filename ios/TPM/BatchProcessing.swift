@@ -80,7 +80,7 @@ enum BatchProcessor {
             throw BatchError(message: "这一步没有「" + (assigning ? "指派" : "同意") + "」选项，请打开这张单据单独处理。")
         }
         var assignees: Fields?
-        if condition == "agree" { assignees = try await nextApprovers(task: task, kind: item.kind, session: session) }
+        if condition == "agree" { assignees = try await nextApprovers(task: task, kind: item.kind, preset: preset, session: session) }
         var payload = commitTaskPayload(task: task, condition: condition, comment: "", assignees: assignees)
         if let extra = try await commitTaskData(task: task, item: item, action: action, assigning: assigning, preset: preset, detail: detail, session: session) {
             payload["taskData"] = extra
@@ -90,8 +90,22 @@ enum BatchProcessor {
     }
 
     /// The approvers of the next node: what the process suggests, replaced by the person's own default where
-    /// the step lets the person choose. A missing approver fails this order only.
-    private static func nextApprovers(task: JSONValue, kind: WorkflowKind, session: LiveSession) async throws -> Fields {
+    /// the step lets the person choose, and finally by what was picked for the whole batch. A node that still
+    /// has nobody fails this order only.
+    private static func nextApprovers(task: JSONValue, kind: WorkflowKind, preset: BatchPreset, session: LiveSession) async throws -> Fields {
+        let model = try await approverModel(task: task, kind: kind, session: session)
+        for node in model.assignees {
+            let key = node.text("variableName")
+            if let picked = preset.approvers[key], !picked.isEmpty { model.selections[key] = picked }
+        }
+        if let message = missingAssigneeMessage(nodes: model.assignees, selections: model.selections) {
+            throw BatchError(message: message + "。请单独处理这张单据，或在批量方案里选好审批人。")
+        }
+        return assigneesPayload(nodes: model.assignees, selections: model.selections)
+    }
+
+    /// The next nodes of a task and who would be ticked for them before the person chooses anything.
+    private static func approverModel(task: JSONValue, kind: WorkflowKind, session: LiveSession) async throws -> OriginalFormModel {
         let values: JSONValue
         do {
             values = try await session.request("workflow/getAssigneeElementsByProcessCategory",
@@ -101,10 +115,19 @@ enum BatchProcessor {
         model.assignees = values.array.map(\.object)
         for node in model.assignees { model.selections[node.text("variableName")] = usernames(node["assignees"] ?? .null) }
         model.applyApproverDefaults(prefix: "assignee.task." + kind.rawValue, scope: session.draftScope, store: .shared)
-        if let message = missingAssigneeMessage(nodes: model.assignees, selections: model.selections) {
-            throw BatchError(message: message + "。请单独处理这张单据，或先把审批人设为默认。")
-        }
-        return assigneesPayload(nodes: model.assignees, selections: model.selections)
+        return model
+    }
+
+    /// For the preset sheet: the approver nodes the first selected order leads to, with what is already ticked.
+    /// Every order of one status leads to the same next node, so one order stands for all.
+    static func approverSetup(_ item: BatchItem, session: LiveSession) async throws -> (nodes: [Fields], selections: [String: [String]]) {
+        let detail: JSONValue
+        do { detail = try await session.request(item.kind.detailPath, query: [item.kind.idKey: item.id]) }
+        catch { throw wrap("读取单据", error) }
+        let task = detail["taskInfo"]
+        guard !task["id"].text.isEmpty else { return ([], [:]) }
+        let model = try await approverModel(task: task, kind: item.kind, session: session)
+        return (model.assignees, model.selections)
     }
 
     /// The `taskData` the single screens send: the repair arrangement when a fault is accepted or claimed,
@@ -116,7 +139,7 @@ enum BatchProcessor {
             guard !groupID.text.isEmpty else { throw BatchError(message: "这张单据没有维修班组，请打开单独处理。") }
             var data: Fields = [
                 "repairWay": .string("SELF"),
-                "faultType": action == .accept ? preset.faultType : detail["faultType"],
+                "faultType": detail["faultType"],
                 "groupId": groupID,
                 "estimatedCompleteTime": .string(action == .accept && !preset.estimated.text.isEmpty ? preset.estimated.text : defaultEstimatedTime()),
                 "repairman": session.authentication["name"] ?? .null,

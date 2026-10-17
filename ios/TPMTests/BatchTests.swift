@@ -67,16 +67,36 @@ import Foundation
 
 @Test func batchPresetNeedsWhatTheStepNeeds() {
     var preset = BatchPreset()
-    #expect(!preset.isComplete(for: .accept))
-    preset.faultType = .object(["typeId": .number(1), "typeName": .string("机械")])
+    // Accepting asks for the repair group and the finish date, not for a fault type.
     #expect(!preset.isComplete(for: .accept))
     preset.group = .object(["groupId": .number(3)])
     #expect(preset.isComplete(for: .accept))
+    // Completing asks for the fault type and the work description.
+    #expect(!preset.isComplete(for: .complete))
+    preset.faultType = .object(["typeId": .number(1), "typeName": .string("机械")])
     #expect(!preset.isComplete(for: .complete))
     preset.content = "已更换轴承"
     #expect(preset.isComplete(for: .complete))
     preset.durationMinutes = 0
     #expect(!preset.isComplete(for: .complete))
+    // Claiming and signing in ask for nothing.
+    #expect(BatchPreset().isComplete(for: .claim) && BatchPreset().isComplete(for: .signIn))
+}
+
+@Test func batchPresetNeedsTheNextApproverUnlessAssigning() {
+    let node: Fields = ["variableName": .string("confirmUser"), "assignType": .string("ASSIGN"), "taskName": .string("【维修】确认"), "assignees": .null]
+    var preset = BatchPreset()
+    preset.approverNodes = [node]
+    preset.group = .object(["groupId": .number(3)])
+    #expect(!preset.isComplete(for: .accept))
+    preset.approvers = ["confirmUser": ["u1"]]
+    #expect(preset.isComplete(for: .accept))
+    preset.approvers = [:]
+    // Assigning a repairer ends in "指派", which names no approver.
+    preset.assignUser = .object(["userName": .string("u2")])
+    #expect(preset.isComplete(for: .accept))
+    // Other steps still need the approver.
+    #expect(!preset.isComplete(for: .claim))
 }
 
 @Test func sentBackOrderIsMarkedFromItsOwnFields() {

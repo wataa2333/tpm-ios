@@ -201,7 +201,7 @@ struct ReferencePicker: View {
                     if !users.isEmpty {
                         DisclosureGroup {
                             ForEach(Array(users.enumerated()), id: \.offset) { _, user in
-                                Button { Task { await select(user) } } label: { HStack { WrappingContent { Text(user.object.label).foregroundStyle(Color.primary) }; ReferenceBadges(value: user) } }.buttonStyle(.plain)
+                                Button { Task { await select(user) } } label: { HStack { WrappingContent { Text(user.object.label).foregroundStyle(Color.primary) }; ReferenceBadges(value: user) }.frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect) }.buttonStyle(.plain)
                                     .referenceMenu(for: user)
                             }
                         } label: { WrappingContent { Text(group["groupName"].text) } }
@@ -267,6 +267,8 @@ struct ReferencePicker: View {
                 Spacer()
                 if picked.contains(identity(value)) { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
             }
+            // The empty space to the right of the text takes the tap too, not only the words.
+            .frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect)
         }.buttonStyle(.plain).uniformRow()
             .referenceMenu(for: value)
     }
