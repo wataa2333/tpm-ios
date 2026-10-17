@@ -1,8 +1,10 @@
 import SwiftUI
 
-/// One rhythm for every list row in the app: 12pt above and below, 16pt at the sides, 8pt between lines.
+/// One rhythm for every list row and card in the app: 12pt above and below, 16pt at the sides, 6pt between lines,
+/// and a bottom row (time and the expand button) that always has the same height.
 enum RowMetrics {
-    static let spacing: CGFloat = 8
+    static let spacing: CGFloat = 6
+    static let footerHeight: CGFloat = 30
     static let insets = EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
 }
 
@@ -62,11 +64,13 @@ struct WorkOrderCard<Destination: View>: View {
     private var cardBody: some View {
         VStack(alignment: .leading, spacing: RowMetrics.spacing) {
             Button { open() } label: {
-                HStack(alignment: .top, spacing: 12) {
+                // The status word sits on the first line of the title, on the same baseline.
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
                     WrappingContent { Text(title).font(.headline).foregroundStyle(theme) }
                     if !status.isEmpty { Text(status).font(.subheadline.weight(.semibold)).foregroundStyle(emphasis).frame(maxWidth: 96, alignment: .trailing).fixedSize(horizontal: false, vertical: true) }
                 }
-            }.buttonStyle(.borderless).navigationLinkIndicatorVisibility(.hidden)
+                .contentShape(.rect)
+            }.buttonStyle(.plain).navigationLinkIndicatorVisibility(.hidden)
                 .accessibilityIdentifier("order-title-" + reference)
             WrappingContent { Text((reference.isEmpty ? "—" : reference) + (machine.isEmpty ? "" : " · " + machine)).font(.subheadline).foregroundStyle(.secondary) }
                 .accessibilityLabel(referenceTitle + "：" + reference + (machine.isEmpty ? "" : "，机台号：" + machine))
@@ -87,8 +91,12 @@ struct WorkOrderCard<Destination: View>: View {
                     HStack(spacing: 4) {
                         Text(expanded ? "收起详情" : "展开详情").font(.subheadline.weight(.medium))
                         Image(systemName: "chevron.down").font(.caption.weight(.semibold)).rotationEffect(.degrees(expanded ? 180 : 0)).animation(reduceMotion ? nil : .smooth(duration: 0.5), value: expanded)
-                    }.frame(minHeight: 24)
-                }.buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.small)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12).frame(height: RowMetrics.footerHeight)
+                    .background(Color.accentColor, in: .capsule)
+                    .contentShape(.capsule)
+                }.buttonStyle(.plain)
                     .accessibilityLabel(expanded ? "收起详情" : "展开详情")
                     .accessibilityIdentifier("order-expand-" + reference)
             }

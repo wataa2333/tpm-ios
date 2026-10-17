@@ -118,3 +118,41 @@ import Foundation
     #expect(latestRepair(.array([])) == nil)
     #expect(latestRepair(.null) == nil)
 }
+
+@Test func rejectingNeedsOnlyAReason() {
+    var preset = BatchPreset()
+    #expect(!preset.isComplete(for: .complete, operation: .reject))
+    preset.comment = "备件缺货"
+    #expect(preset.isComplete(for: .complete, operation: .reject))
+    #expect(BatchAction.signIn.rejectWord == "退单" && BatchAction.accept.rejectWord == "驳回" && BatchAction.approve.rejectWord == "驳回")
+    #expect(isRejectCondition(.object(["name": .string("驳回"), "value": .string("x")])))
+    #expect(isRejectCondition(.object(["name": .string("拒绝"), "value": .string("refuse")])))
+    #expect(!isRejectCondition(.object(["name": .string("同意"), "value": .string("agree")])))
+}
+
+@Test func batchMaterialNeedsItsOrderDetails() {
+    var preset = BatchPreset()
+    preset.faultType = .object(["typeId": .number(1)])
+    preset.content = "已更换"
+    preset.materials = [BatchMaterial(material: .object(["id": .number(5), "materialDesc": .string("轴承")]), quantity: 2)]
+    #expect(!preset.isComplete(for: .complete))
+    preset.erpProject = .object(["projectCode": .string("P1")])
+    preset.erpRemark = "维修领料"
+    preset.erpRecipient = .object(["userId": .number(1)])
+    preset.erpDept = .object(["deptId": .number(1)])
+    preset.erpDivision = .object(["divisionId": .number(1)])
+    #expect(preset.isComplete(for: .complete))
+    preset.materials[0].quantity = 0
+    #expect(!preset.isComplete(for: .complete))
+}
+
+@Test func outboundLinesNeedAPositiveQuantity() {
+    var preset = BatchPreset()
+    preset.faultType = .object(["typeId": .number(1)]); preset.content = "已更换"
+    let line: JSONValue = .object(["id": .object(["outboundId": .number(1), "materialId": .number(2)]), "actualQuantity": .number(5), "usedQuantity": .number(1)])
+    preset.outboundLines = [BatchOutboundLine(line: line, quantity: 2)]
+    #expect(preset.isComplete(for: .complete))
+    #expect(preset.outboundLines[0].id == "1-2")
+    preset.outboundLines[0].quantity = 0
+    #expect(!preset.isComplete(for: .complete))
+}

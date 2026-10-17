@@ -99,7 +99,7 @@ struct AssetRecordDetail: View {
             if preview { DemoNotice().padding(.horizontal, 32).frame(maxWidth: .infinity, alignment: .leading) }
         }
         .searchPageChrome()
-        .navigationTitle("资产详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .textSelection(.enabled).navigationTitle("资产详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility())
         .onAppear { tab = tabs.firstIndex(of: initialTab) ?? 0 }
         .task(id: gate.id("\(tab)")) { await gate.run(key: "\(tab)") { await load() } }

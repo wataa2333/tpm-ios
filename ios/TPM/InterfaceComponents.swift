@@ -175,11 +175,16 @@ struct LoadingRow: View {
     @Environment(\.pulledDown) private var pulledDown
     var body: some View {
         // While the page is pulled down the row fades out but keeps its height, so the page does not move.
+        // A plain centred spinner. It is laid out centred from the first frame and its position is never
+        // animated: with an animated insertion the spinner used to fly in from the left edge.
         if isPresented {
-            HStack { Spacer(); ProgressView().accessibilityLabel(title); Spacer() }
+            ProgressView().accessibilityLabel(title)
+                .frame(maxWidth: .infinity)
                 .opacity(pulledDown ? 0 : 1)
                 .padding(.vertical, 10)
                 .listRowBackground(Color.clear).listRowSeparator(.hidden)
+                .transaction { $0.animation = nil }
+                .transition(.identity)
         }
     }
 }

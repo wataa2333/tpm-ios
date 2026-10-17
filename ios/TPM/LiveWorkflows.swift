@@ -70,6 +70,8 @@ struct LiveWorkflowList: View {
     @State private var state: String
     @State private var rows: [JSONValue] = []
     @State private var query = ""
+    /// Quick-query result pages search only what was confirmed (Return), never every keystroke.
+    @State private var committed = ""
     @State private var searchField: FaultSearchField = .name
     @State private var searching = false
     @State private var loading = true
@@ -94,19 +96,28 @@ struct LiveWorkflowList: View {
         self.initialQuery = initialQuery
         _state = State(initialValue: initialState)
         _query = State(initialValue: initialQuery)
+        _committed = State(initialValue: initialQuery)
         _searchField = State(initialValue: initialField)
     }
     private var dateKey: String { dateRange?.key ?? "" }
+    /// A page opened from a quick query: it lists every order that matches, whatever its status, so it has no
+    /// status strip and no per-status counts.
+    private var searchMode: Bool { !initialQuery.isEmpty }
+    private var activeQuery: String { searchMode ? committed : query }
+    private func commitQuery() {
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty { query = committed } else { query = text; committed = text }
+    }
     /// The search words and the date range, as filters shared by the list and the per-state counts.
     private var searchFilters: [JSONValue] {
         var filters: [JSONValue] = []
-        if !query.isEmpty { filters.append(filter(kind == .fault ? searchField.key : "outNumber", query, "like")) }
+        if !activeQuery.isEmpty { filters.append(filter(kind == .fault ? searchField.key : "outNumber", activeQuery, "like")) }
         if kind == .fault, let dateRange { filters.append(dateRangeFilter("faultTime", dateRange)) }
         return filters
     }
     var body: some View {
         CardPage {
-            if kind == .fault { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? -1 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
+            if kind == .fault && !searchMode { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? -1 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
             if let activeRange = dateRange { DateRangeChip(range: activeRange) { self.dateRange = nil } }
             LoadingRow(isPresented: (loading || gate.busy) && !refreshing, title: "正在加载工单")
             if kind == .fault && searching { CardGroup { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }.padding(.horizontal, 16).padding(.vertical, 6) } }
@@ -119,13 +130,14 @@ struct LiveWorkflowList: View {
             }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
             LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await reload(more: true) }
         }
-        .navigationTitle(query == initialQuery ? (customTitle ?? kind.title) : kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .navigationTitle(searchMode || query == initialQuery ? (customTitle ?? kind.title) : kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(ListTabVisibility())
         .searchPageChrome(isSearching: searching)
-        .nativeSearchable(text: $query, isPresented: $searching, prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号")
+        .nativeSearchable(text: $query, isPresented: $searching, prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号",
+                          collapsesOnSubmit: searchMode, onSubmit: { if searchMode { commitQuery() } })
 
         .refreshable { refreshing = true; await reload(); await reloadCounts(); refreshing = false }
-        .reloadsToTop(on: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)-\(dateKey)"))
+        .reloadsToTop(on: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)"))
         .animation(.smooth(duration: 0.45), value: loading || gate.busy)
         .toolbar {
             if kind == .fault {
@@ -140,8 +152,8 @@ struct LiveWorkflowList: View {
         .onChange(of: state) { batch.clear() }
         .sheet(isPresented: $choosingDates) { DateRangeSheet(range: $dateRange) }
         .errorDialog($error, retry: { Task { await reload() } })
-        .task(id: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)-\(dateKey)")) { await gate.run(key: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(query)-\(dateKey)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await reload() }) }
-        .task(id: gate.id("counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)-\(dateKey)")) { await gate.run("counts", key: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(query)-\(dateKey)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await reloadCounts() }) }
+        .task(id: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)")) { await gate.run(key: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)", debounce: searchMode || activeQuery.isEmpty ? nil : .milliseconds(350), load: { await reload() }) }
+        .task(id: gate.id("counts-\(navigation.refresh)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)")) { await gate.run("counts", key: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)", debounce: searchMode || activeQuery.isEmpty ? nil : .milliseconds(350), load: { await reloadCounts() }) }
         .onAppear {
             navigation.newDocument = kind; navigation.hideTabs = false
             if navigation.pendingListRefresh { navigation.pendingListRefresh = false; navigation.refresh = UUID() }
@@ -156,14 +168,14 @@ struct LiveWorkflowList: View {
         error = nil
         defer { loading = false; loadingMore = false }
         // A page for a filter the user has already left must never be appended to the new list.
-        let snapshot = "\(state)-\(searchField.rawValue)-\(query)-\(dateKey)"
+        let snapshot = "\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)"
         do {
             var filters: [JSONValue] = []
             if kind == .fault && !state.isEmpty { filters.append(filter("faultState", state)) }
             filters += searchFilters
             let data = try await session.page(kind.page, offset: more ? rows.count : 0, filters: filters)
             try Task.checkCancellation()
-            guard snapshot == "\(state)-\(searchField.rawValue)-\(query)-\(dateKey)" else { return }
+            guard snapshot == "\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)" else { return }
             rows = more ? rows + data["content"].array : data["content"].array
             last = data["last"].bool
             total = serverPageCount(data)
@@ -173,7 +185,7 @@ struct LiveWorkflowList: View {
         catch { self.error = error.localizedDescription }
     }
     private func reloadCounts() async {
-        guard kind == .fault else { return }
+        guard kind == .fault, !searchMode else { return }
         let searchFilters = self.searchFilters
         let api = session
         await withTaskGroup(of: (String, Int?).self) { group in
@@ -339,7 +351,7 @@ struct LiveWorkflowDetail: View {
                 .animation(.smooth(duration: 0.45), value: loading || gate.busy)
             }
         }
-        .navigationTitle(kind == .fault ? "报修详情" : "出库详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .textSelection(.enabled).navigationTitle(kind == .fault ? "报修详情" : "出库详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .errorDialog($error, retry: { Task { await load() } })
         .modifier(DetailTabVisibility())
         .task(id: gate.id("detail")) { await gate.run(key: "detail") { await load() } }
@@ -351,7 +363,7 @@ struct LiveWorkflowDetail: View {
         }
         .safeAreaInset(edge: .bottom) {
             if !peeking && !task["id"].text.isEmpty && (taskState["canSubmit"].bool || taskState["canDelegate"].bool || taskState["canResolveDelegate"].bool) {
-                HStack { if returnAvailable { BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) { returning = true }.disabled(loading) }; Spacer(); BottomAction(title: taskActionTitle(task, kind: kind), symbol: "arrow.right.circle") { processing = true }.disabled(loading) }.bottomBarPadding()
+                HStack { if returnAvailable { BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) { returning = true } }; Spacer(); BottomAction(title: taskActionTitle(task, kind: kind), symbol: "arrow.right.circle") { processing = true } }.bottomBarPadding()
             }
         }
         .sheet(isPresented: $returning, onDismiss: taskSheetClosed) { NavigationStack { WorkflowTaskView(task: task, kind: kind, previewReturn: true, onCompleted: completed) } }
@@ -380,11 +392,14 @@ struct LiveWorkflowDetail: View {
             let (loadedLines, loadedState) = try await (lines, state)
             if kind == .erp { materials = loadedLines }
             if let loadedState { taskState = loadedState }
-            returnAvailable = false
+            // Decided in one go at the end: setting it false first made the 退单 button disappear and come back
+            // every time the page reloaded behind a closed sheet.
+            var canReturn = false
             if kind == .fault && !task["id"].text.isEmpty && taskState["canSubmit"].bool {
                 let form = try await session.request("workflow/getFormPropertiesConditionsByTaskId", query: ["taskId": task["id"].text])
-                returnAvailable = form["flowConditions"].array.contains { isReturnCondition($0) }
+                canReturn = form["flowConditions"].array.contains { isReturnCondition($0) }
             }
+            if returnAvailable != canReturn { returnAvailable = canReturn }
             // The extras never hold the page up: it is shown as soon as the order itself is loaded.
             if kind == .fault { Task { await loadExplanations() } }
         } catch { if !isCancellation(error) { self.error = error.localizedDescription } }
@@ -410,7 +425,7 @@ struct LiveRecordFacts: View {
     let record: JSONValue
     let title: String
     let fields: [(String, String)]
-    var body: some View { List { ForEach(fields, id: \.0) { key, label in if record.at(key) != .null { LabeledContent(label, value: readableDate(record.at(key))) } } }.navigationTitle(title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome().modifier(DetailTabVisibility()) }
+    var body: some View { List { ForEach(fields, id: \.0) { key, label in if record.at(key) != .null { LabeledContent(label, value: readableDate(record.at(key))) } } }.textSelection(.enabled).navigationTitle(title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome().modifier(DetailTabVisibility()) }
 }
 struct AttachmentRow: View {
     let photo: JSONValue
@@ -442,7 +457,7 @@ struct LiveCatalogView: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, record in
                 NavigationLink {
                     if source == .assets { AssetRecordDetail(record: record) }
-                    else { List { Section(record["materialDesc"].text) { MaterialFacts(material: record); LabeledContent("库存数量", value: materialQuantity(record["onhandQty"].text, material: record)) } }.navigationTitle("库存详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome().modifier(DetailTabVisibility()) }
+                    else { List { Section(record["materialDesc"].text) { MaterialFacts(material: record); LabeledContent("库存数量", value: materialQuantity(record["onhandQty"].text, material: record)) } }.textSelection(.enabled).navigationTitle("库存详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome().modifier(DetailTabVisibility()) }
                 } label: { VStack(alignment: .leading, spacing: RowMetrics.spacing) {
                     WrappingContent { Text(record.object.label).font(.headline) }
                     WrappingContent { Text(record[source == .assets ? "assetCode" : "materialCode"].text).font(.subheadline).foregroundStyle(.secondary) }
@@ -518,7 +533,7 @@ struct WorkflowNodesView: View {
             if !loading && history.isEmpty && definition.isEmpty && error == nil { CompactEmptyState(title: "暂无流程记录") }
             if preview { Text("流程结构演示，不是真实工单记录").font(.footnote).foregroundStyle(.secondary) }
         }
-        .navigationTitle("处理流程").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .textSelection(.enabled).navigationTitle("处理流程").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .errorDialog($error, retry: { Task { await load() } })
         .modifier(DetailTabVisibility())
         .reloadsToTop(on: gate.token)

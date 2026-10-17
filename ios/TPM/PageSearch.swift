@@ -8,6 +8,7 @@ private struct PageSearch: ViewModifier {
     var presented: Binding<Bool>?
     let prompt: String
     let submit: () -> Void
+    var collapsesOnSubmit = false
     @State private var localActive = false
     @State private var lastSubmitted = ""
     @EnvironmentObject private var navigation: BottomNavigationModel
@@ -15,7 +16,11 @@ private struct PageSearch: ViewModifier {
         let active = presented ?? $localActive
         content
             .searchable(text: $text, isPresented: active, placement: .navigationBarDrawer(displayMode: .always), prompt: prompt)
-            .onSubmit(of: .search) { if text != lastSubmitted { lastSubmitted = text; submit() } }
+            .onSubmit(of: .search) {
+                if text != lastSubmitted { lastSubmitted = text; submit() }
+                // Confirming a search (Return) puts the search field away and the keyboard with it.
+                if collapsesOnSubmit { active.wrappedValue = false }
+            }
             // Closing the search box runs `submit` only if the text differs from what was last submitted.
             // Pages that load by their query on their own pass nothing, so closing the box reloads nothing.
             .onChange(of: active.wrappedValue) { _, isActive in
@@ -26,8 +31,8 @@ private struct PageSearch: ViewModifier {
 }
 
 extension View {
-    func nativeSearchable(text: Binding<String>, isPresented: Binding<Bool>? = nil, prompt: String, onSubmit: @escaping () -> Void = {}) -> some View {
-        modifier(PageSearch(text: text, presented: isPresented, prompt: prompt, submit: onSubmit))
+    func nativeSearchable(text: Binding<String>, isPresented: Binding<Bool>? = nil, prompt: String, collapsesOnSubmit: Bool = false, onSubmit: @escaping () -> Void = {}) -> some View {
+        modifier(PageSearch(text: text, presented: isPresented, prompt: prompt, submit: onSubmit, collapsesOnSubmit: collapsesOnSubmit))
     }
     func nativeNavigationChrome() -> some View {
         toolbarBackgroundVisibility(.automatic, for: .navigationBar)

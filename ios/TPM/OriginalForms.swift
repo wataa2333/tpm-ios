@@ -140,6 +140,38 @@ enum ReferenceSource: String, Identifiable {
     var searchField: String {
         switch self { case .assets: "assetName"; case .materials: "materialDesc"; case .outboundMaterials: "material.materialDesc"; default: "" }
     }
+    /// What a list the server searches can be searched by. The outbound lines (picked for a repair's ERP
+    /// material) also take the material number, the recipient's name and the outbound number, as the original does.
+    var searchModes: [PickerSearch] {
+        switch self {
+        case .assets, .materials: [.name, .code]
+        case .outboundMaterials: [.name, .code, .recipient, .outNumber]
+        default: []
+        }
+    }
+}
+
+enum PickerSearch: String, Identifiable, Hashable {
+    case name, code, recipient, outNumber
+    var id: String { rawValue }
+    func label(for source: ReferenceSource) -> String {
+        switch self {
+        case .name: source == .assets ? "名称" : "物料名称"
+        case .code: source == .assets ? "资产编码" : "料号"
+        case .recipient: "领用人"
+        case .outNumber: "出库单号"
+        }
+    }
+    func field(for source: ReferenceSource) -> String {
+        switch (self, source) {
+        case (.name, _): return source.searchField
+        case (.code, .assets): return "assetCode"
+        case (.code, .materials): return "materialCode"
+        case (.code, _): return "material.materialCode"
+        case (.recipient, _): return "outbound.recipientUser.realName"
+        case (.outNumber, _): return "outbound.outNumber"
+        }
+    }
 }
 
 struct ReferencePicker: View {
@@ -155,7 +187,7 @@ struct ReferencePicker: View {
     @StateObject private var menu = ReferenceMenuModel()
     @State private var values: [JSONValue] = []
     @State private var query = ""
-    @State private var searchByCode = false
+    @State private var searchMode: PickerSearch = .name
     @State private var searching = false
     @State private var userMode = 0
     @State private var userGroups: [JSONValue] = []
@@ -181,8 +213,9 @@ struct ReferencePicker: View {
         List {
             LoadingRow(isPresented: loading || selecting, title: "正在加载")
             if source == .users { Picker("人员分类", selection: $userMode) { Text("按姓名").tag(0); Text("按班组").tag(1) }.pickerStyle(.segmented) }
-            if source.pagePath != nil && searching {
-                Section { Picker("搜索方式", selection: $searchByCode) { Text("按名称").tag(false); Text("按编号").tag(true) }.pickerStyle(.segmented).labelsHidden() }
+            if !source.searchModes.isEmpty {
+                // Always there for the lists the server searches, so the ways of searching are never hidden.
+                Section { Picker("搜索方式", selection: $searchMode) { ForEach(source.searchModes) { Text($0.label(for: source)).tag($0) } }.pickerStyle(.segmented).labelsHidden() }
             }
             if menu.enabled, query.isEmpty, !menu.pins.isEmpty {
                 Section { ForEach(menu.pins) { entry in optionRow(entry.value) } } header: { Text("置顶 · \(menu.pins.count)/\(PickerLists.pinLimit)") }
@@ -215,14 +248,14 @@ struct ReferencePicker: View {
             if !loading && visible.isEmpty && error == nil { ContentUnavailableView("暂无匹配内容", systemImage: "magnifyingglass") }
         }
         .navigationTitle(source.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
-        .reloadsToTop(on: "\(query)-\(searchByCode)-\(userMode)")
+        .reloadsToTop(on: "\(query)-\(searchMode.rawValue)-\(userMode)")
         .errorDialog($error, retry: { Task { await load() } })
         .errorDialog($notice, title: "不能选择", clearsOnClose: true)
         .errorDialog(Binding(get: { menu.notice }, set: { menu.notice = $0 }), title: "不能置顶", clearsOnClose: true)
         .environmentObject(menu)
         .searchPageChrome(isSearching: searching)
         // Only lists the server searches are asked again. The others are filtered here from what is already loaded.
-        .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索", onSubmit: { if source.pagePath != nil || source == .workflowUsers { Task { await load() } } })
+        .nativeSearchable(text: $query, isPresented: $searching, prompt: source.searchModes.isEmpty ? "搜索" : "搜索" + searchMode.label(for: source), onSubmit: { if source.pagePath != nil || source == .workflowUsers { Task { await load() } } })
         .task {
             picked = Set(selected)
             // Materials are picked by quantity, not by preference: no menu there. The demo screens keep their
@@ -233,7 +266,7 @@ struct ReferencePicker: View {
             }
             await load()
         }
-        .onChange(of: searchByCode) { if source.pagePath != nil { Task { await load() } } }
+        .onChange(of: searchMode) { if source.pagePath != nil { Task { await load() } } }
         // The groups are only needed once "按班组" is chosen.
         .task(id: userMode) { await loadUserGroupsIfNeeded() }
         .toolbar { if multiple { ToolbarItem(placement: .confirmationAction) { Button("完成") { finishPicking() } } } }
@@ -321,8 +354,7 @@ struct ReferencePicker: View {
                 var filters: [JSONValue] = []
                 if source == .materials { filters.append(.object(["field": .string("onhandQty"), "operator": .string("gt"), "value": .number(0)])) }
                 if !query.isEmpty {
-                    let field = searchByCode ? (source == .assets ? "assetCode" : source == .materials ? "materialCode" : "material.materialCode") : source.searchField
-                    filters.append(filter(field, query, "like"))
+                    filters.append(filter(searchMode.field(for: source), query, "like"))
                 }
                 response = try await session.page(path, offset: more ? values.count : 0, filters: filters)
                 let rows = response["content"].array

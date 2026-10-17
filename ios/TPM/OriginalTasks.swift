@@ -93,12 +93,14 @@ struct OriginalRepairForm: View {
                 catch { self.error = error.localizedDescription }
             } } }
         }
-        .sheet(isPresented: $workflow, onDismiss: { Task { await load() } }) { NavigationStack { WorkflowTaskView(task: workflowTask, kind: .fault, onCompleted: { onCompleted?(); dismiss() }) } }
+        .sheet(isPresented: $workflow, onDismiss: { Task { await load(silent: true) } }) { NavigationStack { WorkflowTaskView(task: workflowTask, kind: .fault, onCompleted: { onCompleted?(); dismiss() }) } }
         .keyboardManaged()
         .errorDialog($error, title: failedOnServer ? "保存未完成" : "请检查表单", clearsOnClose: true, retry: data.isEmpty ? { Task { await load() } } : nil)
     }
-    private func load() async {
-        loading = true; error = nil; defer { loading = false }
+    /// `silent`: a refresh behind a closed sheet, with no spinner and no dimming of the form.
+    private func load(silent: Bool = false) async {
+        if !silent { loading = true }
+        error = nil; defer { loading = false }
         if preview {
             data = ["startTime": .string("2026-10-15 09:30"), "endTime": .string("2026-10-15 10:30"), "albums": .array([]), "erpRepairMaterials": .array(PreviewBusinessData.repairMaterials), "assetFault": .object(["sn": .string("BX-DEMO-001")]), "faultType": .object(["typeName": .string("示例故障类型")])]
             return
