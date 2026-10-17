@@ -103,6 +103,12 @@ struct LiveWorkflowList: View {
     /// A page opened from a quick query: it lists every order that matches, whatever its status, so it has no
     /// status strip and no per-status counts.
     private var searchMode: Bool { !initialQuery.isEmpty }
+    /// A quick-query page is titled by what it is searching for now ("机台号 A-F08"), following each confirmed
+    /// search and the chosen search field; other pages keep their own title.
+    private var pageTitle: String {
+        if searchMode { return searchField.rawValue + " " + committed }
+        return query == initialQuery ? (customTitle ?? kind.title) : kind.title
+    }
     private var activeQuery: String { searchMode ? committed : query }
     private func commitQuery() {
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -130,7 +136,7 @@ struct LiveWorkflowList: View {
             }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
             LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await reload(more: true) }
         }
-        .navigationTitle(searchMode || query == initialQuery ? (customTitle ?? kind.title) : kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .navigationTitle(pageTitle).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(ListTabVisibility())
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: kind == .fault ? "搜索" + searchField.rawValue : "搜索出库单号",
