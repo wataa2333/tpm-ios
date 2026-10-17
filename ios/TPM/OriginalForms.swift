@@ -621,7 +621,11 @@ struct OriginalPhotosField: View {
                 Button("删除", role: .destructive) { var values = albums.array; values.remove(at: index); albums = .array(values) }
             }
         }
-        PhotosPicker(selection: $selected, maxSelectionCount: max(0, 9-albums.array.count), matching: .images) { Label("选择现场照片", systemImage: "photo.badge.plus").fullRow() }.disabled(uploading || preview || albums.array.count >= 9)
+        PhotosPicker(selection: $selected, maxSelectionCount: max(0, 9-albums.array.count), matching: .images) {
+            Label("选择现场照片", systemImage: "photo.badge.plus")
+        }
+        .fullRow()
+        .disabled(uploading || preview || albums.array.count >= 9)
         .onChange(of: selected) { Task { await upload() } }
         .errorDialog($error, title: "照片上传失败", clearsOnClose: true)
         if uploading { ProgressView("正在上传照片…") }
