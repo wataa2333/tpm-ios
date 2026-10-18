@@ -96,20 +96,11 @@ extension View {
     /// Dismissing the keyboard by dragging the content, and a "收起键盘" button above the keyboard
     /// for fields that have no return key (numbers, phone numbers).
     func keyboardManaged() -> some View {
-        scrollDismissesKeyboard(.interactively)
-            // The button above the keyboard: the one way out of a field that has no return key (numbers, a multi-line note), on every page and sheet
-            // that uses this modifier, whatever its bottom bar looks like.
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button { endEditing() } label: { Label("收起键盘", systemImage: "keyboard.chevron.compact.down") }
-                        .accessibilityIdentifier("keyboard-dismiss")
-                }
-            }
+        scrollDismissesKeyboard(.interactively).modifier(KeyboardDismissRow())
     }
 }
 
-/// A text field with the character count when the field has a limit. The "收起键盘" button is not here: it is above the
+/// A text field with the character count when the field has a limit. The "收起键盘" button is not here: it is a row above the
 /// keyboard (see `keyboardManaged`). Limits count UTF-16 units like the server.
 struct EntryField: View {
     let placeholder: String
@@ -242,4 +233,35 @@ private struct ToastModifier: ViewModifier {
 
 extension View {
     func toast(_ message: Binding<String?>) -> some View { modifier(ToastModifier(message: message)) }
+}
+
+
+/// The "收起键盘" button, as a thin row of its own between the page's bottom bar and the keyboard (and only while the keyboard is up). It is a
+/// bottom inset, so the page's own bar is pushed up by it and nothing lies under it; the keyboard-toolbar placement floated the button over
+/// the page's bottom bar instead. It serves every field, with or without a return key (numbers, a multi-line note).
+private struct KeyboardDismissRow: ViewModifier {
+    @State private var keyboardUp = false
+    func body(content: Content) -> some View {
+        content
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if keyboardUp {
+                    HStack {
+                        Spacer()
+                        Button { endEditing() } label: {
+                            Label("收起键盘", systemImage: "keyboard.chevron.compact.down").font(.subheadline.weight(.medium)).lineLimit(1)
+                        }
+                        .buttonStyle(.glass).controlSize(.regular)
+                        .accessibilityIdentifier("keyboard-dismiss")
+                    }
+                    .padding(.horizontal, 20).padding(.vertical, 6)
+                    .transition(.opacity)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                withAnimation(.easeOut(duration: 0.2)) { keyboardUp = true }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                withAnimation(.easeOut(duration: 0.2)) { keyboardUp = false }
+            }
+    }
 }
