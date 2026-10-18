@@ -193,7 +193,7 @@ struct BatchPreset: Equatable {
         if operation == .reject { return !comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         switch action {
         case .accept:
-            if group.object.isEmpty || estimated.text.isEmpty { return false }
+            if estimated.text.isEmpty { return false }
         case .complete:
             if faultType.object.isEmpty || content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (durationMinutes ?? 1) < 1 { return false }
             if outboundLines.contains(where: { $0.quantity < 1 }) { return false }
@@ -541,7 +541,7 @@ struct BatchPresetSheet: View {
     @ViewBuilder private var proceedSections: some View {
         if action == .accept {
             Section {
-                ReferenceField(title: "维修班组", source: .groups, value: $preset.group, required: true)
+                ReferenceField(title: "维修班组（不选则用各单自带）", source: .groups, value: $preset.group, required: false)
                 ServerDateField(title: "预计完成时间", value: $preset.estimated, required: true)
                 ReferenceField(title: "维修人员（选填）", source: .users, value: $preset.assignUser)
             } header: { RequiredFormHeader(title: "受理方案") } footer: {

@@ -467,6 +467,12 @@ struct LiveCatalogView: View {
                 } label: { VStack(alignment: .leading, spacing: RowMetrics.spacing) {
                     WrappingContent { Text(record.object.label).font(.headline) }
                     WrappingContent { Text(record[source == .assets ? "assetCode" : "materialCode"].text).font(.subheadline).foregroundStyle(.secondary) }
+                    if source != .assets {
+                        // As in the original app: organisation, batch, sub-inventory and locator, then the time of the record at the foot.
+                        let facts = [record["erpTpmCompany"]["organizationName"].text, record["lot"].text, record["subInv"].text, record["locatorCode"].text].filter { !$0.isEmpty }.joined(separator: " · ")
+                        if !facts.isEmpty { WrappingContent { Text(facts).font(.footnote).foregroundStyle(.secondary) } }
+                        if !readableDate(record["updateTime"]).isEmpty { Text("入库 " + readableDate(record["updateTime"])).font(.footnote).foregroundStyle(.secondary) }
+                    }
                 } }
                 .uniformRow()
                 .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }

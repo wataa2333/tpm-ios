@@ -329,7 +329,8 @@ enum BatchProcessor {
     /// the material lines when an ERP order is approved, nothing otherwise.
     private static func commitTaskData(task: JSONValue, item: BatchItem, action: BatchAction, assigning: Bool, preset: BatchPreset, detail: JSONValue, session: LiveSession) async throws -> JSONValue? {
         if item.kind == .fault, action == .accept || action == .claim {
-            let group = action == .accept ? preset.group : detail["userGroup"]
+            // The group chosen for the batch wins; without one, each order keeps the group it already carries (as the single screen does).
+            let group = action == .accept && !preset.group.object.isEmpty ? preset.group : detail["userGroup"]
             let groupID = group["groupId"]
             guard !groupID.text.isEmpty else { throw BatchError(message: "这张单据没有维修班组，请打开单独处理。") }
             var data: Fields = [
