@@ -6,6 +6,7 @@ struct TPMApp: App {
     @StateObject private var store = DemoStore()
     @StateObject private var session = LiveSession()
     @StateObject private var navigation = BottomNavigationModel()
+    @AppStorage(AppAccent.defaultsKey) private var accent = AppAccent.system.rawValue
     var body: some Scene {
         WindowGroup {
             GeometryReader { geometry in
@@ -13,6 +14,8 @@ struct TPMApp: App {
                     .environment(\.bottomSafeArea, geometry.safeAreaInsets.bottom)
                     .environmentObject(store).environmentObject(session).environmentObject(navigation)
                     .labeledContentStyle(SafeFactsStyle())
+                    .tint((AppAccent(rawValue: accent) ?? .system).color)
+                    .accentColor((AppAccent(rawValue: accent) ?? .system).color)
             }
         }
     }
@@ -563,6 +566,12 @@ struct PreviewScreen: View {
     let name: String
     var body: some View {
         switch name {
+        #if DEBUG
+        case "management": NavigationStack { ManagementScreen() }
+        case "management-trends": NavigationStack { ManagementTrendLayoutPreview() }
+        case "management-card": NavigationStack { ManagementCardLayoutPreview() }
+        case "motion-regression": NavigationStack { MotionRegressionPreview() }
+        #endif
         case "home": MainTabs(selection: 0)
         case "workspace": MainTabs(selection: 1)
         case "faults": MainTabs(selection: 2, previewFaultList: true)

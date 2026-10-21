@@ -23,9 +23,9 @@ struct AuthenticatedRoot: View {
                 NativeLoginView().transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.7), value: session.scopeRevision)
-        .animation(.easeInOut(duration: 0.4), value: session.switchingFactory)
-        .animation(.easeInOut(duration: 0.45), value: session.signedIn)
+        .interfaceMotion(session.scopeRevision, duration: 0.7)
+        .interfaceMotion(session.switchingFactory, duration: 0.4)
+        .interfaceMotion(session.signedIn, duration: 0.45)
         // Pins, defaults and drafts saved under the old "name@factory name" scope move to the id-based one.
         .task(id: session.scopeRevision) { session.migrateLegacyScope() }
     }
@@ -133,7 +133,7 @@ struct LiveWorkflowList: View {
                     LiveOrderRow(kind: kind, item: item, selectionMode: batch.active, selected: batch.contains(entry.id), selectable: batch.isSelectable(entry), batch: batch).equatable()
                 }
                 if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无相关单据") }
-            }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
+            }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).interfaceMotion(loading || gate.busy, duration: 0.4)
             LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await reload(more: true) }
         }
         .navigationTitle(pageTitle).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
@@ -144,7 +144,7 @@ struct LiveWorkflowList: View {
 
         .refreshable { refreshing = true; await reload(); await reloadCounts(); refreshing = false }
         .reloadsToTop(on: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)"))
-        .animation(.smooth(duration: 0.45), value: loading || gate.busy)
+        .interfaceMotion(loading || gate.busy, duration: 0.45)
         .toolbar {
             if kind == .fault {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -265,6 +265,16 @@ func erpCardFacts(_ item: JSONValue) -> [(String, String)] {
         .filter { !$0.1.isEmpty }
 }
 
+/// Task identity, server permissions and available return branch always describe the same load.
+struct DetailActionSnapshot: Equatable {
+    var task: JSONValue = .null
+    var permissions: JSONValue = .null
+    var canReturn = false
+    var hasActions: Bool {
+        !task["id"].text.isEmpty && (permissions["canSubmit"].bool || permissions["canDelegate"].bool || permissions["canResolveDelegate"].bool)
+    }
+}
+
 struct LiveWorkflowDetail: View {
     @Environment(\.closeWorkOrder) private var closeWorkOrder
     @Environment(\.dismiss) private var dismiss
@@ -272,7 +282,9 @@ struct LiveWorkflowDetail: View {
     @State private var returnToList = false
     @StateObject private var gate = ReloadGate()
     private func completed() {
-        returnToList = true
+        // Hide the old actions behind the sheet before its dismissal reveals the detail.
+        var transaction = Transaction(); transaction.disablesAnimations = true
+        withTransaction(transaction) { returnToList = true }
         processing = false; returning = false; editing = false
         navigation.refresh = UUID()
     }
@@ -280,6 +292,8 @@ struct LiveWorkflowDetail: View {
     /// next action appears, and let the list refresh behind. One back gesture then returns to
     /// the list instead of to a stale "待签到" page.
     private func signCompleted() {
+        var transaction = Transaction(); transaction.disablesAnimations = true
+        withTransaction(transaction) { suppressActions = true }
         processing = false
         navigation.pendingListRefresh = true
     }
@@ -294,17 +308,22 @@ struct LiveWorkflowDetail: View {
     let id: String
     @State private var detail: JSONValue = .null
     @State private var materials: [JSONValue] = []
-    @State private var taskState: JSONValue = .null
+    @State private var actions = DetailActionSnapshot()
+    @State private var suppressActions = false
+    @State private var detailLoadID = UUID()
     @State private var loading = true
     @State private var error: String?
     @State private var editing = false
     @State private var processing = false
     @State private var returning = false
-    @State private var returnAvailable = false
     @State private var repairResult: JSONValue = .null
+    @State private var explanationRevision = UUID()
     @Environment(\.isPeeking) private var peeking
     @ObservedObject private var directory = UserDirectory.shared
-    private var task: JSONValue { detail["taskInfo"] }
+    private var task: JSONValue { actions.task }
+    private var actionInteractionAllowed: Bool {
+        !loading && !gate.busy && !returnToList && !suppressActions && !editing && !processing && !returning
+    }
     var body: some View {
         Group {
             if detail == .null { LoadingFailure(error: error) { Task { await load() } } }
@@ -325,7 +344,7 @@ struct LiveWorkflowDetail: View {
                             LabeledContent("维修班组", value: detail["userGroup"].object.label)
                             LabeledContent("ERP记账部门", value: detail["division"].object.label)
                         }
-                        if let sentBack = faultReturnKind(detail), repairResult != .null || sentBack == "驳回" { ReturnNoteSection(kind: sentBack, repair: repairResult, fault: detail) }
+                        if let sentBack = faultReturnKind(detail) { ReturnNoteSection(kind: sentBack, repair: repairResult, fault: detail).id(explanationRevision) }
                         if !detail["faultDesc"].text.isEmpty { Section("故障描述") { Text(detail["faultDesc"].text).textSelection(.enabled).contextMenu { Button("复制", systemImage: "doc.on.doc") { copyToPasteboard(detail["faultDesc"].text) } } } }
                         if !detail["albums"].array.isEmpty { Section("现场照片") { ForEach(Array(detail["albums"].array.enumerated()), id: \.offset) { _, photo in AttachmentRow(photo: photo) } } }
                         if repairResult != .null, faultReturnKind(detail) == nil { RepairResultSection(repair: repairResult) }
@@ -354,7 +373,6 @@ struct LiveWorkflowDetail: View {
                 }
                 .refreshable { await load() }
                 .reloadsToTop(on: gate.token)
-                .animation(.smooth(duration: 0.45), value: loading || gate.busy)
             }
         }
         .textSelection(.enabled).navigationTitle(kind == .fault ? "报修详情" : "出库详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
@@ -363,14 +381,37 @@ struct LiveWorkflowDetail: View {
         .task(id: gate.id("detail")) { await gate.run(key: "detail") { await load() } }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                if canEdit && !peeking { Button("编辑") { editing = true } }
+                if canEdit && !peeking { Button("编辑") { editing = true }.disabled(loading || gate.busy || returnToList || suppressActions) }
                 RefreshButton(busy: loading || gate.busy) { gate.request() }
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if !peeking && !task["id"].text.isEmpty && (taskState["canSubmit"].bool || taskState["canDelegate"].bool || taskState["canResolveDelegate"].bool) {
-                HStack { if returnAvailable { BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) { returning = true } }; Spacer(); BottomAction(title: taskActionTitle(task, kind: kind), symbol: "arrow.right.circle") { processing = true } }.bottomBarPadding()
+            VStack(spacing: 0) {
+                if !peeking && actions.hasActions {
+                    HStack {
+                        if actions.canReturn {
+                            BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) {
+                                guard actionInteractionAllowed else { return }
+                                returning = true
+                            }.transition(.opacity)
+                        }
+                        Spacer()
+                        BottomAction(title: taskActionTitle(task, kind: kind), symbol: "arrow.right.circle") {
+                            guard actionInteractionAllowed else { return }
+                            processing = true
+                        }
+                    }
+                    .bottomBarPadding()
+                    // Block stale actions without toggling the glass button's disabled tint on every refresh.
+                    // Preserve the inset while dismissing the sheet / popping the detail.
+                    .opacity(returnToList || suppressActions ? 0 : 1)
+                    .allowsHitTesting(actionInteractionAllowed)
+                    .accessibilityHidden(!actionInteractionAllowed)
+                    .transition(.opacity)
+                }
             }
+            .interfaceMotion(actions)
+            .interfaceMotion(suppressActions)
         }
         .sheet(isPresented: $returning, onDismiss: taskSheetClosed) { NavigationStack { WorkflowTaskView(task: task, kind: kind, previewReturn: true, onCompleted: completed) } }
         .sheet(isPresented: $editing, onDismiss: taskSheetClosed) {
@@ -387,36 +428,47 @@ struct LiveWorkflowDetail: View {
         kind == .fault ? detail["faultState"].text == "UNTREATED" && !task["id"].text.isEmpty : detail["processInstanceId"].text.isEmpty && detail["createBy"].text == session.authentication.text("name")
     }
     private func load() async {
+        let run = UUID(), scope = session.scopeRevision
+        detailLoadID = run
         loading = true; error = nil
-        defer { loading = false }
+        defer { if detailLoadID == run { loading = false } }
         do {
-            detail = try await session.request(kind.detailPath, query: [kind.idKey: id])
+            let loadedDetail = try await session.request(kind.detailPath, query: [kind.idKey: id])
+            guard detailLoadID == run, scope == session.scopeRevision, !returnToList else { return }
+            detail = loadedDetail
+            explanationRevision = UUID()
             // The materials and the task state both only need what the detail just said: ask for them together.
-            let api = session, isERP = kind == .erp, orderID = id, instance = detail["processInstanceId"].text
+            let api = session, isERP = kind == .erp, orderID = id, instance = orderProcessID(loadedDetail)
+            let loadedTask = loadedDetail["taskInfo"]
             async let lines: [JSONValue] = isERP ? api.request("erpOutbound/getErpMaterialOutboundsByOutboundId", query: ["outboundId": orderID]).array : []
             async let state: JSONValue? = instance.isEmpty ? nil : api.request("workflow/getWorkflowTaskState", query: ["processInstanceId": instance])
             let (loadedLines, loadedState) = try await (lines, state)
-            if kind == .erp { materials = loadedLines }
-            if let loadedState { taskState = loadedState }
-            // Decided in one go at the end: setting it false first made the 退单 button disappear and come back
-            // every time the page reloaded behind a closed sheet.
+            let permissions = loadedState ?? .null
             var canReturn = false
-            if kind == .fault && !task["id"].text.isEmpty && taskState["canSubmit"].bool {
-                let form = try await session.request("workflow/getFormPropertiesConditionsByTaskId", query: ["taskId": task["id"].text])
+            if kind == .fault && !loadedTask["id"].text.isEmpty && permissions["canSubmit"].bool {
+                let form = try await session.request("workflow/getFormPropertiesConditionsByTaskId", query: ["taskId": loadedTask["id"].text])
                 canReturn = form["flowConditions"].array.contains { isReturnCondition($0) }
             }
-            if returnAvailable != canReturn { returnAvailable = canReturn }
+            try Task.checkCancellation()
+            guard detailLoadID == run, scope == session.scopeRevision, !returnToList else { return }
+            if kind == .erp { materials = loadedLines }
+            actions = DetailActionSnapshot(task: loadedTask, permissions: permissions, canReturn: canReturn)
+            suppressActions = false
             // The extras never hold the page up: it is shown as soon as the order itself is loaded.
-            if kind == .fault { Task { await loadExplanations() } }
-        } catch { if !isCancellation(error) { self.error = error.localizedDescription } }
+            if kind == .fault { Task { await loadExplanations(record: loadedDetail, run: run, scope: scope) } }
+        } catch {
+            guard detailLoadID == run, scope == session.scopeRevision, !returnToList, !isCancellation(error) else { return }
+            actions = DetailActionSnapshot()
+            self.error = error.localizedDescription
+        }
     }
     /// The repairer's note and the solution: one light request (`repair/getRepairsByFaultId`, as the original
     /// detail page makes), sent after the page is already on screen and only for states that can have a repair.
     /// When it cannot be read the page simply does without. The process history is never read for this.
-    private func loadExplanations() async {
-        guard faultMayHaveRepairNote(detail) else { repairResult = .null; return }
+    private func loadExplanations(record: JSONValue, run: UUID, scope: UUID) async {
+        guard faultMayHaveRepairNote(record) else { repairResult = .null; return }
         let answer = try? await session.request("repair/getRepairsByFaultId", query: ["faultId": id])
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, detailLoadID == run, scope == session.scopeRevision, !returnToList else { return }
         if let answer, let repair = latestRepair(answer), !repair["user"].object.isEmpty || !repair["content"].text.isEmpty { repairResult = repair } else { repairResult = .null }
     }
 }
@@ -478,7 +530,7 @@ struct LiveCatalogView: View {
                 .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
             }
-            }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
+            }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).interfaceMotion(loading || gate.busy, duration: 0.4)
             Section { LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await load(more: true) } }
         }
         .navigationTitle(source == .assets ? "资产台账" : "库存")
@@ -487,7 +539,7 @@ struct LiveCatalogView: View {
         .nativeSearchable(text: $query, isPresented: $searching, prompt: byCode ? "搜索编号" : "搜索名称")
         .onChange(of: byCode) { Task { await load() } }
         .reloadsToTop(on: gate.id("\(byCode)-\(query)"))
-        .animation(.smooth(duration: 0.45), value: loading || gate.busy)
+        .interfaceMotion(loading || gate.busy, duration: 0.45)
         .refreshButton(busy: loading || loadingMore || gate.busy) { gate.request() }
         .errorDialog($error, retry: { Task { await load() } })
         .task(id: gate.id("\(byCode)-\(query)")) { await gate.run(key: "\(byCode)-\(query)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await load() }) }
@@ -551,7 +603,7 @@ struct WorkflowNodesView: View {
         .reloadsToTop(on: gate.token)
         .task(id: gate.id("flow")) { await gate.run(key: "flow") { await load() } }
         .refreshable { await load() }
-        .animation(.smooth(duration: 0.45), value: loading || gate.busy)
+        .interfaceMotion(loading || gate.busy, duration: 0.45)
         .refreshButton(busy: loading || gate.busy) { gate.request() }
     }
     private func load() async {

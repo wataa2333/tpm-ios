@@ -120,6 +120,9 @@ struct ProfileTab: View {
     @State private var draftCount = 0
     @State private var resuming: FaultDraft?
     @State private var draftNotice: String?
+    @State private var developer = false
+    @State private var titleTaps = 0
+    @State private var lastTitleTap = Date.distantPast
     /// Turning the protection off is a change the owner confirms with the same check.
     private func setProtection(_ on: Bool) {
         if on { BiometricGate.isEnabled = true; protect = true; return }
@@ -192,9 +195,21 @@ struct ProfileTab: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("protect-accounts")
             } footer: { Text("打开后，使用已记住的账号前需要面容 ID 或设备密码验证。") }
+            Section { NavigationLink { AppearanceSettings() } label: { Label("外观", systemImage: "paintpalette") } }
             Section { Button("退出登录", role: .destructive) { session.signOut() } }
         }
         .navigationTitle("我的").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
+        .background {
+            ProfileTitleTapObserver {
+                guard !developer else { return }
+                let now = Date()
+                titleTaps = now.timeIntervalSince(lastTitleTap) <= 1.5 ? titleTaps + 1 : 1
+                lastTitleTap = now
+                if titleTaps >= 10 { titleTaps = 0; developer = true }
+            }.frame(width: 0, height: 0)
+        }
+        .onDisappear { titleTaps = 0; lastTitleTap = .distantPast }
+        .sheet(isPresented: $developer) { DeveloperAccessSheet() }
         .rootTopBar(busy: refreshing) {
             Task { refreshing = true; try? await session.refreshFactories(); refreshing = false }
         }

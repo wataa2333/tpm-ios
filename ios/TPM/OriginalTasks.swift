@@ -16,6 +16,7 @@ struct OriginalRepairForm: View {
     @State private var creatingERP = false
     @State private var choosingAssistants = false
     @State private var workflow = false
+    @State private var workflowCompleted = false
     @State private var confirming = false
     @State private var submitAfterSave = false
     @State private var draftID: UUID?
@@ -54,6 +55,7 @@ struct OriginalRepairForm: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(row["material"]["materialDesc"].text)
+                            Text("料号：" + repairMaterialCode(row)).font(.subheadline).foregroundStyle(.secondary)
                             Text("使用数量：\(materialQuantity(row["useNum"].text, material: row["material"]))").font(.subheadline).foregroundStyle(.secondary)
                         }
                     }
@@ -75,6 +77,9 @@ struct OriginalRepairForm: View {
                             disabled: loading || photoUploading || data.isEmpty,
                             // "保存" keeps what is typed on this phone: nothing is sent and nothing is required.
                             save: { keepDraft() }, submit: { prepare(true) })
+                .opacity(workflowCompleted ? 0 : 1)
+                .allowsHitTesting(!workflowCompleted)
+                .accessibilityHidden(workflowCompleted)
         }
         .toast($toast)
         .task { if data.isEmpty { await load(); applyDraft() } }
@@ -93,7 +98,18 @@ struct OriginalRepairForm: View {
                 catch { self.error = error.localizedDescription }
             } } }
         }
-        .sheet(isPresented: $workflow, onDismiss: { Task { await load(silent: true) } }) { NavigationStack { WorkflowTaskView(task: workflowTask, kind: .fault, onCompleted: { onCompleted?(); dismiss() }) } }
+        .sheet(isPresented: $workflow, onDismiss: {
+            if workflowCompleted {
+                // First let the workflow sheet finish closing, then close its parent once.
+                if let onCompleted { onCompleted() } else { dismiss() }
+            } else { Task { await load(silent: true) } }
+        }) {
+            NavigationStack {
+                WorkflowTaskView(task: workflowTask, kind: .fault, onCompleted: {
+                    workflowCompleted = true
+                })
+            }
+        }
         .keyboardManaged()
         .errorDialog($error, title: failedOnServer ? "保存未完成" : "请检查表单", clearsOnClose: true, retry: data.isEmpty ? { Task { await load() } } : nil)
     }
@@ -116,10 +132,17 @@ struct OriginalRepairForm: View {
         } catch { self.error = stageFailureMessage("加载维修任务", error) }
     }
     private func addMaterial(_ material: JSONValue, allowUnissued: Bool = false) {
+        var rows = data["erpRepairMaterials"]?.array ?? []
+        let identity = outboundLineIdentity(material)
+        if rows.contains(where: { outboundLineIdentity($0["materialOutbound"]) == identity }) {
+            if !allowUnissued {
+                rows.removeAll { outboundLineIdentity($0["materialOutbound"]) == identity }
+                data["erpRepairMaterials"] = .array(rows)
+            }
+            return
+        }
         guard !material["material"].object.isEmpty else { error = "此出库ERP物料信息丢失，请与ERP联系"; return }
         if !allowUnissued && material["actualQuantity"].number - material["usedQuantity"].number < 1 { error = "库存小于1，不能选择"; return }
-        var rows = data["erpRepairMaterials"]?.array ?? []
-        guard !rows.contains(where: { $0["material"]["id"] == material["id"]["materialId"] && $0["outbound"]["outboundId"] == material["id"]["outboundId"] }) else { error = "已选择此出库物料"; return }
         rows.append(.object(["material": material["material"], "outbound": material["outbound"], "materialOutbound": material, "useNum": .number(1)]))
         data["erpRepairMaterials"] = .array(rows)
     }
@@ -168,7 +191,7 @@ struct OriginalRepairForm: View {
             _ = try await session.request("repair/handleRepair", body: .object(repairSubmissionPayload(data, repairID: repairID)))
             // The server has it now: the local copy has done its job.
             if let draftID { DraftStore.shared.remove(id: draftID, scope: session.repairDraftScope); self.draftID = nil }
-            if submitAfterSave { workflow = true } else { onCompleted?(); dismiss() }
+            if submitAfterSave { workflowCompleted = false; workflow = true } else { onCompleted?(); dismiss() }
         } catch {
             self.error = stageFailureMessage("保存维修结果", error)
             failedOnServer = true; showValidation = true
@@ -250,6 +273,8 @@ struct WorkflowTaskView: View {
             Section(isReturning ? "退单原因" : isRejecting ? "驳回意见" : "意见") { EntryField(placeholder: isReturning ? "请输入退单原因" : isRejecting ? "请输入驳回意见" : "请输入意见", text: $comment, limit: 255, axis: .vertical, lines: 3...8) }
             if preview { Section { Text("流程页面预览，使用示例数据，不执行真实提交。").font(.footnote).foregroundStyle(.secondary) } }
         }
+        .interfaceMotion(condition)
+        .interfaceMotion(assignmentsLoading)
         .disabled(loading || submitting)
         .initialLoadingContent(loading && state == .null)
         .overlay { AnimatedLoadingOverlay(isPresented: loading || submitting, title: submitting ? "正在提交…" : "正在加载当前节点…") }
@@ -277,7 +302,7 @@ struct WorkflowTaskView: View {
             Task { await loadAssignments() }
         }
         .keyboardManaged()
-        .noticeDialog("提交未完成", message: failure ?? "", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } }), copyText: failure)
+        .noticeDialog("提交未完成", message: failure ?? "", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } }))
         .errorDialog($error, title: "提交未完成", retry: ready ? nil : { Task { await load() } })
         .sheet(isPresented: Binding(get: { handoff != nil }, set: { if !$0 { handoff = nil } })) {
             NavigationStack { TaskHandoffView(taskID: state["taskId"].text, operation: handoff ?? "transfer") { onCompleted?(); dismiss() } }

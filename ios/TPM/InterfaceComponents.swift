@@ -46,7 +46,7 @@ extension EnvironmentValues {
 struct BottomAction: View {
     let title: String
     let symbol: String
-    var color: Color = .blue
+    var color: Color = .accentColor
     var busy = false
     let action: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -137,12 +137,16 @@ struct LoadMoreFooter: View {
                     .frame(maxWidth: .infinity)
                     .task(id: loaded) { if !loading { await loadMore() } }
                     .accessibilityElement(children: .combine)
+                    .transition(.opacity)
             } else if loaded > 0 && !hasMore {
                 Text(total.map { "共 \($0) 单" } ?? "已显示全部 \(loaded) 条")
                     .font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+                    .contentTransition(.numericText()).transition(.opacity)
             }
         }
         .listRowBackground(Color.clear).listRowSeparator(.hidden)
+        .interfaceMotion(hasMore)
+        .interfaceMotion(failed)
     }
 }
 
@@ -163,7 +167,7 @@ struct AnimatedLoadingOverlay: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .allowsHitTesting(false)
-        .animation(.easeOut(duration: 0.3), value: isPresented)
+        .interfaceMotion(isPresented)
     }
 }
 
@@ -174,18 +178,24 @@ struct LoadingRow: View {
     var title = "正在加载"
     @Environment(\.pulledDown) private var pulledDown
     var body: some View {
-        // While the page is pulled down the row fades out but keeps its height, so the page does not move.
-        // A plain centred spinner. It is laid out centred from the first frame and its position is never
-        // animated: with an animated insertion the spinner used to fly in from the left edge.
-        if isPresented {
-            ProgressView().accessibilityLabel(title)
+        // A full-width container fixes the centre before fading in; no positional/move transition.
+        // Removing the branch also removes its padding instead of leaving an invisible loading row.
+        Group {
+            if isPresented {
+                HStack {
+                    Spacer(minLength: 0)
+                    ProgressView().accessibilityLabel(title)
+                    Spacer(minLength: 0)
+                }
                 .frame(maxWidth: .infinity)
                 .opacity(pulledDown ? 0 : 1)
                 .padding(.vertical, 10)
+                .clipped()
                 .listRowBackground(Color.clear).listRowSeparator(.hidden)
-                .transaction { $0.animation = nil }
-                .transition(.identity)
+                .transition(.opacity)
+            }
         }
+        .interfaceMotion(isPresented)
     }
 }
 
@@ -208,7 +218,7 @@ struct ChipStrip: View {
                                     Text(item.title).font(.subheadline.weight(selection == item.id ? .semibold : .regular)).lineLimit(1)
                                     if item.showsCount {
                                         Text(item.count.map(String.init) ?? "…").font(.caption.weight(.semibold)).monospacedDigit()
-                                            .contentTransition(.numericText()).animation(.smooth(duration: 0.5), value: item.count)
+                                            .contentTransition(.numericText()).interfaceMotion(item.count, duration: 0.5)
                                     }
                                 }
                                 .foregroundStyle(selection == item.id ? Color.primary : Color.secondary)

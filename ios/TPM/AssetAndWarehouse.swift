@@ -75,7 +75,7 @@ struct AssetRecordDetail: View {
                             else { LiveWorkflowDetail(kind: .fault, id: row["faultId"].text) }
                         }
                     }
-                }.opacity(loading || gate.busy ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
+                }.opacity(loading || gate.busy ? 0.4 : 1).interfaceMotion(loading || gate.busy, duration: 0.4)
             } else if tab == 2 {
                 if !asset["albums"].array.isEmpty {
                     CardGroup {
@@ -104,7 +104,7 @@ struct AssetRecordDetail: View {
         .onAppear { tab = tabs.firstIndex(of: initialTab) ?? 0 }
         .task(id: gate.id("\(tab)")) { await gate.run(key: "\(tab)") { await load() } }
         .refreshButton(busy: loading || gate.busy) { gate.request() }
-        .animation(.smooth(duration: 0.45), value: loading || gate.busy)
+        .interfaceMotion(loading || gate.busy, duration: 0.45)
         .errorDialog($error, retry: { Task { await load() } })
         .reloadsToTop(on: gate.id("\(tab)"))
     }
@@ -159,7 +159,7 @@ struct WarehouseStockView: View {
                 }.uniformRow()
             }
             if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无库存记录") }
-            }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
+            }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).interfaceMotion(loading || gate.busy, duration: 0.4)
             Section { LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await load(more: true) } }
             if preview { DemoNotice() }
         }
@@ -169,7 +169,7 @@ struct WarehouseStockView: View {
         .nativeSearchable(text: $query, isPresented: $searching, prompt: "搜索" + (searchField == "material.materialNum" ? "物料编号" : searchField == "material.materialModel" ? "规格型号" : "物料名称"))
         .task(id: gate.id(searchField + query)) { await gate.run(key: searchField + query, debounce: query.isEmpty ? nil : .milliseconds(350), load: { await load() }) }
         .reloadsToTop(on: gate.id(searchField + query))
-        .animation(.smooth(duration: 0.45), value: loading || gate.busy)
+        .interfaceMotion(loading || gate.busy, duration: 0.45)
         .refreshButton(busy: loading || loadingMore || gate.busy) { gate.request() }
         .errorDialog($error, retry: { Task { await load() } })
         .refreshable { await load() }
@@ -231,7 +231,7 @@ struct WarehouseReceiptsView: View {
         }.navigationTitle("入库记录").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
             .errorDialog($error, clearsOnClose: true)
             .reloadsToTop(on: gate.token)
-            .animation(.smooth(duration: 0.45), value: loading || gate.busy)
+            .interfaceMotion(loading || gate.busy, duration: 0.45)
             .refreshButton(busy: loading || gate.busy) { gate.request() }
             .task(id: gate.id("receipts")) { await gate.run(key: "receipts") {
                 if preview { rows = [.object(["entryNumber": .string("RK-DEMO-001"), "warehousingTime": .string("2026-10-15 14:30"), "applyDate": .string("2026-10-15"), "warehouse": .object(["warehouseName": .string("备件仓")]), "user": PreviewIdentity.user])]; return }

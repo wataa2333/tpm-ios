@@ -2,6 +2,65 @@ import XCTest
 
 @MainActor
 final class PreviewTests: XCTestCase {
+    func testManagementDateChoiceDoesNotStartReading() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "management"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["维修管理分析"].waitForExistence(timeout: 10))
+        app.buttons["处理统计"].tap()
+        let date = app.buttons["先选择维修结束日期"]
+        XCTAssertTrue(date.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["预估并读取"].isEnabled)
+        date.tap()
+        XCTAssertTrue(app.navigationBars["设定日期范围"].waitForExistence(timeout: 5))
+        app.buttons["这个月"].tap()
+        app.buttons["应用日期范围"].tap()
+        XCTAssertTrue(app.buttons["预估并读取"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["预估并读取"].isEnabled)
+        XCTAssertTrue(app.staticTexts["尚未读取"].firstMatch.exists)
+        XCTAssertFalse(app.buttons["暂停读取"].exists)
+    }
+
+    func testManagementCardRemovesRepeatedHeaderFactsAndKeepsNavigation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "management-card"]
+        app.launch()
+        let expand = app.buttons["order-expand-TEST-ASSET-001"]
+        XCTAssertTrue(expand.waitForExistence(timeout: 10))
+        expand.tap()
+        XCTAssertTrue(app.staticTexts["资产名称"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["报修名称"].exists)
+        XCTAssertFalse(app.staticTexts["资产编码"].exists)
+        XCTAssertFalse(app.staticTexts["报修时间"].exists)
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label == %@", "示例报修名称")).count, 1)
+        app.buttons["order-open-TEST-ASSET-001"].tap()
+        XCTAssertTrue(app.navigationBars["示例详情"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(expand.waitForExistence(timeout: 5))
+        expand.tap()
+        XCTAssertFalse(app.staticTexts["资产名称"].exists)
+    }
+
+    func testManagementTrendControlsAndLandscapeRemainReachable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "management-trends"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["维修处理趋势"].waitForExistence(timeout: 10))
+        let portrait = app.alerts.buttons["继续竖屏"]
+        if portrait.waitForExistence(timeout: 3) { portrait.tap() }
+        app.buttons["全选人员"].tap()
+        app.buttons["按月"].tap()
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let swap = app.buttons["人员为行"]
+        for _ in 0..<6 where !swap.isHittable { app.swipeUp() }
+        XCTAssertTrue(swap.isHittable)
+        swap.tap()
+        XCTAssertTrue(app.buttons["日期为行"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["按日"].isHittable)
+        app.buttons["清空人员"].tap()
+    }
+
     func testAssetERPAndInventoryDetailsRestoreTabsOnlyOnTheirLists() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "workspace"]

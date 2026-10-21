@@ -20,6 +20,10 @@ targets:
     info:
       path: TPM/Info.plist
       properties:
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         NSAppTransportSecurity:
           NSExceptionDomains:
             tpm.forbetter.cn:
@@ -35,8 +39,8 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         TARGETED_DEVICE_FAMILY: '1'
         SWIFT_VERSION: '6.0'
-        CURRENT_PROJECT_VERSION: '28'
-        MARKETING_VERSION: '0.7.22'
+        CURRENT_PROJECT_VERSION: '29'
+        MARKETING_VERSION: '0.7.23'
   TPMTests:
     type: bundle.unit-test
     platform: iOS

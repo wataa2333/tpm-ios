@@ -36,7 +36,6 @@ struct NewDocumentButton: ViewModifier {
     var preview = false
     @EnvironmentObject private var navigation: BottomNavigationModel
     @State private var creating: WorkflowKind?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var kind: WorkflowKind { navigation.newDocument ?? .fault }
 
     func body(content: Content) -> some View {
@@ -57,7 +56,7 @@ struct NewDocumentButton: ViewModifier {
                         .transition(.opacity)
                     }
                 }
-                .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.4), value: navigation.hideTabs || navigation.selectingBatch)
+                .interfaceMotion(navigation.hideTabs || navigation.selectingBatch)
             }
             .sheet(item: $creating, onDismiss: {
                 navigation.presentingDocument = false

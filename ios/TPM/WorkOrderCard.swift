@@ -1,10 +1,9 @@
 import SwiftUI
 
 /// One rhythm for every list row and card in the app: 12pt above and below, 16pt at the sides, 6pt between lines,
-/// and a bottom row (time and the expand button) that always has the same height.
+/// and a footer that moves its button below the time when the available width is too small.
 enum RowMetrics {
     static let spacing: CGFloat = 6
-    static let footerHeight: CGFloat = 30
     static let insets = EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
 }
 
@@ -34,6 +33,17 @@ struct WorkOrderCard<Destination: View>: View {
     /// Only the status word takes the state's colour; titles, links and buttons use the theme colour.
     private var emphasis: Color { FaultState.allCases.first { $0.rawValue == status }?.color ?? color }
     private var theme: Color { .accentColor }
+    /// Suppress only fields already visible in the compact header, keeping all other details.
+    private var expandedFacts: [(String, String)] {
+        facts.filter { fact in
+            if fact.1.isEmpty { return true }
+            if ["报修名称", "保养名称", "检查名称", "工单名称"].contains(fact.0) && fact.1 == title { return false }
+            if fact.0 == referenceTitle && fact.1 == reference { return false }
+            if ["报修时间", "创建时间", "申请时间", "出库时间"].contains(fact.0) && fact.1 == time { return false }
+            return !summaryFacts.contains { $0.0 == fact.0 && $0.1 == fact.1 }
+                && !statusNote.contains { $0.0 == fact.0 && $0.1 == fact.1 }
+        }
+    }
     /// In selection mode the card never navigates: tapping it shows the order in a sheet instead.
     private func open() { if let selecting { selecting.peek() } else { opening = true } }
     var body: some View {
@@ -83,31 +93,22 @@ struct WorkOrderCard<Destination: View>: View {
                     .accessibilityIdentifier("order-note-" + reference)
             }
             VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Text(time).font(.subheadline).foregroundStyle(.secondary)
-                    .accessibilityIdentifier("order-time-" + reference)
-                Spacer(minLength: 0)
-                Button { withAnimation(reduceMotion ? nil : .smooth(duration: 0.5)) { expanded.toggle() } } label: {
-                    HStack(spacing: 4) {
-                        Text(expanded ? "收起详情" : "展开详情").font(.subheadline.weight(.medium))
-                        Image(systemName: "chevron.down").font(.caption.weight(.semibold)).rotationEffect(.degrees(expanded ? 180 : 0)).animation(reduceMotion ? nil : .smooth(duration: 0.5), value: expanded)
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12).frame(height: RowMetrics.footerHeight)
-                    .background(Color.accentColor, in: .capsule)
-                    .contentShape(.capsule)
-                }.buttonStyle(.plain)
-                    .accessibilityLabel(expanded ? "收起详情" : "展开详情")
-                    .accessibilityIdentifier("order-expand-" + reference)
+            ViewThatFits(in: .horizontal) {
+                footer
+                VStack(alignment: .trailing, spacing: 6) {
+                    Text(time).font(.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("order-time-" + reference)
+                    expandButton
+                }
             }
             if expanded {
                 VStack(spacing: 10) {
-                    ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
+                    ForEach(Array(expandedFacts.enumerated()), id: \.offset) { _, fact in
                         ReadableFact(title: fact.0, value: fact.1)
                     }
                     Button { open() } label: {
                         Label(selecting == nil ? "打开工单" : "查看工单", systemImage: "arrow.up.right.square").font(.subheadline.weight(.semibold))
-                            .frame(maxWidth: .infinity, minHeight: 32)
+                            .frame(maxWidth: .infinity, minHeight: 44)
                     }.buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.regular)
                         .accessibilityIdentifier("order-open-" + reference)
                 }
@@ -118,6 +119,26 @@ struct WorkOrderCard<Destination: View>: View {
         }
         .padding(selecting == nil ? RowMetrics.insets : EdgeInsets(top: RowMetrics.insets.top, leading: 0, bottom: RowMetrics.insets.bottom, trailing: RowMetrics.insets.trailing))
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    private var footer: some View {
+        HStack(spacing: 12) {
+                Text(time).font(.subheadline).foregroundStyle(.secondary).fixedSize()
+                    .accessibilityIdentifier("order-time-" + reference)
+                Spacer(minLength: 0)
+                expandButton
+        }
+    }
+    private var expandButton: some View {
+        Button { withAnimation(reduceMotion ? nil : .smooth(duration: 0.5)) { expanded.toggle() } } label: {
+            HStack(spacing: 4) {
+                Text(expanded ? "收起详情" : "展开详情").font(.subheadline.weight(.medium))
+                Image(systemName: "chevron.down").font(.caption.weight(.semibold)).rotationEffect(.degrees(expanded ? 180 : 0))
+            }
+            .foregroundStyle(.white).padding(.horizontal, 12)
+            .frame(minHeight: 44).background(Color.accentColor, in: .capsule)
+        }.buttonStyle(.plain).fixedSize()
+            .accessibilityLabel(expanded ? "收起详情" : "展开详情")
+            .accessibilityIdentifier("order-expand-" + reference)
     }
 }
 

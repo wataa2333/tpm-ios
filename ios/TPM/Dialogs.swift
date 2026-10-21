@@ -7,7 +7,7 @@ func endEditing() {
 }
 
 /// The one dialog every confirmation and notice in the app uses: a compact bottom card with a
-/// centred title, optional message, one large primary button and, when wanted, a copy/cancel
+/// centred title, optional message, one large primary button and, when wanted, a cancel
 /// button. It replaces the mix of system action sheets, popover bubbles and alerts, which looked
 /// different from each other and were small.
 struct DialogSheet: View {
@@ -15,7 +15,6 @@ struct DialogSheet: View {
     var message: String? = nil
     let primary: String
     var primaryRole: ButtonRole? = nil
-    var copyText: String? = nil
     var showsCancel = true
     /// An optional second choice between the main button and "取消", e.g. "不保存".
     var secondary: String? = nil
@@ -39,9 +38,6 @@ struct DialogSheet: View {
                 .buttonStyle(.glassProminent).controlSize(.large)
                 .tint(primaryRole == .destructive ? .red : .accentColor)
                 .accessibilityIdentifier("dialog-primary")
-                // Copying is for sending a server or network error to someone; a plain "please choose
-                // an approver" has nothing worth copying.
-                if let copyText, looksLikeServerError(copyText) { CopyButton(text: copyText, title: "复制错误信息").buttonStyle(.glass).controlSize(.large).frame(maxWidth: .infinity) }
                 if let secondary {
                     Button(role: .destructive) { dismiss(); onSecondary() } label: { Text(secondary).font(.headline).frame(maxWidth: .infinity, minHeight: 28) }
                         .buttonStyle(.glass).controlSize(.large)
@@ -77,15 +73,14 @@ extension View {
         }
     }
 
-    /// Tells the user something (a validation problem, a failed request). `copyText` adds a
-    /// copy button; `onClose` runs however the dialog is closed.
-    func noticeDialog(_ title: String, message: String, isPresented: Binding<Bool>, copyText: String? = nil, onClose: @escaping () -> Void = {}) -> some View {
+    /// Tells the user something; `onClose` runs however the dialog is closed.
+    func noticeDialog(_ title: String, message: String, isPresented: Binding<Bool>, onClose: @escaping () -> Void = {}) -> some View {
         sheet(isPresented: isPresented, onDismiss: onClose) {
-            DialogSheet(title: title, message: message, primary: "好", copyText: copyText, showsCancel: false, onPrimary: {})
+            DialogSheet(title: title, message: message, primary: "好", showsCancel: false, onPrimary: {})
         }
     }
 
-    /// Shows a failure or validation message in the app's one dialog, with a copy button. With
+    /// Shows a failure or validation message in the app's one dialog. With
     /// `retry` the main button reads "重试" and runs it. `clearsOnClose` empties the message on close
     /// (forms, so the same message can appear again); otherwise it stays, so a paged list that
     /// failed does not immediately try again by itself.
@@ -141,7 +136,7 @@ struct ErrorDialog: ViewModifier {
                 if !open { acknowledged = true; if clearsOnClose { error = nil } }
             })) {
                 DialogSheet(title: title, message: error ?? shownMessage, primary: retry == nil ? "好" : "重试",
-                            copyText: error ?? shownMessage, showsCancel: retry != nil, onPrimary: { retry?() })
+                            showsCancel: retry != nil, onPrimary: { retry?() })
             }
     }
 }
@@ -189,25 +184,30 @@ extension View {
 
 /// The negative bottom padding only makes sense against the home indicator. With the keyboard up, the
 /// bar's bottom edge is the keyboard's top edge, and pulling it down would hide the buttons' labels
-/// behind the keys, so the padding is normal then. The flag changes once per show/hide, without animation.
+/// behind the keys, so the padding is normal then. Follow the keyboard's own animation timing.
 private struct BottomBarPadding: ViewModifier {
     @State private var keyboardUp = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
         content.padding(.horizontal, 20).padding(.top, 8).padding(.bottom, keyboardUp ? 8 : -14)
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-                var transaction = Transaction(); transaction.disablesAnimations = true
-                withTransaction(transaction) { keyboardUp = true }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
+                updateKeyboard(notification)
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-                var transaction = Transaction(); transaction.disablesAnimations = true
-                withTransaction(transaction) { keyboardUp = false }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
+                updateKeyboard(notification)
             }
+    }
+    private func updateKeyboard(_ notification: Notification) {
+        let change = KeyboardMotionChange(notification)
+        guard keyboardUp != change.visible else { return }
+        withAnimation(change.animation(reduceMotion: reduceMotion)) { keyboardUp = change.visible }
     }
 }
 
 /// A short notice that slides in below the navigation bar, speaks itself to VoiceOver and goes away alone.
 private struct ToastModifier: ViewModifier {
     @Binding var message: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .top) {
@@ -216,12 +216,12 @@ private struct ToastModifier: ViewModifier {
                         .padding(.horizontal, 18).padding(.vertical, 10)
                         .glassEffect(.regular, in: .capsule)
                         .padding(.top, 8).padding(.horizontal, 24)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                         .accessibilityIdentifier("toast")
                         .allowsHitTesting(false)
                 }
             }
-            .animation(.smooth(duration: 0.35), value: message)
+            .interfaceMotion(message, duration: 0.35)
             .onChange(of: message) { _, new in if let new { AccessibilityNotification.Announcement(new).post() } }
             .task(id: message) {
                 guard message != nil else { return }
@@ -241,6 +241,7 @@ extension View {
 /// the page's bottom bar instead. It serves every field, with or without a return key (numbers, a multi-line note).
 private struct KeyboardDismissRow: ViewModifier {
     @State private var keyboardUp = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
         content
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -257,11 +258,16 @@ private struct KeyboardDismissRow: ViewModifier {
                     .transition(.opacity)
                 }
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-                withAnimation(.easeOut(duration: 0.2)) { keyboardUp = true }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
+                updateKeyboard(notification)
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-                withAnimation(.easeOut(duration: 0.2)) { keyboardUp = false }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
+                updateKeyboard(notification)
             }
+    }
+    private func updateKeyboard(_ notification: Notification) {
+        let change = KeyboardMotionChange(notification)
+        guard keyboardUp != change.visible else { return }
+        withAnimation(change.animation(reduceMotion: reduceMotion)) { keyboardUp = change.visible }
     }
 }

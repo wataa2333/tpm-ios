@@ -34,7 +34,7 @@ struct FactorySwitcherButton: View {
             .accessibilityLabel("切换厂区，当前" + session.currentFactoryName)
             // Keep the list current; the stored one comes from sign-in time.
             .task { try? await session.refreshFactories() }
-            .noticeDialog("切换厂区失败", message: failure ?? "", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } }), copyText: failure)
+            .noticeDialog("切换厂区失败", message: failure ?? "", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } }))
     }
     private func change(to id: String) async {
         guard !switching else { return }

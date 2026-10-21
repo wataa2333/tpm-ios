@@ -30,18 +30,14 @@ struct DashboardCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .center) {
-                if let count {
-                    // One line for up to seven digits with their separators: it shrinks instead of wrapping.
-                    Text("\(count)").font(.system(size: 30, weight: .bold, design: .rounded)).monospacedDigit()
-                        .lineLimit(1).minimumScaleFactor(0.45).layoutPriority(1)
-                        .foregroundStyle(.primary)
-                        .contentTransition(.numericText()).animation(.smooth(duration: 0.55), value: count)
-                        .accessibilityIdentifier("dashboard-count-" + title)
-                } else {
-                    // Keeps the row (and so the icon's position) steady while the number is on its way, and
-                    // on cards that show no number at all.
-                    Text("0").font(.system(size: 30, weight: .bold, design: .rounded)).hidden()
-                }
+                // Keep the same text identity from unknown → known; a hidden zero only reserves space.
+                Text(count.map(String.init) ?? "0").font(.system(size: 30, weight: .bold, design: .rounded)).monospacedDigit()
+                    .lineLimit(1).minimumScaleFactor(0.45).layoutPriority(1)
+                    .foregroundStyle(.primary)
+                    .opacity(count == nil ? 0 : 1)
+                    .contentTransition(.numericText()).interfaceMotion(count, duration: 0.55)
+                    .accessibilityHidden(count == nil)
+                    .accessibilityIdentifier("dashboard-count-" + title)
                 Spacer(minLength: 8)
                 Image(systemName: symbol).font(.title2.weight(.semibold)).foregroundStyle(tint)
             }
@@ -208,7 +204,7 @@ struct DashboardHome: View {
         // Pulling down shows the system spinner only and changes nothing on this page until the numbers arrive.
         .overlay(alignment: .top) {
             ProgressView().padding(.top, 6).opacity(loadingCounts || gate.busy ? 1 : 0).allowsHitTesting(false)
-                .animation(.smooth(duration: 0.3), value: loadingCounts || gate.busy)
+                .interfaceMotion(loadingCounts || gate.busy)
         }
         .navigationTitle("主页").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
         .modifier(ListTabVisibility())
@@ -252,6 +248,7 @@ struct DashboardWorkspace: View {
     @StateObject private var gate = ReloadGate()
     @State private var loadingCounts = false
     @State private var route: QuickQuery?
+    @AppStorage(ManagementSettings.enabledKey) private var managementEnabled = false
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
     private func count(_ key: String) -> Int? {
         guard preview else { return counts[key] }
@@ -281,6 +278,12 @@ struct DashboardWorkspace: View {
                 DashboardHeading(title: "快速查询维修")
                 QuickQueryCard(title: "按机台号查询", symbol: "gearshape.2", tint: .purple, placeholder: "输入机台号", seed: 4) { route = QuickQuery(field: .machine, text: $0) }
                 QuickQueryCard(title: "按资产编码查询", symbol: "barcode", tint: .mint, placeholder: "输入编码的尾号或中间一段", seed: 5) { route = QuickQuery(field: .assetCode, text: $0) }
+                if managementEnabled && !preview {
+                    DashboardHeading(title: "管理看板")
+                    NavigationLink { ManagementScreen() } label: {
+                        DashboardCard(title: "人员与工单分析", symbol: "person.3.sequence", tint: .purple, subtitle: "维修待处理 · 处理统计与趋势", wide: true, seed: 6)
+                    }
+                }
                 if preview { DemoNotice() }
             }
             .buttonStyle(DashboardPressStyle())
@@ -299,7 +302,7 @@ struct DashboardWorkspace: View {
         // Pulling down shows the system spinner only and changes nothing on this page until the numbers arrive.
         .overlay(alignment: .top) {
             ProgressView().padding(.top, 6).opacity(loadingCounts || gate.busy ? 1 : 0).allowsHitTesting(false)
-                .animation(.smooth(duration: 0.3), value: loadingCounts || gate.busy)
+                .interfaceMotion(loadingCounts || gate.busy)
         }
         .navigationTitle("工作台").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
         .modifier(ListTabVisibility())

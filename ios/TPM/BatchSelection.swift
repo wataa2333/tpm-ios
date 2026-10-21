@@ -349,7 +349,7 @@ struct BatchHost: ViewModifier {
                         .transition(.opacity)
                 }
             }
-            .animation(.smooth(duration: 0.3), value: batch.active)
+            .interfaceMotion(batch.active)
             .onChange(of: batch.active) { _, active in navigation.selectingBatch = active }
             .onDisappear { if batch.active { batch.end() }; navigation.selectingBatch = false }
             .toast($batch.notice)
@@ -426,6 +426,7 @@ struct BatchBar: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("已选 \(batch.items.count)/\(BatchSelection.limit)").font(.headline).monospacedDigit()
+                        .contentTransition(.numericText())
                     Text(batch.groupTitle).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
@@ -445,7 +446,9 @@ struct BatchBar: View {
                     .accessibilityIdentifier("batch-reject")
                     Button { onRun(.proceed) } label: {
                         HStack(spacing: 8) {
-                            if busy { ProgressView() } else { Image(systemName: action.symbol) }
+                            Group { if busy { ProgressView() } else { Image(systemName: action.symbol) } }
+                                .frame(width: 20, height: 20)
+                                .interfaceMotion(busy, duration: 0.2)
                             Text(action.title).lineLimit(1)
                         }
                         .font(.headline).frame(maxWidth: .infinity, minHeight: 28)
@@ -454,12 +457,15 @@ struct BatchBar: View {
                     .disabled(batch.items.isEmpty || busy)
                     .accessibilityIdentifier("batch-run")
                 }
+                .transition(.opacity)
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
         .frame(maxWidth: .infinity)
         .background(.bar)
         .overlay(alignment: .top) { Divider() }
+        .interfaceMotion(batch.action)
+        .interfaceMotion(batch.items.count, duration: 0.2)
     }
 }
 
@@ -498,11 +504,15 @@ struct BatchPresetSheet: View {
         Binding(get: { preset.outboundLines[index].quantity }, set: { preset.outboundLines[index].quantity = $0 })
     }
     private func addOutbound(_ line: JSONValue) {
-        guard !preset.outboundLines.contains(where: { $0.id == outboundLineIdentity(line) }) else { return }
+        if preset.outboundLines.contains(where: { $0.id == outboundLineIdentity(line) }) {
+            preset.outboundLines.removeAll { $0.id == outboundLineIdentity(line) }; return
+        }
         preset.outboundLines.append(BatchOutboundLine(line: line))
     }
     private func addMaterial(_ material: JSONValue) {
-        guard !preset.materials.contains(where: { $0.material["id"] == material["id"] }) else { return }
+        if preset.materials.contains(where: { $0.material["id"] == material["id"] }) {
+            preset.materials.removeAll { $0.material["id"] == material["id"] }; return
+        }
         preset.materials.append(BatchMaterial(material: material))
     }
 
@@ -533,7 +543,7 @@ struct BatchPresetSheet: View {
             }
             .keyboardManaged()
             .sheet(isPresented: $choosingOutbound) { NavigationStack { ReferencePicker(source: .outboundMaterials, multiple: true, selected: preset.outboundLines.map(\.id)) { addOutbound($0) } } }
-            .sheet(isPresented: $choosingMaterial) { NavigationStack { ReferencePicker(source: .materials, multiple: true) { addMaterial($0) } } }
+            .sheet(isPresented: $choosingMaterial) { NavigationStack { ReferencePicker(source: .materials, multiple: true, selected: preset.materials.map(\.id)) { addMaterial($0) } } }
         }
         .presentationDragIndicator(.visible)
     }
@@ -644,6 +654,7 @@ struct BatchRunSheet: View {
                             Text(headline).font(.subheadline.weight(.medium))
                             Spacer()
                             Text("\(run.processed)/\(run.total)").font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+                                .contentTransition(.numericText()).interfaceMotion(run.processed)
                         }
                     }.padding(.vertical, 4)
                     if let current = run.current {
@@ -653,10 +664,10 @@ struct BatchRunSheet: View {
                 }
                 Section("统计") {
                     LabeledContent("全部", value: "\(run.total)")
-                    LabeledContent("已处理", value: "\(run.processed)")
-                    LabeledContent("完成") { Text("\(run.succeeded.count)").foregroundStyle(.green) }
-                    LabeledContent("跳过") { Text("\(run.skipped.count)").foregroundStyle(run.skipped.isEmpty ? Color.secondary : Color.orange) }
-                    LabeledContent("失败") { Text("\(run.failures.count)").foregroundStyle(run.failures.isEmpty ? Color.secondary : Color.red) }
+                    LabeledContent("已处理") { Text("\(run.processed)").monospacedDigit().contentTransition(.numericText()).interfaceMotion(run.processed) }
+                    LabeledContent("完成") { Text("\(run.succeeded.count)").foregroundStyle(.green).monospacedDigit().contentTransition(.numericText()).interfaceMotion(run.succeeded.count) }
+                    LabeledContent("跳过") { Text("\(run.skipped.count)").foregroundStyle(run.skipped.isEmpty ? Color.secondary : Color.orange).monospacedDigit().contentTransition(.numericText()).interfaceMotion(run.skipped.count) }
+                    LabeledContent("失败") { Text("\(run.failures.count)").foregroundStyle(run.failures.isEmpty ? Color.secondary : Color.red).monospacedDigit().contentTransition(.numericText()).interfaceMotion(run.failures.count) }
                 }
                 if !run.skipped.isEmpty {
                     Section("跳过的单据") {
@@ -666,7 +677,6 @@ struct BatchRunSheet: View {
                                 if !skip.reference.isEmpty { Text(skip.reference).font(.subheadline).foregroundStyle(.secondary) }
                                 Text(skip.message).font(.subheadline).foregroundStyle(.orange).textSelection(.enabled)
                             }
-                            .contextMenu { Button("复制", systemImage: "doc.on.doc") { copyToPasteboard(skip.name + "：" + skip.message) } }
                         }
                     }
                 }
@@ -678,23 +688,27 @@ struct BatchRunSheet: View {
                                 if !failure.reference.isEmpty { Text(failure.reference).font(.subheadline).foregroundStyle(.secondary) }
                                 Text(failure.message).font(.subheadline).foregroundStyle(.red).textSelection(.enabled)
                             }
-                            .contextMenu { Button("复制", systemImage: "doc.on.doc") { copyToPasteboard(failure.name + "：" + failure.message) } }
                         }
                     }
                 }
             }
+            .interfaceMotion(run.running)
+            .interfaceMotion(run.skipped.count)
+            .interfaceMotion(run.failures.count)
             .navigationTitle(run.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 HStack(spacing: 12) {
                     if run.running {
                         Button { run.stop() } label: { Text("停止").font(.headline).frame(maxWidth: .infinity, minHeight: 28) }
                             .buttonStyle(.glass).controlSize(.large).accessibilityIdentifier("batch-stop")
+                            .transition(.opacity)
                     }
                     Button { dismiss() } label: { Text("完成").font(.headline).frame(maxWidth: .infinity, minHeight: 28) }
                         .buttonStyle(.glassProminent).controlSize(.large).disabled(run.running)
                         .accessibilityIdentifier("batch-done")
                 }
                 .padding(.horizontal, 20).padding(.vertical, 8)
+                .interfaceMotion(run.running)
             }
         }
         .interactiveDismissDisabled(true)

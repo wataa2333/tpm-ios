@@ -1,0 +1,244 @@
+import SwiftUI
+
+enum ManagedReadSettings {
+    static let experimentalKey = "developer.managementReadExperiment"
+    static let pageKey = "developer.managementPageSize"
+    static let concurrencyKey = "developer.managementConcurrency"
+}
+
+struct ManagementScreen: View {
+    @EnvironmentObject private var session: LiveSession
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage(ManagementSettings.enabledKey) private var enabled = false
+    @AppStorage(ManagedReadSettings.experimentalKey) private var experimental = false
+    @AppStorage(ManagedReadSettings.pageKey) private var pageSize = 500
+    @AppStorage(ManagedReadSettings.concurrencyKey) private var concurrency = 8
+    @StateObject private var model = ManagementAnalyticsModel()
+    @State private var historical = false
+    @State private var range: DateRange?
+    @State private var choosingDates = false
+    @State private var showNotes = false
+    @State private var showIssues = false
+    @State private var ascending = false
+    @State private var showSigned = true
+    @State private var showWorking = true
+    @State private var confirmation = false
+    @State private var estimate = 0
+    @State private var queryError: String?
+    @State private var estimateTask: Task<Void, Never>?
+    private var people: [ManagedPerson] {
+        model.report.people.filter { historical || (showSigned && $0.signed > 0) || (showWorking && $0.working > 0) }
+            .sorted { a, b in
+                let ac = historical ? a.processed : (showSigned ? a.signed : 0) + (showWorking ? a.working : 0)
+                let bc = historical ? b.processed : (showSigned ? b.signed : 0) + (showWorking ? b.working : 0)
+                return ac == bc ? a.id < b.id : ascending ? ac < bc : ac > bc
+            }
+    }
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                queryControls
+                if historical && model.window != nil && !model.slices.isEmpty {
+                    NavigationLink {
+                        ManagementTrendScreen(model: model)
+                    } label: {
+                        Label("折线图与统计表", systemImage: "chart.xyaxis.line")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }.buttonStyle(.borderedProminent)
+                }
+                HStack {
+                    Text("人员／已加载").font(.headline)
+                    Spacer()
+                    Button(ascending ? "数量升序" : "数量降序", systemImage: ascending ? "arrow.up" : "arrow.down") { ascending.toggle() }
+                        .font(.subheadline).buttonStyle(.bordered)
+                }
+                if !historical {
+                    HStack {
+                        ManagementChoice(title: "待签到", selected: showSigned) { showSigned.toggle() }
+                        ManagementChoice(title: "待完成", selected: showWorking) { showWorking.toggle() }
+                    }
+                    Text("可同时选择两种状态；筛选只影响已加载人员与工单。").font(.caption).foregroundStyle(.secondary)
+                }
+                if people.isEmpty {
+                    ContentUnavailableView(model.slices.isEmpty ? "尚未读取" : "没有匹配工单", systemImage: "person.2", description: Text(model.slices.isEmpty ? "按需读取当前厂区维修工单。" : "请检查状态筛选和读取情况。"))
+                }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+                    ForEach(people) { person in
+                        NavigationLink {
+                            ManagedPersonOrders(model: model, personID: person.id, historical: historical, showSigned: showSigned, showWorking: showWorking)
+                        } label: { personCard(person) }.buttonStyle(.plain)
+                    }
+                }
+                DisclosureGroup("读取情况", isExpanded: $showIssues) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(model.slices) { slice in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(managedStateTitle(slice.state)).font(.subheadline.weight(.medium))
+                                Text("读取 \(slice.offset) 条 · 有效 \(slice.documents.count) 单 · " + (slice.complete ? "结束" : "未完整读取")).font(.caption)
+                                ForEach(slice.reasons.sorted(), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
+                            }
+                        }
+                        if model.report.identityUnclear { Text("缺少唯一身份或账号/ID冲突的记录单列为“执行人未明确”。").font(.caption) }
+                        if model.report.duplicateConflicts { Text("当前待处理存在跨状态冲突，请重新读取。").font(.caption) }
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
+                }
+                DisclosureGroup("统计口径", isExpanded: $showNotes) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("仅维修，无客户端总量上限。当前待处理为 SIGNED 待签到、REPAIRED 待完成；逐单核对详情和维修任务第一条记录的执行人。")
+                        Text("处理统计只含当前 RESOLVED 待复线与 FINISHED 已完结，排除 VERIFIED。按维修结束时间 repairEndTime 筛选，不代表完整绩效。")
+                        Text("处理统计按业务编号计一次，后读记录覆盖前读；最新状态或日期离开范围会移除。全部合计包含身份未明确的工单，不随图表人员勾选变化。")
+                        Text("暂停或失败时仅显示已加载数据。失败可从上次已提交分页继续；同一次读取的页大小与详情并发保持不变。统计不是实时一致性快照。")
+                    }.font(.footnote).padding(.top, 8)
+                }
+            }.padding(16)
+        }
+        .background(Color(uiColor: .systemGroupedBackground))
+        .navigationTitle("维修管理分析").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .modifier(DetailTabVisibility())
+        .interfaceMotion(historical).interfaceMotion(ascending).interfaceMotion(showSigned).interfaceMotion(showWorking)
+        .interfaceMotion(showIssues).interfaceMotion(showNotes).interfaceMotion(model.running)
+        .sheet(isPresented: $choosingDates) {
+            ManagementDateRangePicker(initial: range) { range = $0; model.clear() }
+        }
+        .alert("确认读取维修工单", isPresented: $confirmation) {
+            Button("取消", role: .cancel) { }
+            Button("开始读取") { start(restart: true) }
+        } message: {
+            Text("预估 \(estimate) 单。" + ((range.map { ManagedWindow(range: $0).requiresLargeFetchConfirmation } ?? false) && historical ? "范围超过 7 天，建议在趋势页使用横屏。" : "") + "待处理需逐单读取详情与执行人，数据较多时可暂停。")
+        }
+        .errorDialog($queryError, title: "读取失败", clearsOnClose: true)
+        .onChange(of: historical) { cancelEstimate(); model.clear() }
+        .onChange(of: session.scopeRevision) { cancelEstimate(); model.clear() }
+        .onChange(of: enabled) { _, value in if !value { cancelEstimate(); model.clear(); dismiss() } }
+        .onDisappear { cancelEstimate(); model.pause() }
+    }
+    private var queryControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(session.currentFactoryName).font(.headline)
+            Text("只读取当前账号、当前厂区可见的维修数据。").font(.footnote).foregroundStyle(.secondary)
+            HStack {
+                ManagementChoice(title: "当前待处理", selected: !historical) { historical = false }
+                ManagementChoice(title: "处理统计", selected: historical) { historical = true }
+            }
+            if historical {
+                Button { choosingDates = true } label: {
+                    Label(range.map { let w = ManagedWindow(range: $0); return w.from + " 至 " + w.to } ?? "先选择维修结束日期", systemImage: "calendar")
+                        .font(.subheadline).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }.buttonStyle(.bordered).disabled(model.running || model.estimating)
+                Text("待复线＋已完结 · 按维修结束时间").font(.caption).foregroundStyle(.secondary)
+            }
+            Text(model.status).font(.subheadline).foregroundStyle(.secondary).accessibilityIdentifier("management-status")
+            if model.running || model.estimating { ProgressView().frame(maxWidth: .infinity, alignment: .leading) }
+            if model.running {
+                Button("暂停读取", systemImage: "pause") { model.pause() }.buttonStyle(.bordered)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack { readButtons }
+                    VStack(alignment: .leading) { readButtons }
+                }.disabled(model.estimating || historical && range == nil)
+            }
+            if let first = model.slices.first { Text("本次每页 \(first.pageSize) · 详情并发 \(model.detailConcurrency)").font(.caption).foregroundStyle(.secondary) }
+        }.padding(16).background(.background, in: RoundedRectangle(cornerRadius: 20))
+    }
+    @ViewBuilder private var readButtons: some View {
+        if model.hasUnfinished { Button("继续／重试", systemImage: "play") { start(restart: false) }.buttonStyle(.borderedProminent) }
+        Button(model.slices.isEmpty ? "预估并读取" : "重新读取", systemImage: "arrow.clockwise") { prepare() }.buttonStyle(.bordered)
+    }
+    private func personCard(_ person: ManagedPerson) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(person.name).font(.headline).foregroundStyle(.primary)
+            Text(person.identity).font(.caption).foregroundStyle(.secondary)
+            if historical { Text("处理 \(person.processed) 单").font(.subheadline).foregroundStyle(Color.accentColor) }
+            else {
+                if showSigned { Text("待签到 \(person.signed)").font(.subheadline).foregroundStyle(Color.accentColor) }
+                if showWorking { Text("待完成 \(person.working)").font(.subheadline).foregroundStyle(Color.accentColor) }
+            }
+        }.frame(maxWidth: .infinity, minHeight: 100, alignment: .topLeading).padding(12)
+            .background(.background, in: RoundedRectangle(cornerRadius: 16)).contentShape(.rect)
+    }
+    private func start(restart: Bool) {
+        model.start(session: session, days: nil, restart: restart, range: historical ? range : nil,
+                    pageSize: experimental ? pageSize : 500, concurrency: experimental ? concurrency : 8)
+    }
+    private func cancelEstimate() { estimateTask?.cancel(); estimateTask = nil; confirmation = false }
+    private func prepare() {
+        estimateTask?.cancel()
+        estimateTask = Task {
+            do {
+                estimate = try await model.estimate(session: session, historical: historical, range: range)
+                try Task.checkCancellation()
+                confirmation = true
+            } catch { if !isCancellation(error) { queryError = error.localizedDescription } }
+        }
+    }
+}
+
+struct ManagementChoice: View {
+    let title: String
+    let selected: Bool
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if selected { Image(systemName: "checkmark").font(.caption.weight(.bold)).transition(.opacity) }
+                Text(title).font(.subheadline.weight(.medium)).fixedSize(horizontal: false, vertical: true)
+            }.frame(minHeight: 32).padding(.horizontal, 10).padding(.vertical, 4)
+                .foregroundStyle(selected ? Color.white : Color.primary)
+                .background(selected ? Color.accentColor : Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+        }.buttonStyle(.plain).accessibilityLabel(title).accessibilityAddTraits(selected ? .isSelected : []).interfaceMotion(selected, duration: 0.2)
+    }
+}
+
+func managedStateTitle(_ state: String) -> String {
+    ["SIGNED": "待签到", "REPAIRED": "待完成", "RESOLVED": "待复线", "FINISHED": "已完结"][state] ?? state
+}
+
+private struct ManagedPersonOrders: View {
+    @ObservedObject var model: ManagementAnalyticsModel
+    let personID: String
+    let historical: Bool
+    var showSigned = true
+    var showWorking = true
+    @EnvironmentObject private var session: LiveSession
+    @State private var state = ""
+    private var person: ManagedPerson? { model.report.people.first { $0.id == personID } }
+    private var rows: [ManagedDocument] {
+        (person?.documents ?? []).filter { doc in
+            (historical || showSigned && doc.state == "SIGNED" || showWorking && doc.state == "REPAIRED") && (state.isEmpty || doc.state == state)
+        }.sorted { $0.id < $1.id }
+    }
+    var body: some View {
+        List {
+            Section {
+                Text(person?.identity ?? "当前范围内没有此执行人的已加载记录。").font(.subheadline).foregroundStyle(.secondary)
+                Text(model.status).font(.footnote).foregroundStyle(.secondary)
+                Picker("状态", selection: $state) {
+                    Text("全部已选状态").tag("")
+                    if historical { Text("待复线").tag("RESOLVED"); Text("已完结").tag("FINISHED") }
+                    else {
+                        if showSigned { Text("待签到").tag("SIGNED") }
+                        if showWorking { Text("待完成").tag("REPAIRED") }
+                    }
+                }
+            }
+            Section("仅已加载记录 · \(rows.count) 单") {
+                ForEach(rows) { doc in
+                    NavigationLink {
+                        LiveWorkflowDetail(kind: .fault, id: doc.businessID)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(doc.title).font(.headline)
+                            Text(managedStateTitle(doc.state)).font(.subheadline).foregroundStyle(.secondary)
+                            Text(doc.number.isEmpty ? "业务编号：" + doc.businessID : "单号：" + doc.number).font(.caption).foregroundStyle(.secondary)
+                            if historical { Text("维修结束：" + doc.end).font(.caption).foregroundStyle(.secondary) }
+                        }.padding(.vertical, 3)
+                    }
+                }
+                if rows.isEmpty { Text("已加载范围内没有匹配工单。").foregroundStyle(.secondary) }
+            }
+        }
+        .navigationTitle(person?.name ?? "人员工单").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .modifier(DetailTabVisibility()).interfaceMotion(state)
+        .onChange(of: session.scopeRevision) { model.clear() }
+    }
+}

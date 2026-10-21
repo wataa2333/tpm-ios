@@ -58,7 +58,7 @@ struct ReadOnlyPoolView: View {
                     }
                 }
                 if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无待接单工单") }
-            }.opacity((loading || gate.busy) && !moreLoading ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
+            }.opacity((loading || gate.busy) && !moreLoading ? 0.4 : 1).interfaceMotion(loading || gate.busy, duration: 0.4)
             LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || moreLoading, loaded: rows.count, total: total) { await load(more: true) }
         }
         .searchPageChrome(isSearching: searching)
@@ -66,7 +66,7 @@ struct ReadOnlyPoolView: View {
         .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(ListTabVisibility())
         .reloadsToTop(on: gate.id("\(byAsset)-\(query)"))
-        .animation(.smooth(duration: 0.45), value: loading || gate.busy)
+        .interfaceMotion(loading || gate.busy, duration: 0.45)
         .refreshButton(busy: loading || moreLoading || gate.busy) { gate.request() }
         .errorDialog($error, retry: { Task { await load() } })
         .task(id: gate.id("\(byAsset)-\(query)")) { await gate.run(key: "\(byAsset)-\(query)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await load() }) }

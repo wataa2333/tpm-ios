@@ -97,7 +97,10 @@ final class OriginalFormModel: ObservableObject {
     }
     func addMaterial(_ material: JSONValue) {
         var lines = data["erpMaterialOutbounds"]?.array ?? []
-        guard !lines.contains(where: { $0["material"]["id"] == material["id"] }) else { error = "已选择此出库物料"; return }
+        if lines.contains(where: { $0["material"]["id"] == material["id"] }) {
+            lines.removeAll { $0["material"]["id"] == material["id"] }
+            data["erpMaterialOutbounds"] = .array(lines); return
+        }
         lines.append(.object(["material": material, "id": .object(["imaterialId": material["id"], "outboundId": data["outboundId"] ?? .null]), "entryQuantity": .number(1)]))
         data["erpMaterialOutbounds"] = .array(lines)
     }
@@ -283,6 +286,7 @@ struct ReferencePicker: View {
             if multiple {
                 Button { finishPicking() } label: {
                     Text(picked.isEmpty ? "完成" : "完成（已选 \(picked.count) 项）").font(.headline).frame(maxWidth: .infinity, minHeight: 28)
+                        .contentTransition(.numericText()).interfaceMotion(picked.count, duration: 0.2)
                 }
                 .buttonStyle(.glassProminent).controlSize(.large)
                 .padding(.horizontal, 20).padding(.vertical, 8)
@@ -305,11 +309,16 @@ struct ReferencePicker: View {
                     }
                 }
                 Spacer()
-                if picked.contains(identity(value)) { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
+                Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
+                    .frame(width: 22)
+                    .opacity(picked.contains(identity(value)) ? 1 : 0)
+                    .accessibilityHidden(true)
+                    .interfaceMotion(picked.contains(identity(value)), duration: 0.2)
             }
             // The empty space to the right of the text takes the tap too, not only the words.
             .frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect)
         }.buttonStyle(.plain).uniformRow()
+            .accessibilityAddTraits(picked.contains(identity(value)) ? .isSelected : [])
             .referenceMenu(for: value)
     }
     private func finishPicking() { endEditing(); searching = false; dismiss() }
@@ -331,10 +340,19 @@ struct ReferencePicker: View {
         return line.isEmpty ? [] : [line]
     }
     private func select(_ value: JSONValue) async {
-        if preview { choose(value); if !multiple { searching = false; dismiss() }; return }
         guard !selecting else { return }
+        // Deselect before resolving or checking stock: a selected line must always be removable.
+        if multiple && picked.contains(identity(value)) {
+            choose(value)
+            picked.remove(identity(value))
+            return
+        }
+        if preview {
+            choose(value)
+            if multiple { picked.insert(identity(value)) } else { searching = false; dismiss() }
+            return
+        }
         if source == .outboundMaterials {
-            if picked.contains(identity(value)) { notice = "这条出库物料已经选择过了。"; return }
             if available(value) < 1 { notice = "这条出库物料的可用数量小于 1，不能选择。"; return }
         }
         selecting = true
@@ -759,7 +777,7 @@ struct OriginalERPForm: View {
                             save: { keepDraft() }, submit: { prepare(true) })
         }
         .toast($toast)
-        .sheet(isPresented: $selecting) { NavigationStack { ReferencePicker(source: .materials, multiple: true) { model.addMaterial($0) } } }
+        .sheet(isPresented: $selecting) { NavigationStack { ReferencePicker(source: .materials, multiple: true, selected: (model.data["erpMaterialOutbounds"]?.array ?? []).map { $0["material"]["id"].text }) { model.addMaterial($0) } } }
         .task {
             guard !model.ready else { return }
             if preview {

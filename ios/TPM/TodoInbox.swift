@@ -35,7 +35,7 @@ struct TodoInboxView: View {
                                     selectable: entry.map { batch.isSelectable($0) } ?? false, batch: batch).equatable()
                     }
                     if rows.isEmpty && !loading && error == nil { CompactEmptyState(title: "暂无待办") }
-                }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).animation(.easeInOut(duration: 0.4), value: loading || gate.busy)
+                }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).interfaceMotion(loading || gate.busy, duration: 0.4)
                 LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await load(more: true) }
             }
         }
@@ -44,7 +44,7 @@ struct TodoInboxView: View {
         .searchPageChrome(largeTitle: true)
         .nativeSearchable(text: $query, prompt: "搜索待办名称")
         .reloadsToTop(on: gate.id("\(navigation.refresh)-\(query)"))
-        .animation(.smooth(duration: 0.45), value: loading || gate.busy)
+        .interfaceMotion(loading || gate.busy, duration: 0.45)
         .rootTopBar(preview: preview, busy: loading || loadingMore || gate.busy) { gate.request() }
         .modifier(TodoBatchHost(enabled: !preview, batch: batch) { rows.compactMap { batchItem(todo: $0) } })
         .errorDialog($error, retry: { Task { await load() } })
