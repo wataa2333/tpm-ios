@@ -228,7 +228,7 @@ struct ManagementTrendScreen: View {
     }
     private func requestLandscape() {
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }) else { return }
-        if originalOrientation == nil { originalOrientation = scene.interfaceOrientation }
+        if originalOrientation == nil { originalOrientation = scene.effectiveGeometry.interfaceOrientation }
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape)) { error in
             Task { @MainActor in orientationError = "系统未允许切换，可手动旋转设备：" + error.localizedDescription }
         }
@@ -306,7 +306,7 @@ private struct ManagementTrendTable: View {
         .accessibilityLabel("维修处理统计表，空白 — 表示数量尚未明确")
         .onChange(of: swapped) { horizontalOffset = 0 }
     }
-    @ViewBuilder private func movingHeader<Content: View>(driving: Bool = false, @ViewBuilder content: () -> Content) -> some View {
+    @ViewBuilder private func movingHeader<Content: View>(driving: Bool = false, @ViewBuilder content: @escaping () -> Content) -> some View {
         if driving {
             ScrollView(.horizontal) { content() }
                 .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x + $0.contentInsets.leading } action: { _, value in horizontalOffset = value }
