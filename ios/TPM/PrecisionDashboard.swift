@@ -6,6 +6,7 @@ struct PrecisionDashboardScreen: View {
     @EnvironmentObject private var queries: QueryAccountModel
     @StateObject private var model = PrecisionDashboardModel()
     @State private var search = ""
+    @State private var searching = false
     @State private var grade = "全部"
     @State private var shown = 20
     private var context: String { session.scopeRevision.uuidString + queries.revision.uuidString }
@@ -62,7 +63,6 @@ struct PrecisionDashboardScreen: View {
                     PrecisionDateDistribution(rows: data.rows)
                     PrecisionPanel {
                         Text("设备检测明细").font(.headline)
-                        TextField("搜索机台号、编码、名称或等级", text: $search).textFieldStyle(.roundedBorder)
                         ScrollView(.horizontal) {
                             HStack(spacing: 8) {
                                 ForEach(["全部"] + precisionGrades, id: \.self) { value in
@@ -92,6 +92,8 @@ struct PrecisionDashboardScreen: View {
         .background(Color(uiColor: .systemGroupedBackground))
         .navigationTitle("精密度检查看板").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility())
+        .nativeSearchable(text: $search, isPresented: $searching, prompt: "机台号、编码、名称或等级")
+        .scrollDismissesKeyboard(.interactively)
         .task(id: context) { await model.enter(owner: session, queries: queries) }
         .onChange(of: search) { shown = 20 }.onChange(of: grade) { shown = 20 }
         .refreshable { await model.refresh(owner: session, queries: queries) }
@@ -134,6 +136,11 @@ private struct PrecisionDateDistribution: View {
     @State private var days = 30
     @State private var visibleDays = 14.0
     @State private var magnifyStart: Double?
+    @State private var selectedIndex: Int?
+    private var selectedPoint: (String, Int)? {
+        guard let selectedIndex, dates.indices.contains(selectedIndex) else { return nil }
+        return dates[selectedIndex]
+    }
     private var dates: [(String, Int)] {
         let grouped = Dictionary(grouping: rows.compactMap { managementDay($0["analysisDate"]) }, by: { $0 }).mapValues(\.count)
         let from = days == 0 ? "" : serverDate(Calendar.current.date(byAdding: .day, value: -(days - 1), to: Date()) ?? Date(), dateOnly: true)
@@ -152,14 +159,26 @@ private struct PrecisionDateDistribution: View {
         PrecisionPanel {
             Text("检测日期分布").font(.headline)
             Picker("日期范围", selection: $days) { Text("7天").tag(7); Text("30天").tag(30); Text("90天").tag(90); Text("全部").tag(0) }.pickerStyle(.segmented)
-            Text("当前分析结果的检测日期分布，并非历史每日新增；左右拖动、双指缩放。").font(.caption).foregroundStyle(.secondary)
+            Text("当前分析结果的检测日期分布，并非历史每日新增；点选查看台数，左右拖动、双指缩放。").font(.caption).foregroundStyle(.secondary)
             if dates.isEmpty { Text("该范围暂无检测日期").font(.subheadline) }
             else {
-                Chart(Array(dates.enumerated()), id: \.offset) { index, point in
+                Chart {
+                    ForEach(Array(dates.enumerated()), id: \.offset) { index, point in
                     LineMark(x: .value("日期", index), y: .value("台数", point.1)).foregroundStyle(Color.accentColor).interpolationMethod(.monotone)
-                    PointMark(x: .value("日期", index), y: .value("台数", point.1)).foregroundStyle(Color.accentColor).symbolSize(12)
+                    PointMark(x: .value("日期", index), y: .value("台数", point.1)).foregroundStyle(Color.accentColor).symbolSize(selectedIndex == index ? 75 : 12)
+                    }
+                    if let selectedIndex, dates.indices.contains(selectedIndex) {
+                        RuleMark(x: .value("选中日期", selectedIndex)).foregroundStyle(Color.secondary)
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    }
                 }
+                .chartXScale(domain: 0...max(1, dates.count - 1))
+                .chartYScale(domain: 0...max(1, dates.map { $0.1 }.max() ?? 1))
                 .chartScrollableAxes(.horizontal).chartXVisibleDomain(length: min(visibleDays, Double(max(2, dates.count))))
+                .chartXSelection(value: $selectedIndex)
+                .chartGesture { proxy in
+                    SpatialTapGesture().onEnded { value in proxy.selectXValue(at: value.location.x) }
+                }
                 .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { value in
                     AxisGridLine(); AxisTick(); AxisValueLabel { if let index = value.as(Int.self), dates.indices.contains(index) { Text(String(dates[index].0.suffix(5))) } }
                 } }
@@ -168,7 +187,16 @@ private struct PrecisionDateDistribution: View {
                     if magnifyStart == nil { magnifyStart = visibleDays }
                     visibleDays = min(Double(max(2, dates.count)), max(2, (magnifyStart ?? 14) / Double(value.magnification)))
                 }.onEnded { _ in magnifyStart = nil })
+                if let point = selectedPoint {
+                    HStack {
+                        Text(point.0).font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Text("\(point.1) 台").font(.headline).foregroundStyle(Color.accentColor).monospacedDigit()
+                    }.accessibilityElement(children: .combine).accessibilityIdentifier("precision-selected-value")
+                }
             }
         }
+        .onChange(of: days) { selectedIndex = nil }
+        .onChange(of: dates.map { $0.0 + ":" + String($0.1) }) { selectedIndex = nil }
     }
 }

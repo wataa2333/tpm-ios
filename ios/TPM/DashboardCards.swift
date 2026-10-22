@@ -281,10 +281,7 @@ struct DashboardWorkspace: View {
                 if !preview {
                     DashboardHeading(title: "精密度看板")
                     NavigationLink { PrecisionDashboardScreen() } label: {
-                        HStack {
-                            DashboardCard(title: "精密度检查看板", symbol: "scope", tint: .teal, subtitle: "017CNC覆盖率 · 等级与逐项数值", wide: true, seed: 7)
-                            Image(systemName: "chevron.right").foregroundStyle(.secondary)
-                        }
+                        DashboardCard(title: "精密度检查看板", symbol: "scope", tint: .teal, subtitle: "017CNC覆盖率 · 等级与逐项数值", wide: true, seed: 7)
                     }
                 }
                 if managementEnabled && !preview {
