@@ -28,6 +28,7 @@ struct ManagementScreen: View {
     @State private var estimate = 0
     @State private var queryError: String?
     @State private var estimateTask: Task<Void, Never>?
+    @State private var needsFreshOrders = false
     private var people: [ManagedPerson] {
         model.report.people.filter { historical || (showSigned && $0.signed > 0) || (showWorking && $0.working > 0) }
             .sorted { a, b in
@@ -46,7 +47,7 @@ struct ManagementScreen: View {
                             if let date = model.cachedAt {
                                 Text(date.formatted(date: .numeric, time: .shortened)).font(.caption)
                             }
-                            Text("点击“重新读取”获取最新数据。").font(.caption)
+                            Text("仅保留统计数值；查看具体单据需重新读取。").font(.caption)
                         }
                     } icon: { Image(systemName: "clock.arrow.circlepath") }
                     .frame(maxWidth: .infinity, alignment: .leading).padding(12)
@@ -83,9 +84,13 @@ struct ManagementScreen: View {
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
                     ForEach(people) { person in
-                        NavigationLink {
-                            ManagedPersonOrders(model: model, personID: person.id, historical: historical, showSigned: showSigned, showWorking: showWorking)
-                        } label: { personCard(person) }.buttonStyle(.plain)
+                        if model.summaryOnly {
+                            Button { needsFreshOrders = true } label: { personCard(person) }.buttonStyle(.plain)
+                        } else {
+                            NavigationLink {
+                                ManagedPersonOrders(model: model, personID: person.id, historical: historical, showSigned: showSigned, showWorking: showWorking)
+                            } label: { personCard(person) }.buttonStyle(.plain)
+                        }
                     }
                 }
                 DisclosureGroup("读取情况", isExpanded: $showIssues) {
@@ -126,6 +131,12 @@ struct ManagementScreen: View {
             Text("预估 \(estimate) 单。" + ((range.map { ManagedWindow(range: $0).requiresLargeFetchConfirmation } ?? false) && historical ? "范围超过 7 天，建议在趋势页使用横屏。" : "") + "待处理需逐单读取详情与执行人，数据较多时可暂停。")
         }
         .errorDialog($queryError, title: "读取失败", clearsOnClose: true)
+        .alert("需要重新获取单据", isPresented: $needsFreshOrders) {
+            Button("取消", role: .cancel) { }
+            Button("重新获取") { prepare() }
+        } message: {
+            Text("上次数据仅保留统计数值，未保存具体单据。查看人员工单前必须重新读取。")
+        }
         .onAppear { restorePrevious() }
         .onChange(of: historical) {
             cancelEstimate()

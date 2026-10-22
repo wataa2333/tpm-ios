@@ -36,6 +36,15 @@ func managedTrendBuckets(report: ManagedReport, window: ManagedWindow, grain: Ma
     }
     let indices = Dictionary(uniqueKeysWithValues: buckets.enumerated().map { ($0.element.id, $0.offset) })
     for person in report.people {
+        if let days = person.savedDays {
+            for (day, count) in days {
+                let key = String(day.prefix(grain == .day ? 10 : 7))
+                guard let index = indices[key] else { continue }
+                buckets[index].counts[person.id, default: 0] += count
+                buckets[index].total += count
+            }
+            continue
+        }
         for doc in person.documents where ["RESOLVED", "FINISHED"].contains(doc.state) {
             let key = String(doc.end.prefix(grain == .day ? 10 : 7))
             guard let index = indices[key] else { continue }
