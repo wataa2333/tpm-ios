@@ -322,48 +322,64 @@ private struct ManagementTrendTable: View {
     private var rowTitles: [String] { swapped ? names : buckets.map(\.label) }
     private var columnTitles: [String] { swapped ? buckets.map(\.label) : names }
     var body: some View {
-        ScrollView(.horizontal) {
+        HStack(alignment: .top, spacing: 0) {
             VStack(spacing: 0) {
-                HStack(spacing: 0) {
-                    fixedRow(swapped ? "人员" : "日期", "合计", header: true)
-                    ForEach(columnTitles.indices, id: \.self) { column in
-                        cell(columnTitles[column], header: true)
-                            .overlay { selectionShade(date: swapped ? column : nil, series: swapped ? nil : names[column]) }
-                            .contentShape(.rect)
-                            .onTapGesture { select(date: swapped ? column : nil, series: swapped ? nil : names[column]) }
-                    }
-                }
+                fixedRow(swapped ? "人员" : "日期", "合计", header: true)
                 if swapped {
-                    HStack(spacing: 0) {
-                        fixedRow("全部合计", text(fixedTotal(0)), header: true)
-                        ForEach(buckets.indices, id: \.self) { column in
-                            cell(text(value(0, column)), header: true)
-                                .overlay { selectionShade(date: column, series: "全部合计") }
-                                .contentShape(.rect)
-                                .onTapGesture { select(date: column, series: "全部合计") }
-                        }
-                    }
+                    fixedRow("全部合计", text(fixedTotal(0)), header: true)
+                        .overlay { selectionShade(date: nil, series: "全部合计") }
+                        .contentShape(.rect)
+                        .onTapGesture { select(date: nil, series: "全部合计") }
                 }
                 ForEach(rowTitles.indices, id: \.self) { row in
-                    HStack(spacing: 0) {
-                        fixedRow(rowTitles[row], text(fixedTotal(swapped ? row + 1 : row)), header: false)
-                            .overlay { selectionShade(date: swapped ? nil : row, series: swapped ? names[row] : nil) }
-                            .contentShape(.rect)
-                            .onTapGesture { select(date: swapped ? nil : row, series: swapped ? names[row] : "全部合计") }
-                        ForEach(columnTitles.indices, id: \.self) { column in
-                            cell(text(value(swapped ? row + 1 : row, column)), header: false)
-                                .overlay { selectionShade(date: swapped ? column : row, series: swapped ? names[row] : names[column]) }
-                                .contentShape(.rect)
-                                .onTapGesture { select(date: swapped ? column : row, series: swapped ? names[row] : names[column]) }
-                        }
-                    }
+                    fixedRow(rowTitles[row], text(fixedTotal(swapped ? row + 1 : row)), header: false)
+                        .overlay { selectionShade(date: swapped ? nil : row, series: swapped ? names[row] : nil) }
+                        .contentShape(.rect)
+                        .onTapGesture { select(date: swapped ? nil : row, series: swapped ? names[row] : "全部合计") }
                 }
             }
+            .fixedSize(horizontal: true, vertical: false)
+            .overlay(alignment: .trailing) {
+                Rectangle().fill(Color(uiColor: .separator)).frame(width: 0.5).allowsHitTesting(false)
+            }
+            ScrollView(.horizontal) {
+                VStack(spacing: 0) {
+                    HStack(spacing: 0) {
+                        ForEach(columnTitles.indices, id: \.self) { column in
+                            cell(columnTitles[column], header: true)
+                                .overlay { selectionShade(date: swapped ? column : nil, series: swapped ? nil : names[column]) }
+                                .contentShape(.rect)
+                                .onTapGesture { select(date: swapped ? column : nil, series: swapped ? nil : names[column]) }
+                        }
+                    }
+                    if swapped {
+                        HStack(spacing: 0) {
+                            ForEach(buckets.indices, id: \.self) { column in
+                                cell(text(value(0, column)), header: true)
+                                    .overlay { selectionShade(date: column, series: "全部合计") }
+                                    .contentShape(.rect)
+                                    .onTapGesture { select(date: column, series: "全部合计") }
+                            }
+                        }
+                    }
+                    ForEach(rowTitles.indices, id: \.self) { row in
+                        HStack(spacing: 0) {
+                            ForEach(columnTitles.indices, id: \.self) { column in
+                                cell(text(value(swapped ? row + 1 : row, column)), header: false)
+                                    .overlay { selectionShade(date: swapped ? column : row, series: swapped ? names[row] : names[column]) }
+                                    .contentShape(.rect)
+                                    .onTapGesture { select(date: swapped ? column : row, series: swapped ? names[row] : names[column]) }
+                            }
+                        }
+                    }
+                }.fixedSize(horizontal: true, vertical: false)
+            }
+            .scrollEdgeEffectHidden(true, for: .horizontal)
         }
+        .frame(height: CGFloat(rowTitles.count + (swapped ? 2 : 1)) * rowHeight, alignment: .top)
         .background(Color(uiColor: .secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 14))
-        .scrollEdgeEffectHidden(true, for: .horizontal)
-        .accessibilityLabel("维修处理统计表，横向滑动查看更多列，空白 — 表示数量尚未明确")
+        .accessibilityLabel("维修处理统计表，左侧名称和合计固定，横向滑动查看更多列，空白 — 表示数量尚未明确")
     }
     private func select(date: Int?, series: String?) {
         if let date { selectedIndex = date }
@@ -382,13 +398,13 @@ private struct ManagementTrendTable: View {
             Text(total).font(.caption.monospacedDigit()).frame(width: 40)
         }.padding(.horizontal, 6).frame(height: rowHeight)
             .background(header ? Color.accentColor.opacity(0.1) : Color.clear)
-            .overlay(alignment: .bottom) { Divider() }
+
     }
     private func cell(_ title: String, header: Bool) -> some View {
         Text(title).font(header ? .caption.weight(.semibold) : .caption.monospacedDigit())
             .frame(width: columnWidth, height: rowHeight).padding(.horizontal, 4)
             .background(header ? Color.accentColor.opacity(0.1) : Color(uiColor: .secondarySystemGroupedBackground))
-            .overlay(alignment: .bottom) { Divider() }
+
     }
     private func fixedTotal(_ row: Int) -> Int? {
         let total: Int
