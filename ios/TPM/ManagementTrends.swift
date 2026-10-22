@@ -140,7 +140,7 @@ struct ManagementTrendScreen: View {
         .toolbarBackground(.regularMaterial, for: .navigationBar)
         .toolbarBackgroundVisibility(.visible, for: .navigationBar)
         .modifier(DetailTabVisibility())
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("横屏", systemImage: "rectangle.landscape.rotate") { requestLandscape() } } }
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("切换屏幕方向", systemImage: "rectangle.landscape.rotate") { toggleOrientation() } } }
         .alert("建议横屏查看", isPresented: $suggestLandscape) {
             Button("继续竖屏", role: .cancel) { }
             Button("切换横屏") { requestLandscape() }
@@ -292,10 +292,15 @@ struct ManagementTrendScreen: View {
         let repeated = people.filter { $0.name == person.name }.count > 1
         return repeated ? person.name + "（" + person.identity + "）" : person.name
     }
-    private func requestLandscape() {
+    private func toggleOrientation() {
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }) else { return }
+        requestOrientation(scene.effectiveGeometry.interfaceOrientation.isLandscape ? .portrait : .landscape)
+    }
+    private func requestLandscape() { requestOrientation(.landscape) }
+    private func requestOrientation(_ mask: UIInterfaceOrientationMask) {
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }) else { return }
         if originalOrientation == nil { originalOrientation = scene.effectiveGeometry.interfaceOrientation }
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape)) { error in
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in
             Task { @MainActor in orientationError = "系统未允许切换，可手动旋转设备：" + error.localizedDescription }
         }
     }
