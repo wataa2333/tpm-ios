@@ -37,6 +37,19 @@ struct ManagementScreen: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                if model.showingPrevious {
+                    Label {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("上次读取的数据，非最新").font(.subheadline.weight(.semibold))
+                            if let date = model.cachedAt {
+                                Text(date.formatted(date: .numeric, time: .shortened)).font(.caption)
+                            }
+                            Text("点击“重新读取”获取最新数据。").font(.caption)
+                        }
+                    } icon: { Image(systemName: "clock.arrow.circlepath") }
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                    .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                }
                 queryControls
                 if historical && model.window != nil && !model.slices.isEmpty {
                     NavigationLink {
@@ -107,10 +120,21 @@ struct ManagementScreen: View {
             Text("预估 \(estimate) 单。" + ((range.map { ManagedWindow(range: $0).requiresLargeFetchConfirmation } ?? false) && historical ? "范围超过 7 天，建议在趋势页使用横屏。" : "") + "待处理需逐单读取详情与执行人，数据较多时可暂停。")
         }
         .errorDialog($queryError, title: "读取失败", clearsOnClose: true)
-        .onChange(of: historical) { cancelEstimate(); model.clear() }
-        .onChange(of: session.scopeRevision) { cancelEstimate(); model.clear() }
+        .onAppear { restorePrevious() }
+        .onChange(of: historical) {
+            cancelEstimate()
+            if historical != (model.window != nil) { model.clear() }
+        }
+        .onChange(of: session.scopeRevision) { cancelEstimate(); model.clear(); restorePrevious() }
         .onChange(of: enabled) { _, value in if !value { cancelEstimate(); model.clear(); dismiss() } }
         .onDisappear { cancelEstimate(); model.pause() }
+    }
+    private func restorePrevious() {
+        model.restorePrevious(session: session)
+        if !model.slices.isEmpty {
+            historical = model.window != nil
+            range = model.cachedRange
+        }
     }
     private var queryControls: some View {
         VStack(alignment: .leading, spacing: 12) {

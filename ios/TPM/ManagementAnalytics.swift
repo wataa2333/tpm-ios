@@ -1,9 +1,10 @@
 import Foundation
 import SwiftUI
+import CryptoKit
 
 enum ManagementSettings { static let enabledKey = "developer.managementDashboard" }
 
-enum ManagedKind: String, CaseIterable, Identifiable, Sendable {
+enum ManagedKind: String, CaseIterable, Identifiable, Sendable, Codable {
     case repair, maintenance, precision
     var id: String { rawValue }
     var title: String { switch self { case .repair: "维修"; case .maintenance: "保养"; case .precision: "精密度检查" } }
@@ -16,7 +17,7 @@ enum ManagedKind: String, CaseIterable, Identifiable, Sendable {
     var endField: String { self == .repair ? "repairEndTime" : "endTime" }
 }
 
-struct ManagedWindow: Equatable {
+struct ManagedWindow: Equatable, Codable {
     let from: String
     let to: String
     let dayCount: Int
@@ -77,7 +78,7 @@ private func managedIdentifier(_ value: JSONValue) -> String {
     }
 }
 
-struct ManagedDocument: Identifiable, Equatable, Sendable {
+struct ManagedDocument: Identifiable, Equatable, Sendable, Codable {
     let kind: ManagedKind
     let businessID: String
     let title: String
@@ -116,7 +117,7 @@ func managedDocument(kind: ManagedKind, row: JSONValue, state: String, window: M
 }
 
 /// No client total cap. A response is committed only after its detail checks finish.
-struct ManagedSlice: Identifiable {
+struct ManagedSlice: Identifiable, Codable {
     let kind: ManagedKind
     let state: String
     var id: String { kind.rawValue + ":" + state }
@@ -246,6 +247,13 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
 }
 
 @MainActor final class ManagementAnalyticsModel: ObservableObject {
+    private struct Snapshot: Codable {
+        let version: Int
+        let savedAt: Date
+        let slices: [ManagedSlice]
+        let window: ManagedWindow?
+        let concurrency: Int
+    }
     typealias PageReader = @MainActor (ManagedSlice, ManagedWindow?) async throws -> JSONValue
     @Published private(set) var slices: [ManagedSlice] = []
     @Published private(set) var report = ManagedReport()
@@ -256,6 +264,48 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
     @Published private(set) var detailExpected = 0
     @Published private(set) var estimatedCount: Int?
     @Published private(set) var window: ManagedWindow?
+    @Published private(set) var cachedAt: Date?
+    @Published private(set) var showingPrevious = false
+    private var cacheURL: URL?
+    var cachedRange: DateRange? {
+        guard let window else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let from = formatter.date(from: window.from), let to = formatter.date(from: window.to) else { return nil }
+        return DateRange(from: from, to: to)
+    }
+    func restorePrevious(session: LiveSession) {
+        if !slices.isEmpty {
+            showingPrevious = true
+            return
+        }
+        let key = SHA256.hash(data: Data(session.draftScope.utf8)).map { String(format: "%02x", $0) }.joined()
+        guard let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
+        let url = folder.appendingPathComponent("ManagementCache", isDirectory: true).appendingPathComponent(key + ".json")
+        cacheURL = url
+        guard let data = try? Data(contentsOf: url),
+              let saved = try? JSONDecoder().decode(Snapshot.self, from: data), saved.version == 1 else { return }
+        slices = saved.slices; window = saved.window; detailConcurrency = saved.concurrency
+        report = managedReport(slices.flatMap { Array($0.documents.values) })
+        scope = session.scopeRevision; paused = hasUnfinished
+        cachedAt = saved.savedAt; showingPrevious = true
+    }
+    private func savePrevious() {
+        guard let url = cacheURL, !slices.isEmpty,
+              slices.contains(where: { $0.offset > 0 }) || slices.allSatisfy({ $0.complete }) else { return }
+        let date = Date()
+        let saved = Snapshot(version: 1, savedAt: date, slices: slices, window: window, concurrency: detailConcurrency)
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            var folder = url.deletingLastPathComponent()
+            var values = URLResourceValues(); values.isExcludedFromBackup = true
+            try folder.setResourceValues(values)
+            let data = try JSONEncoder().encode(saved)
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
+            cachedAt = date
+        } catch { /* A cache failure must not discard the visible report. */ }
+    }
     private(set) var scope: UUID?
     private(set) var detailConcurrency = 8
     private var generation = UUID()
@@ -278,6 +328,7 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
         runner?.cancel(); runner = nil; generation = UUID()
         running = false; paused = false; estimating = false; estimatedCount = nil
         slices = []; report = ManagedReport(); window = nil; scope = nil; detailChecked = 0; detailExpected = 0
+        cachedAt = nil; showingPrevious = false; cacheURL = nil
     }
     func pause() {
         runner?.cancel(); runner = nil; generation = UUID(); running = false
@@ -309,6 +360,8 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
     func start(session: LiveSession, days: Int?, restart: Bool = false, range: DateRange? = nil,
                pageSize: Int = 500, concurrency: Int = 8, pageReader: PageReader? = nil) {
         guard !running && !estimating else { return }
+        // Bind persistence only for live reads, never offline layout fixtures.
+        let key = SHA256.hash(data: Data(session.draftScope.utf8)).map { String(format: "%02x", $0) }.joined()
         let selected = range.map { ManagedWindow(range: $0) } ?? days.map { ManagedWindow(days: $0) }
         if restart || scope != session.scopeRevision || window != selected || slices.isEmpty {
             clear(); scope = session.scopeRevision; window = selected
@@ -323,7 +376,11 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
             slices[i].failed = false; slices[i].finished = false
             slices[i].reasons = slices[i].reasons.filter { !$0.hasPrefix("读取失败：") }
         }
+        if pageReader == nil, let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            cacheURL = folder.appendingPathComponent("ManagementCache", isDirectory: true).appendingPathComponent(key + ".json")
+        }
         guard hasUnfinished else { return }
+        showingPrevious = false
         running = true; paused = false
         let token = UUID(), capturedScope = session.scopeRevision
         let limitConcurrency = detailConcurrency
@@ -375,6 +432,7 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
                     slices[index].finished = true; slices[index].complete = false; slices[index].failed = true
                 }
                 report = managedReport(slices.flatMap { Array($0.documents.values) })
+                savePrevious()
             }
         }
     }

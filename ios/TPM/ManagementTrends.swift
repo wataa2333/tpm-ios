@@ -154,6 +154,10 @@ struct ManagementTrendScreen: View {
     }
     private var controls: some View {
         VStack(alignment: .leading, spacing: 14) {
+            if model.showingPrevious {
+                Label("上次读取的数据，非最新", systemImage: "clock.arrow.circlepath")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.orange)
+            }
             if let window = model.window { Text(window.from + " 至 " + window.to).font(.subheadline.weight(.medium)) }
             Text(model.status).font(.caption).foregroundStyle(.secondary)
             Text("RESOLVED＋FINISHED · 维修结束日期").font(.caption).foregroundStyle(.secondary)
