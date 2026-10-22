@@ -70,6 +70,8 @@ struct ManagementTrendScreen: View {
     @State private var suggestLandscape = false
     @State private var initialized = false
     @State private var selectedIndex: Int?
+    @State private var focusedSeries: String?
+    @State private var chartScrollIndex = 0
     private var people: [ManagedPerson] { model.report.people.filter { $0.id != ManagedReport.unknown } }
     private var buckets: [ManagedTrendBucket] {
         guard let window = model.window else { return [] }
@@ -143,6 +145,9 @@ struct ManagementTrendScreen: View {
             }
         }
         .onChange(of: grain) { visibleCount = grain == .day ? 7 : 12; zoomStart = nil; selectedIndex = nil }
+        .onChange(of: focusedSeries) { _, name in
+            if name == "全部合计" { showTotal = true }
+        }
         .onChange(of: session.scopeRevision) { model.clear(); dismiss() }
         .onChange(of: enabled) { _, value in if !value { dismiss() } }
         .onDisappear { restoreOrientation() }
@@ -195,6 +200,8 @@ struct ManagementTrendScreen: View {
                                     Spacer()
                                     Text(point.map { "\($0.value) 单" } ?? "—").monospacedDigit()
                                 }.font(.caption)
+                                    .padding(4)
+                                    .background(focusedSeries == name ? Color.gray.opacity(0.18) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
                             }
                         }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
@@ -215,7 +222,8 @@ struct ManagementTrendScreen: View {
                 Spacer()
                 Button(swapped ? "日期为行" : "人员为行", systemImage: "arrow.triangle.swap") { swapped.toggle() }.font(.subheadline).buttonStyle(.bordered)
             }
-            ManagementTrendTable(buckets: buckets, people: people.filter { selected.contains($0.id) }, swapped: swapped, complete: !model.incomplete)
+            ManagementTrendTable(buckets: buckets, people: people.filter { selected.contains($0.id) }, swapped: swapped, complete: !model.incomplete,
+                                 selectedIndex: $selectedIndex, focusedSeries: $focusedSeries)
                 .id(swapped)
         }.interfaceMotion(swapped).interfaceMotion(grain).interfaceMotion(selected).interfaceMotion(showTotal)
     }
@@ -224,8 +232,10 @@ struct ManagementTrendScreen: View {
             ForEach(points) { point in
             LineMark(x: .value("日期", point.index), y: .value("单数", point.value), series: .value("连续日期", point.series + ":" + String(point.segment)))
                 .foregroundStyle(by: .value("人员", point.series)).interpolationMethod(.monotone)
+                .lineStyle(StrokeStyle(lineWidth: focusedSeries == point.series ? 3 : 1.5))
             PointMark(x: .value("日期", point.index), y: .value("单数", point.value))
-                .foregroundStyle(by: .value("人员", point.series)).symbolSize(18)
+                .foregroundStyle(by: .value("人员", point.series))
+                .symbolSize(selectedIndex == point.index && (focusedSeries == nil || focusedSeries == point.series) ? 90 : 18)
             }
             if let index = selectedIndex, buckets.indices.contains(index) {
                 RuleMark(x: .value("选中日期", index))
@@ -235,6 +245,7 @@ struct ManagementTrendScreen: View {
         .chartXScale(domain: 0...max(1, buckets.count - 1))
         .chartYScale(domain: 0...max(1, points.map(\.value).max() ?? 1))
         .chartScrollableAxes(.horizontal)
+        .chartScrollPosition(x: $chartScrollIndex)
         .chartXVisibleDomain(length: max(2, min(visibleCount, Double(max(2, buckets.count)))))
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
@@ -249,7 +260,13 @@ struct ManagementTrendScreen: View {
         .chartLegend(.hidden)
         .chartXSelection(value: $selectedIndex)
         .chartGesture { proxy in
-            SpatialTapGesture().onEnded { value in proxy.selectXValue(at: value.location.x) }
+            SpatialTapGesture().onEnded { value in
+                focusedSeries = nil
+                proxy.selectXValue(at: value.location.x)
+            }
+        }
+        .onChange(of: selectedIndex) { _, index in
+            if let index { chartScrollIndex = max(0, index - Int(visibleCount / 2)) }
         }
         .frame(height: 280)
         .simultaneousGesture(MagnifyGesture().onChanged { value in
@@ -289,9 +306,10 @@ private struct ManagementTrendTable: View {
     let people: [ManagedPerson]
     let swapped: Bool
     let complete: Bool
+    @Binding var selectedIndex: Int?
+    @Binding var focusedSeries: String?
     @ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = 40
-    @ScaledMetric(relativeTo: .body) private var columnWidth: CGFloat = 88
-    @State private var horizontalOffset: CGFloat = 0
+    @ScaledMetric(relativeTo: .body) private var columnWidth: CGFloat = 64
     private var names: [String] {
         people.map { person in
             people.filter { $0.name == person.name }.count > 1 ? person.name + "（" + person.identity + "）" : person.name
@@ -306,6 +324,9 @@ private struct ManagementTrendTable: View {
                     fixedRow(swapped ? "人员" : "日期", "合计", header: true)
                     ForEach(columnTitles.indices, id: \.self) { column in
                         cell(columnTitles[column], header: true)
+                            .overlay { selectionShade(date: swapped ? column : nil, series: swapped ? nil : names[column]) }
+                            .contentShape(.rect)
+                            .onTapGesture { select(date: swapped ? column : nil, series: swapped ? nil : names[column]) }
                     }
                 }
                 if swapped {
@@ -313,14 +334,23 @@ private struct ManagementTrendTable: View {
                         fixedRow("全部合计", text(fixedTotal(0)), header: true)
                         ForEach(buckets.indices, id: \.self) { column in
                             cell(text(value(0, column)), header: true)
+                                .overlay { selectionShade(date: column, series: "全部合计") }
+                                .contentShape(.rect)
+                                .onTapGesture { select(date: column, series: "全部合计") }
                         }
                     }
                 }
                 ForEach(rowTitles.indices, id: \.self) { row in
                     HStack(spacing: 0) {
                         fixedRow(rowTitles[row], text(fixedTotal(swapped ? row + 1 : row)), header: false)
+                            .overlay { selectionShade(date: swapped ? nil : row, series: swapped ? names[row] : nil) }
+                            .contentShape(.rect)
+                            .onTapGesture { select(date: swapped ? nil : row, series: swapped ? names[row] : "全部合计") }
                         ForEach(columnTitles.indices, id: \.self) { column in
                             cell(text(value(swapped ? row + 1 : row, column)), header: false)
+                                .overlay { selectionShade(date: swapped ? column : row, series: swapped ? names[row] : names[column]) }
+                                .contentShape(.rect)
+                                .onTapGesture { select(date: swapped ? column : row, series: swapped ? names[row] : names[column]) }
                         }
                     }
                 }
@@ -328,12 +358,24 @@ private struct ManagementTrendTable: View {
         }
         .background(Color(uiColor: .secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        .scrollEdgeEffectHidden(true, for: .horizontal)
         .accessibilityLabel("维修处理统计表，横向滑动查看更多列，空白 — 表示数量尚未明确")
+    }
+    private func select(date: Int?, series: String?) {
+        if let date { selectedIndex = date }
+        else if selectedIndex == nil, !buckets.isEmpty { selectedIndex = 0 }
+        focusedSeries = series
+    }
+    private func selectionShade(date: Int?, series: String?) -> some View {
+        let dateMatch = date != nil && date == selectedIndex
+        let seriesMatch = series != nil && series == focusedSeries
+        return Color.gray.opacity(dateMatch && seriesMatch ? 0.32 : dateMatch || seriesMatch ? 0.16 : 0)
+            .allowsHitTesting(false)
     }
     private func fixedRow(_ title: String, _ total: String, header: Bool) -> some View {
         HStack(spacing: 0) {
-            Text(title).font(header ? .caption.weight(.semibold) : .caption).frame(width: columnWidth, alignment: .leading)
-            Text(total).font(.caption.monospacedDigit()).frame(width: 48)
+            Text(title).font(header ? .caption.weight(.semibold) : .caption).frame(width: 78, alignment: .leading)
+            Text(total).font(.caption.monospacedDigit()).frame(width: 40)
         }.padding(.horizontal, 6).frame(height: rowHeight)
             .background(header ? Color.accentColor.opacity(0.1) : Color.clear)
             .overlay(alignment: .bottom) { Divider() }
