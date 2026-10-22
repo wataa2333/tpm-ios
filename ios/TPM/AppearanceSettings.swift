@@ -88,7 +88,7 @@ struct DeveloperAccessSheet: View {
                 if unlocked {
                     Section {
                         settingToggle("管理看板", isOn: $managementEnabled)
-                    } footer: { Text("开启后在工作台显示管理看板入口，不改变服务器权限。") }
+                    } footer: { Text("开启后在看板显示管理看板入口，不改变服务器权限。") }
                     Section("管理读取档位") {
                         settingToggle("实验读取档位", isOn: $experimental)
                         if experimental {

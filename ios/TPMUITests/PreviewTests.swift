@@ -48,7 +48,9 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["维修处理趋势"].waitForExistence(timeout: 10))
         let portrait = app.alerts.buttons["继续竖屏"]
         if portrait.waitForExistence(timeout: 3) { portrait.tap() }
-        app.buttons["全选人员"].tap()
+        app.buttons["trend-people-picker"].tap()
+        app.buttons["全选搜索结果"].tap()
+        app.buttons["完成"].tap()
         app.buttons["按月"].tap()
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
@@ -58,7 +60,31 @@ final class PreviewTests: XCTestCase {
         swap.tap()
         XCTAssertTrue(app.buttons["日期为行"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["按日"].isHittable)
+        app.buttons["trend-people-picker"].tap()
         app.buttons["清空人员"].tap()
+        app.buttons["完成"].tap()
+    }
+
+    func testTrendPeoplePickerSearchAndCancelWithFortyPeople() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "management-trends"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["维修处理趋势"].waitForExistence(timeout: 10))
+        let portrait = app.alerts.buttons["继续竖屏"]
+        if portrait.waitForExistence(timeout: 3) { portrait.tap() }
+        let picker = app.buttons["trend-people-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5)); picker.tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("fixture-account-39")
+        XCTAssertTrue(app.staticTexts["账号：fixture-account-39"].waitForExistence(timeout: 5))
+        app.buttons["全选搜索结果"].tap()
+        app.buttons["取消"].tap()
+        XCTAssertTrue(picker.label.contains("已选0人"))
+        picker.tap()
+        app.buttons["全选搜索结果"].tap()
+        XCTAssertTrue(app.staticTexts["已选40人 / 共40人"].exists)
+        app.buttons["完成"].tap()
+        XCTAssertTrue(picker.label.contains("已选40人"))
     }
 
     func testAssetERPAndInventoryDetailsRestoreTabsOnlyOnTheirLists() {
@@ -343,7 +369,7 @@ final class PreviewTests: XCTestCase {
             XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", title)).firstMatch.exists, title)
         }
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "精密度检查工单池")).firstMatch.exists)
-        app.buttons["工作台"].firstMatch.tap()
+        app.buttons["看板"].firstMatch.tap()
         XCTAssertTrue(app.buttons["新建报修"].exists)
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "资产台账")).firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "ERP 出库")).firstMatch.exists)

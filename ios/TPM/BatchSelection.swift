@@ -729,10 +729,11 @@ struct BatchRunSheet: View {
 /// A read-only look at one order from inside the selection. Opening and closing it changes nothing behind it.
 struct BatchPeekSheet: View {
     let item: BatchItem
+    @Environment(\.queryReading) private var queryReading
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         NavigationStack {
-            LiveWorkflowDetail(kind: item.kind, id: item.id)
+            LiveWorkflowDetail(kind: item.kind, id: item.id, usesQueryAccount: queryReading)
                 .environment(\.isPeeking, true)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("完成") { dismiss() }.accessibilityIdentifier("peek-done") } }
         }
@@ -743,6 +744,8 @@ struct BatchPeekSheet: View {
 extension EnvironmentValues {
     /// True inside the peek sheet: the order can be read there, not changed.
     @Entry var isPeeking = false
+    /// Carries only the read routing flag; the operator LiveSession is never replaced.
+    @Entry var queryReading = false
 }
 
 /// A question in the middle of a run. It cannot be swiped away: the run is waiting for an answer.

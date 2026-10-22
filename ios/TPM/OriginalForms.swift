@@ -529,6 +529,7 @@ struct OriginalFaultForm: View {
     var preview = false
     /// A draft to continue: applied over the freshly loaded form.
     var draft: FaultDraft? = nil
+    var initialAsset: JSONValue? = nil
     var onSaved: (() -> Void)? = nil
     private func field(_ key: String) -> Binding<JSONValue> { Binding(get: { model.data[key] ?? .null }, set: { model.data[key] = $0 }) }
     private func apply(_ draft: FaultDraft, automatic: Bool = false) {
@@ -569,6 +570,7 @@ struct OriginalFaultForm: View {
                     EntryField(placeholder: "请输入报修名称", text: text("faultName"), limit: 64)
                 }.fullSeparator()
                 ReferenceField(title: "报修资产", source: .assets, value: field("asset"), required: true)
+                if let asset = model.data["asset"], !asset["assetCode"].text.isEmpty { LabeledContent("资产编码", value: asset["assetCode"].text) }
                 ServerDateField(title: "故障时间", value: field("faultTime"), required: true)
             } header: { RequiredFormHeader(title: "故障报修") }
             Section("申请与受理") {
@@ -618,7 +620,7 @@ struct OriginalFaultForm: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             DocumentActions(busy: model.saving, submitting: confirming == true,
-                            disabled: !model.ready || photoUploading,
+                            disabled: !model.ready || model.loading || photoUploading,
                             // "保存" keeps a draft on this phone: nothing is sent to the server and nothing is required.
                             // Only "提交" writes to the server, and it needs the form complete.
                             save: { if draftsAllowed { keepDraft() } else { prepare(false) } }, submit: { prepare(true) })
@@ -632,7 +634,20 @@ struct OriginalFaultForm: View {
                 loadedData = model.data; loadedSelections = model.selections
                 // The form opens with what was saved last time for the same order (a new report: the last
                 // new report). A draft chosen on purpose wins; a draft of another order is never offered.
-                if draftsAllowed, model.ready {
+                if let initialAsset, existing == nil, model.ready {
+                    model.loading = true
+                    defer { model.loading = false }
+                    do {
+                        let id = initialAsset["assetId"].text, code = initialAsset["assetCode"].text
+                        guard !id.isEmpty, !code.isEmpty else { throw APIError(message: "资产信息不完整，请手动选择报修资产") }
+                        let page = try await session.page("asset/pageAsset", filters: [filter("assetId", id)], limit: 2)
+                        try Task.checkCancellation()
+                        let matches = page["content"].array.filter { $0["assetId"].text == id && $0["assetCode"].text == code }
+                        guard matches.count == 1 else { throw APIError(message: "当前登录账号无法核对该资产，请手动选择报修资产") }
+                        model.data["asset"] = matches[0]
+                    } catch is CancellationError { return } catch { model.error = error.localizedDescription }
+                }
+                if draftsAllowed, model.ready, initialAsset == nil {
                     if let draft, draftTarget.matches(draft) { apply(draft) }
                     else if let last = DraftStore.shared.drafts(scope: session.draftScope, for: draftTarget).first { apply(last, automatic: true) }
                 }

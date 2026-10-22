@@ -26,6 +26,7 @@ struct WorkOrderCard<Destination: View>: View {
     let facts: [(String, String)]
     /// Set while the list is in selection mode: a circle selects the card, the card itself opens a peek.
     var selecting: CardSelecting? = nil
+    var reportAsset: JSONValue? = nil
     @ViewBuilder let destination: () -> Destination
     @State private var expanded = false
     @State private var opening = false
@@ -111,6 +112,7 @@ struct WorkOrderCard<Destination: View>: View {
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }.buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.regular)
                         .accessibilityIdentifier("order-open-" + reference)
+                    if selecting == nil, let reportAsset { AssetReportButton(asset: reportAsset) }
                 }
                 .padding(.top, RowMetrics.spacing)
                 .transition(.opacity)

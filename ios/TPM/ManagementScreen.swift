@@ -10,6 +10,7 @@ enum ManagedReadSettings {
 
 struct ManagementScreen: View {
     @EnvironmentObject private var session: LiveSession
+    @EnvironmentObject private var queries: QueryAccountModel
     @Environment(\.dismiss) private var dismiss
     @AppStorage(ManagementSettings.enabledKey) private var enabled = false
     @AppStorage(ManagedReadSettings.experimentalKey) private var experimental = false
@@ -29,6 +30,8 @@ struct ManagementScreen: View {
     @State private var queryError: String?
     @State private var estimateTask: Task<Void, Never>?
     @State private var needsFreshOrders = false
+    @State private var sourceSession: LiveSession?
+    private var readContext: String { session.scopeRevision.uuidString + queries.revision.uuidString }
     private var people: [ManagedPerson] {
         model.report.people.filter { historical || (showSigned && $0.signed > 0) || (showWorking && $0.working > 0) }
             .sorted { a, b in
@@ -47,7 +50,7 @@ struct ManagementScreen: View {
                             if let date = model.cachedAt {
                                 Text(date.formatted(date: .numeric, time: .shortened)).font(.caption)
                             }
-                            Text("仅保留统计数值；查看具体单据需重新读取。").font(.caption)
+                            Text(model.summaryOnly ? "旧版仅保存汇总，重新查询后可保留完整展示。" : "人员工单、图表和统计表为上次记录，请重新查询获取最新数据。").font(.caption)
                         }
                     } icon: { Image(systemName: "clock.arrow.circlepath") }
                     .frame(maxWidth: .infinity, alignment: .leading).padding(12)
@@ -109,7 +112,7 @@ struct ManagementScreen: View {
                 DisclosureGroup("统计口径", isExpanded: $showNotes) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("仅维修，无客户端总量上限。当前待处理为 SIGNED 待签到、REPAIRED 待完成；逐单核对详情和维修任务第一条记录的执行人。")
-                        Text("处理统计只含当前 RESOLVED 待复线与 FINISHED 已完结，排除 VERIFIED。按维修结束时间 repairEndTime 筛选，不代表完整绩效。")
+                        Text("处理统计包含待确认 VERIFIED、待复线 RESOLVED 与已完结 FINISHED。按维修结束时间 repairEndTime 筛选，不代表完整绩效。")
                         Text("处理统计按业务编号计一次，后读记录覆盖前读；最新状态或日期离开范围会移除。全部合计包含身份未明确的工单，不随图表人员勾选变化。")
                         Text("暂停或失败时仅显示已加载数据。失败可从上次已提交分页继续；同一次读取的页大小与详情并发保持不变。统计不是实时一致性快照。")
                     }.font(.footnote).padding(.top, 8)
@@ -137,26 +140,31 @@ struct ManagementScreen: View {
         } message: {
             Text("上次数据仅保留统计数值，未保存具体单据。查看人员工单前必须重新读取。")
         }
-        .onAppear { restorePrevious() }
+        .task(id: readContext) { await restorePrevious() }
         .onChange(of: historical) {
             cancelEstimate()
             if historical != (model.window != nil) { model.clear() }
         }
-        .onChange(of: session.scopeRevision) { cancelEstimate(); model.clear(); restorePrevious() }
+        .onChange(of: session.scopeRevision) { cancelEstimate(); model.clear(); sourceSession = nil }
+        .onChange(of: queries.revision) { cancelEstimate(); model.clear(); sourceSession = nil }
         .onChange(of: enabled) { _, value in if !value { cancelEstimate(); model.clear(); dismiss() } }
         .onDisappear { cancelEstimate(); model.pause() }
     }
-    private func restorePrevious() {
-        model.restorePrevious(session: session)
-        if !model.slices.isEmpty {
-            historical = model.window != nil
-            range = model.cachedRange
-        }
+    private func restorePrevious() async {
+        let context = readContext
+        do {
+            let source = try await queries.source(for: session)
+            try Task.checkCancellation()
+            guard context == readContext else { return }
+            sourceSession = source
+            model.restorePrevious(session: source)
+            if !model.slices.isEmpty { historical = model.window != nil; range = model.cachedRange }
+        } catch { if !isCancellation(error), context == readContext { queryError = error.localizedDescription } }
     }
     private var queryControls: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(session.currentFactoryName).font(.headline)
-            Text("只读取当前账号、当前厂区可见的维修数据。").font(.footnote).foregroundStyle(.secondary)
+            Text("查询账号：" + queries.label(operator: session) + " · 操作账号：" + session.authentication.text("name")).font(.footnote).foregroundStyle(.secondary)
             HStack {
                 ManagementChoice(title: "当前待处理", selected: !historical) { historical = false }
                 ManagementChoice(title: "处理统计", selected: historical) { historical = true }
@@ -168,6 +176,7 @@ struct ManagementScreen: View {
                 }.buttonStyle(.bordered).disabled(model.running || model.estimating)
                 Text("待复线＋已完结 · 按维修结束时间").font(.caption).foregroundStyle(.secondary)
             }
+            if sourceSession == nil { Button("重试连接查询账号") { Task { await restorePrevious() } }.buttonStyle(.bordered) }
             Text(model.status).font(.subheadline).foregroundStyle(.secondary).accessibilityIdentifier("management-status")
             if model.running || model.estimating { ProgressView().frame(maxWidth: .infinity, alignment: .leading) }
             if model.running {
@@ -176,7 +185,7 @@ struct ManagementScreen: View {
                 ViewThatFits(in: .horizontal) {
                     HStack { readButtons }
                     VStack(alignment: .leading) { readButtons }
-                }.disabled(model.estimating || historical && range == nil)
+                }.disabled(sourceSession == nil || model.estimating || historical && range == nil)
             }
             if let first = model.slices.first { Text("本次每页 \(first.pageSize) · 详情并发 \(model.detailConcurrency)").font(.caption).foregroundStyle(.secondary) }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
@@ -196,18 +205,24 @@ struct ManagementScreen: View {
                 if showWorking { Text("待完成 \(person.working)").font(.subheadline).foregroundStyle(Color.accentColor) }
             }
         }.frame(maxWidth: .infinity, alignment: .topLeading).padding(12)
-            .background(.background, in: RoundedRectangle(cornerRadius: 16)).contentShape(.rect)
+            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 16)).contentShape(.rect)
     }
     private func start(restart: Bool) {
-        model.start(session: session, days: nil, restart: restart, range: historical ? range : nil,
+        guard let sourceSession else { return }
+        model.start(session: sourceSession, days: nil, restart: restart, range: historical ? range : nil,
                     pageSize: experimental ? pageSize : 500, concurrency: experimental ? concurrency : 8)
     }
     private func cancelEstimate() { estimateTask?.cancel(); estimateTask = nil; confirmation = false }
     private func prepare() {
         estimateTask?.cancel()
+        let context = readContext
         estimateTask = Task {
             do {
-                estimate = try await model.estimate(session: session, historical: historical, range: range)
+                let source = try await queries.source(for: session)
+                try Task.checkCancellation()
+                guard context == readContext else { return }
+                if sourceSession !== source { model.clear(); sourceSession = source }
+                estimate = try await model.estimate(session: source, historical: historical, range: range)
                 try Task.checkCancellation()
                 confirmation = true
             } catch { if !isCancellation(error) { queryError = error.localizedDescription } }
@@ -233,7 +248,7 @@ struct ManagementChoice: View {
 }
 
 func managedStateTitle(_ state: String) -> String {
-    ["SIGNED": "待签到", "REPAIRED": "待完成", "RESOLVED": "待复线", "FINISHED": "已完结"][state] ?? state
+    ["SIGNED": "待签到", "REPAIRED": "待完成", "VERIFIED": "待确认", "RESOLVED": "待复线", "FINISHED": "已完结"][state] ?? state
 }
 
 private struct ManagedPersonOrders: View {
@@ -253,11 +268,12 @@ private struct ManagedPersonOrders: View {
     var body: some View {
         List {
             Section {
+                if model.showingPrevious { Text("上次数据，非最新").font(.caption).foregroundStyle(.orange) }
                 Text(person?.identity ?? "当前范围内没有此执行人的已加载记录。").font(.subheadline).foregroundStyle(.secondary)
                 Text(model.status).font(.footnote).foregroundStyle(.secondary)
                 Picker("状态", selection: $state) {
                     Text("全部已选状态").tag("")
-                    if historical { Text("待复线").tag("RESOLVED"); Text("已完结").tag("FINISHED") }
+                    if historical { Text("待确认").tag("VERIFIED"); Text("待复线").tag("RESOLVED"); Text("已完结").tag("FINISHED") }
                     else {
                         if showSigned { Text("待签到").tag("SIGNED") }
                         if showWorking { Text("待完成").tag("REPAIRED") }
@@ -267,7 +283,7 @@ private struct ManagedPersonOrders: View {
             Section("仅已加载记录 · \(rows.count) 单") {
                 ForEach(rows) { doc in
                     NavigationLink {
-                        LiveWorkflowDetail(kind: .fault, id: doc.businessID)
+                        LiveWorkflowDetail(kind: .fault, id: doc.businessID, usesQueryAccount: true)
                     } label: {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(doc.title).font(.headline)

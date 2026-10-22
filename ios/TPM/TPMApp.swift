@@ -6,13 +6,15 @@ struct TPMApp: App {
     @StateObject private var store = DemoStore()
     @StateObject private var session = LiveSession()
     @StateObject private var navigation = BottomNavigationModel()
+    @StateObject private var queryAccounts = QueryAccountModel()
     @AppStorage(AppAccent.defaultsKey) private var accent = AppAccent.system.rawValue
     var body: some Scene {
         WindowGroup {
             GeometryReader { geometry in
                 PreviewRouter()
                     .environment(\.bottomSafeArea, geometry.safeAreaInsets.bottom)
-                    .environmentObject(store).environmentObject(session).environmentObject(navigation)
+                    .environmentObject(store).environmentObject(session).environmentObject(navigation).environmentObject(queryAccounts)
+                    .onChange(of: session.scopeRevision) { queryAccounts.invalidate() }
                     .labeledContentStyle(SafeFactsStyle())
                     .tint((AppAccent(rawValue: accent) ?? .system).color)
                     .accentColor((AppAccent(rawValue: accent) ?? .system).color)

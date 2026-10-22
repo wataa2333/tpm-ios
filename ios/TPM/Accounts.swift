@@ -183,10 +183,6 @@ struct ProfileTab: View {
                     HStack { Label("切换账号", systemImage: "person.2.fill"); Spacer(); if session.signingIn { ProgressView() } }
                 }
                 .accessibilityIdentifier("switch-account")
-                Button { developer = true } label: {
-                    Label("开发者选项", systemImage: "hammer")
-                }
-                .accessibilityIdentifier("developer-options")
             }
             Section {
                 // Laid out by hand: text on the left, switch centred on the right of the same line.
@@ -198,6 +194,11 @@ struct ProfileTab: View {
                 .accessibilityIdentifier("protect-accounts")
             } footer: { Text("打开后，使用已记住的账号前需要面容 ID 或设备密码验证。") }
             Section { NavigationLink { AppearanceSettings() } label: { Label("外观", systemImage: "paintpalette") } }
+            Section("其他") {
+                Button { developer = true } label: { Label("开发者选项", systemImage: "hammer") }
+                    .accessibilityIdentifier("developer-options")
+                NavigationLink { QueryAccountSettingsView() } label: { Label("独立查询账号", systemImage: "person.badge.key") }
+            }
             Section { Button("退出登录", role: .destructive) { session.signOut() } }
         }
         .navigationTitle("我的").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()

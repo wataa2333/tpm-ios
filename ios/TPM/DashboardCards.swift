@@ -278,6 +278,15 @@ struct DashboardWorkspace: View {
                 DashboardHeading(title: "快速查询维修")
                 QuickQueryCard(title: "按机台号查询", symbol: "gearshape.2", tint: .purple, placeholder: "输入机台号", seed: 4) { route = QuickQuery(field: .machine, text: $0) }
                 QuickQueryCard(title: "按资产编码查询", symbol: "barcode", tint: .mint, placeholder: "输入编码的尾号或中间一段", seed: 5) { route = QuickQuery(field: .assetCode, text: $0) }
+                if !preview {
+                    DashboardHeading(title: "精密度看板")
+                    NavigationLink { PrecisionDashboardScreen() } label: {
+                        HStack {
+                            DashboardCard(title: "精密度检查看板", symbol: "scope", tint: .teal, subtitle: "017CNC覆盖率 · 等级与逐项数值", wide: true, seed: 7)
+                            Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                        }
+                    }
+                }
                 if managementEnabled && !preview {
                     DashboardHeading(title: "管理看板")
                     NavigationLink { ManagementScreen() } label: {
@@ -304,7 +313,7 @@ struct DashboardWorkspace: View {
             ProgressView().padding(.top, 6).opacity(loadingCounts || gate.busy ? 1 : 0).allowsHitTesting(false)
                 .interfaceMotion(loadingCounts || gate.busy)
         }
-        .navigationTitle("工作台").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
+        .navigationTitle("看板").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
         .modifier(ListTabVisibility())
         // Loads by itself only the first time, when nothing is shown yet. After that it is manual only:
         // the refresh button or pulling the page down.

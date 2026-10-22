@@ -116,7 +116,7 @@ extension LiveSession {
     /// Drafts, pins and defaults belong to one account in one factory, like the orders they will become.
     /// Both halves are ids that never change: the account's user id (its login name when the server sent
     /// none) and the factory id, so renaming a factory or a missing factory list cannot move the data.
-    var draftScope: String { accountKey + "#" + currentFactoryID }
+    var draftScope: String { accountKey + "#" + currentFactoryID + (queryOnly ? "|query-for:" + queryOwnerScope : "") }
     /// The account half of `draftScope`, lower-cased so "Tom" and "tom" are one account.
     var accountKey: String {
         let id = authentication.text("id").trimmingCharacters(in: .whitespaces)

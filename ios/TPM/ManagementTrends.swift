@@ -45,7 +45,7 @@ func managedTrendBuckets(report: ManagedReport, window: ManagedWindow, grain: Ma
             }
             continue
         }
-        for doc in person.documents where ["RESOLVED", "FINISHED"].contains(doc.state) {
+        for doc in person.documents where ["VERIFIED", "RESOLVED", "FINISHED"].contains(doc.state) {
             let key = String(doc.end.prefix(grain == .day ? 10 : 7))
             guard let index = indices[key] else { continue }
             buckets[index].counts[person.id, default: 0] += 1
@@ -66,6 +66,7 @@ struct ManagedTrendPoint: Identifiable {
 struct ManagementTrendScreen: View {
     @ObservedObject var model: ManagementAnalyticsModel
     @EnvironmentObject private var session: LiveSession
+    @EnvironmentObject private var queries: QueryAccountModel
     @Environment(\.dismiss) private var dismiss
     @AppStorage(ManagementSettings.enabledKey) private var enabled = false
     @State private var grain = ManagedGrain.day
@@ -77,6 +78,7 @@ struct ManagementTrendScreen: View {
     @State private var originalOrientation: UIInterfaceOrientation?
     @State private var orientationError: String?
     @State private var suggestLandscape = false
+    @State private var choosingPeople = false
     @State private var initialized = false
     @State private var selectedIndex: Int?
     @State private var focusedSeries: String?
@@ -145,6 +147,11 @@ struct ManagementTrendScreen: View {
             Button("继续竖屏", role: .cancel) { }
             Button("切换横屏") { requestLandscape() }
         } message: { Text("日期跨度超过 7 天，横屏可同时查看人员选择、图表和统计表。") }
+        .sheet(isPresented: $choosingPeople) {
+            ManagementPeoplePicker(people: people, initial: selected, initialTotal: showTotal) { values, total in
+                selected = values; showTotal = total
+            }
+        }
         .errorDialog($orientationError, title: "屏幕方向", clearsOnClose: true)
         .onAppear {
             if !initialized {
@@ -158,6 +165,7 @@ struct ManagementTrendScreen: View {
             if name == "全部合计" { showTotal = true }
         }
         .onChange(of: session.scopeRevision) { model.clear(); dismiss() }
+        .onChange(of: queries.revision) { model.clear(); dismiss() }
         .onChange(of: enabled) { _, value in if !value { dismiss() } }
         .onDisappear { restoreOrientation() }
     }
@@ -169,25 +177,16 @@ struct ManagementTrendScreen: View {
             }
             if let window = model.window { Text(window.from + " 至 " + window.to).font(.subheadline.weight(.medium)) }
             Text(model.status).font(.caption).foregroundStyle(.secondary)
-            Text("RESOLVED＋FINISHED · 维修结束日期").font(.caption).foregroundStyle(.secondary)
+            Text("待确认／待复线／已完结 · 维修结束日期").font(.caption).foregroundStyle(.secondary)
             HStack {
                 ForEach(ManagedGrain.allCases) { option in
                     ManagementChoice(title: option.title, selected: grain == option) { grain = option }
                 }
             }
-            ManagementChoice(title: "全部合计", selected: showTotal) { showTotal.toggle() }
-            HStack {
-                Button("全选人员") { selected = Set(people.map(\.id)) }
-                Spacer(minLength: 8)
-                Button("清空人员") { selected.removeAll() }
-            }.font(.subheadline).buttonStyle(.bordered)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 6)], alignment: .leading, spacing: 6) {
-                ForEach(people) { person in
-                    ManagementChoice(title: seriesTitle(person), selected: selected.contains(person.id), fillWidth: true) {
-                        if selected.contains(person.id) { selected.remove(person.id) } else { selected.insert(person.id) }
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
+            Button { choosingPeople = true } label: {
+                Label("选择对比人员 · 已选\(selected.count)人", systemImage: "person.2")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }.buttonStyle(.bordered).accessibilityIdentifier("trend-people-picker")
             Text("全部合计含身份未明确工单；选择人员不会改变全部合计。单指横向查看日期，双指缩放；纵向滚动页面。").font(.caption).foregroundStyle(.secondary)
             if model.incomplete { Text("读取未完整，空白值用 —；图表仅绘制已知数量。").font(.caption).foregroundStyle(.secondary) }
         }.interfaceMotion(selected).interfaceMotion(showTotal)
@@ -223,12 +222,7 @@ struct ManagementTrendScreen: View {
                     }
                     legend
                 }
-                HStack {
-                    Button("放大", systemImage: "plus.magnifyingglass") { visibleCount = max(2, visibleCount / 1.5) }
-                    Button("缩小", systemImage: "minus.magnifyingglass") { visibleCount = min(Double(max(2, buckets.count)), visibleCount * 1.5) }
-                    Spacer(minLength: 0)
-                    Button("重置") { visibleCount = grain == .day ? 7 : 12 }
-                }.font(.caption).buttonStyle(.bordered)
+
             }.padding(14).background(.background, in: RoundedRectangle(cornerRadius: 18))
             HStack {
                 Text("统计表").font(.headline)
@@ -447,12 +441,12 @@ struct ManagementTrendLayoutPreview: View {
             .task {
                 model.start(session: session, days: 30, pageReader: { slice, window in
                     guard slice.state == "RESOLVED", let window else { return .object(["content": .array([]), "last": .bool(true)]) }
-                    let rows: [JSONValue] = (0..<6).map { index in
+                    let rows: [JSONValue] = (0..<41).map { index in
                         .object(["faultId": .string("fixture-" + String(index)), "faultName": .string("示例维修工单"), "faultState": .string("RESOLVED"),
-                                 "repairEndTime": .string(window.from), "repairUser": .object(["userName": .string(index == 5 ? "" : "fixture-account-" + String(index)),
+                                 "repairEndTime": .string(window.from), "repairUser": .object(["userName": .string(index == 40 ? "" : "fixture-account-" + String(index)),
                                                                                          "realName": .string(index < 2 ? "同名人员" : "较长的示例维修人员姓名")])])
                     }
-                    return .object(["content": .array(rows), "last": .bool(true), "totalElements": .number(6)])
+                    return .object(["content": .array(rows), "last": .bool(true), "totalElements": .number(41)])
                 })
             }
     }

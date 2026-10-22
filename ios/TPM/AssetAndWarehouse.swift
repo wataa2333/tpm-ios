@@ -99,6 +99,9 @@ struct AssetRecordDetail: View {
             if preview { DemoNotice().padding(.horizontal, 32).frame(maxWidth: .infinity, alignment: .leading) }
         }
         .searchPageChrome()
+        .safeAreaInset(edge: .bottom) {
+            if !preview { AssetReportButton(asset: asset).padding(.horizontal, 16).padding(.vertical, 8).background(.bar) }
+        }
         .textSelection(.enabled).navigationTitle("资产详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility())
         .onAppear { tab = tabs.firstIndex(of: initialTab) ?? 0 }

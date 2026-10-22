@@ -54,6 +54,9 @@ enum BatchProcessor {
         if item.kind == .fault, task["category"].text != item.group {
             throw BatchError(message: "这张单据的任务已从「" + batchGroupName(item.group) + "」往下走了，可能已被他人或你在其他设备上处理。")
         }
+        // Query results may include orders visible to the reader but not actionable by the operator.
+        // Check before repair saves or material writes, rather than only before the final workflow commit.
+        try await requireOperationPermission(task: task, detail: detail, session: session)
         var note = ""
         if action == .complete && operation == .proceed {
             let saved = try await saveRepair(item: item, detail: detail, preset: preset, session: session, ask: ask)
@@ -64,6 +67,16 @@ enum BatchProcessor {
         } catch let error as BatchError {
             throw BatchError(message: error.message + note)
         }
+    }
+
+    private static func requireOperationPermission(task: JSONValue, detail: JSONValue, session: LiveSession) async throws {
+        guard !session.queryOnly else { throw BatchError(message: "查询账号不能用于单据操作") }
+        let instance = task["processInstanceId"].text.isEmpty ? orderProcessID(detail) : task["processInstanceId"].text
+        guard !instance.isEmpty else { throw BatchError(message: "当前登录账号没有此单据的可执行任务") }
+        let state: JSONValue
+        do { state = try await session.request("workflow/getWorkflowTaskState", query: ["processInstanceId": instance]) }
+        catch { throw wrap("核对操作权限", error) }
+        guard state["canSubmit"].bool else { throw BatchError(message: "当前登录账号 " + session.authentication.text("name") + " 没有此单据的操作权限") }
     }
 
     /// Server and network failures keep their stage and server text; a cancelled request stays a cancellation.
@@ -310,7 +323,8 @@ enum BatchProcessor {
         do { detail = try await session.request(item.kind.detailPath, query: [item.kind.idKey: item.id]) }
         catch { throw wrap("读取单据", error) }
         let task = detail["taskInfo"]
-        guard !task["id"].text.isEmpty else { return ([], [:]) }
+        guard !task["id"].text.isEmpty else { throw BatchError(message: "当前登录账号没有此单据的可执行任务") }
+        try await requireOperationPermission(task: task, detail: detail, session: session)
         let model = try await approverModel(task: task, kind: item.kind, session: session)
         return (model.assignees, model.selections)
     }

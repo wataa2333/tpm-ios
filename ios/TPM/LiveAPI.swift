@@ -98,7 +98,7 @@ func stageFailureMessage(_ stage: String, _ error: Error) -> String {
         return error is APIError ? error.localizedDescription : "\(stage)失败：\(error.localizedDescription)"
     }
     guard let status = api.status else { return "\(stage)失败：\(api.request ?? "")，\(api.message)" }
-    let explanation = api.detail.isEmpty ? "服务器未提供错误说明" : "服务器信息：" + api.detail
+    let explanation = status == 403 ? "当前登录账号没有此请求的权限" + (api.detail.isEmpty ? "" : "；" + api.detail) : api.detail.isEmpty ? "服务器未提供错误说明" : "服务器信息：" + api.detail
     return "\(stage)失败：\(api.request ?? "") 返回 HTTP \(status)，\(explanation)"
 }
 
@@ -111,6 +111,9 @@ final class LiveSession: ObservableObject {
     @Published private(set) var switchingFactory = false
     private let root = URL(string: "http://tpm.forbetter.cn:8855/")!
     private let account = "tpm-session"
+    /// Query sessions never restore/persist the operator token and cannot call business write endpoints.
+    let queryOnly: Bool
+    var queryOwnerScope = ""
     var signedIn: Bool { !authentication.text("token").isEmpty }
     var factories: [JSONValue] { authentication["factories"]?.array ?? [] }
     var currentFactoryID: String { authentication.text("factoryId") }
@@ -119,17 +122,19 @@ final class LiveSession: ObservableObject {
     }
     private let urlSession: URLSession
     /// `authentication` is only for tests that need a signed-in session without the Keychain.
-    init(urlSession: URLSession = .shared, authentication initial: Fields? = nil) {
-        self.urlSession = urlSession
-        if let initial { authentication = initial } else { restore() }
+    init(urlSession: URLSession = .shared, authentication initial: Fields? = nil, queryOnly: Bool = false) {
+        self.urlSession = urlSession; self.queryOnly = queryOnly
+        if let initial { authentication = initial } else if !queryOnly { restore() }
     }
     func restore() {
+        guard !queryOnly else { return }
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.personal.tpm", kSecAttrAccount as String: account, kSecReturnData as String: true]
         var result: CFTypeRef?
         if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
            let data = result as? Data, let value = try? JSONDecoder().decode(JSONValue.self, from: data) { authentication = value.object }
     }
     private func persist() throws {
+        guard !queryOnly else { return }
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.personal.tpm", kSecAttrAccount as String: account]
         let data = try JSONEncoder().encode(JSONValue.object(authentication))
         let attributes: [String: Any] = [kSecValueData as String: data]
@@ -142,10 +147,10 @@ final class LiveSession: ObservableObject {
         } else if update != errSecSuccess { throw APIError(message: "无法更新登录会话") }
     }
     func signOut() {
-        UserDirectory.shared.clear()
+        if !queryOnly { UserDirectory.shared.clear() }
         scopeRevision = UUID()
         authentication = [:]
-        SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.personal.tpm", kSecAttrAccount as String: account] as CFDictionary)
+        if !queryOnly { SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.personal.tpm", kSecAttrAccount as String: account] as CFDictionary) }
     }
     func login(username: String, password: String) async throws {
         signingIn = true
@@ -188,9 +193,10 @@ final class LiveSession: ObservableObject {
         authentication["factoryId"] = factories.first { $0["factoryId"].text == factoryID }?["factoryId"] ?? .string(factoryID)
         do { try persist() } catch { authentication = previous; throw error }
         scopeRevision = UUID()
-        rememberFactory()
+        if !queryOnly { rememberFactory() }
     }
     func request(_ path: String, query: [String: String] = [:], body: JSONValue? = nil) async throws -> JSONValue {
+        if queryOnly { try QueryReadPolicy.validate(path: path, body: body) }
         var components = URLComponents(url: root.appendingPathComponent("rest").appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) } }
         var request = URLRequest(url: components.url!)
@@ -222,7 +228,8 @@ final class LiveSession: ObservableObject {
         guard (200..<300).contains(http.statusCode) else {
             if http.statusCode == 401 && signOutOnUnauthorized { signOut() }
             let detail = serverErrorSummary(data)
-            throw APIError(message: "请求失败（\(http.statusCode)）" + (detail.isEmpty ? "" : "：" + detail), status: http.statusCode, request: label, detail: detail)
+            let message = http.statusCode == 403 ? "账号 \(authentication.text("name")) 没有此请求的权限" : "请求失败（\(http.statusCode)）"
+            throw APIError(message: message + (detail.isEmpty ? "" : "：" + detail), status: http.statusCode, request: label, detail: detail)
         }
         if let token = http.value(forHTTPHeaderField: "Authorization"), signedIn {
             authentication["token"] = .string(token.hasPrefix("Bearer ") ? String(token.dropFirst(7)) : token)
@@ -238,6 +245,7 @@ final class LiveSession: ObservableObject {
         try await request(path, body: .object(["offset": .number(Double(offset)), "limit": .number(Double(limit)), "sort": .string("createTime"), "order": .string("desc"), "filters": .array(filters)]))
     }
     func uploadPhoto(_ data: Data, directory: String) async throws -> JSONValue {
+        guard !queryOnly else { throw APIError(message: "查询账号仅用于读取；上传和单据操作必须使用当前登录账号") }
         var components = URLComponents(url: root.appendingPathComponent("rest/upload/uploadImage"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "directory", value: directory)]
         var request = URLRequest(url: components.url!)

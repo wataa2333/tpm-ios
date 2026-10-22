@@ -123,6 +123,12 @@ private func managementPage(_ rows: [JSONValue], last: Bool, total: Int? = nil) 
     model.pause()
     #expect(model.report.count == 1)
     #expect(model.paused && model.incomplete)
+    // The dashboard reappears after visiting a child page; it must keep the current query.
+    model.restorePrevious(session: session)
+    #expect(!model.showingPrevious && !model.summaryOnly)
+    #expect(model.hasUnfinished)
+    #expect(model.slices.first?.offset == 1)
+    #expect(model.report.people.flatMap(\.documents).count == 1)
     gate.finish(managementPage([managementRow("late")], last: true, total: 2))
     var resumedOffsets: [Int] = []
     model.start(session: session, days: nil, pageReader: { slice, _ in
@@ -187,6 +193,8 @@ private func managementPage(_ rows: [JSONValue], last: Bool, total: Int? = nil) 
     try slice.consume(managementPage([initial], last: false), requested: 500, window: window)
     #expect(slice.documents.count == 1)
     try slice.consume(managementPage([managementRow("1", state: "VERIFIED", end: window.from)], last: false), requested: 500, window: window)
+    #expect(slice.documents.values.first?.state == "VERIFIED")
+    try slice.consume(managementPage([managementRow("1", state: "REPAIRED", end: window.from)], last: false), requested: 500, window: window)
     #expect(slice.documents.isEmpty)
     try slice.consume(managementPage([initial], last: false), requested: 500, window: window)
     try slice.consume(managementPage([managementRow("1", state: "FINISHED", end: "2000-01-01")], last: true), requested: 500, window: window)
@@ -270,8 +278,45 @@ private func managementPage(_ rows: [JSONValue], last: Bool, total: Int? = nil) 
     for _ in 0..<1000 { if !model.running { break }; await Task.yield() }
     #expect(model.report.count == 1)
     #expect(model.report.people.first?.id == "account:last")
-    #expect(model.slices.map(\.state) == ["RESOLVED", "FINISHED"])
+    #expect(model.slices.map(\.state) == ["VERIFIED", "RESOLVED", "FINISHED"])
     #expect(model.slices.allSatisfy { $0.kind == .repair })
     #expect(!model.incomplete)
     model.clear()
+}
+
+
+@Test @MainActor func managementReturningFromChildPagesKeepsCurrentDocuments() async {
+    let session = LiveSession(authentication: ["token": .string("TEST")])
+    let model = ManagementAnalyticsModel()
+    model.start(session: session, days: nil, pageReader: { slice, _ in
+        managementPage(slice.state == "SIGNED" ? [managementRow("current-order")] : [], last: true)
+    })
+    for _ in 0..<1000 { if !model.running { break }; await Task.yield() }
+    #expect(!model.running)
+    let documents = model.report.people.flatMap(\.documents)
+    #expect(documents.count == 1)
+    for _ in 0..<3 {
+        model.pause() // Existing dashboard onDisappear when a child is pushed.
+        model.restorePrevious(session: session) // Existing dashboard onAppear after pop.
+        #expect(model.report.people.flatMap(\.documents) == documents)
+        #expect(model.slices.first?.documents.count == 1)
+        #expect(!model.summaryOnly)
+        #expect(!model.showingPrevious)
+        #expect(!model.incomplete)
+    }
+    model.clear()
+}
+
+@Test func managementDisplayCacheKeepsOrdersAndVerifiedTrendCounts() throws {
+    let window = ManagedWindow(days: 7)
+    let a = try #require(managedDocument(kind: .repair, row: managementRow("cache-1", state: "VERIFIED", account: "a", end: window.from), state: "VERIFIED", window: window))
+    let b = try #require(managedDocument(kind: .repair, row: managementRow("cache-2", state: "FINISHED", account: "b", end: window.to), state: "FINISHED", window: window))
+    let report = managedReport([a, b])
+    let restored = try JSONDecoder().decode(ManagedReport.self, from: JSONEncoder().encode(report))
+    let restoredDocuments = restored.people.flatMap(\.documents).sorted { $0.id < $1.id }
+    let originalDocuments = report.people.flatMap(\.documents).sorted { $0.id < $1.id }
+    #expect(restoredDocuments == originalDocuments)
+    #expect(restored.people.count == 2)
+    #expect(managedTrendBuckets(report: restored, window: window, grain: .day).reduce(0) { $0 + $1.total } == 2)
+    #expect(managedTrendBuckets(report: restored, window: window, grain: .month).reduce(0) { $0 + $1.total } == 2)
 }

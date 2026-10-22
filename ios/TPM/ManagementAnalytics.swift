@@ -165,7 +165,7 @@ struct ManagedSlice: Identifiable, Codable {
                 guard !actualState.isEmpty, managementDay(row[kind.endField]) != nil else {
                     reasons.insert("工单状态或维修结束日期缺失"); continue
                 }
-                if ["RESOLVED", "FINISHED"].contains(actualState),
+                if ["VERIFIED", "RESOLVED", "FINISHED"].contains(actualState),
                    let doc = managedDocument(kind: kind, row: row, state: actualState, window: window) {
                     documents[key] = doc
                 }
@@ -204,7 +204,7 @@ struct ManagedPerson: Identifiable, Codable {
         var result = self
         result.savedSigned = signed; result.savedWorking = working; result.savedProcessed = processed
         if savedDays == nil {
-            result.savedDays = Dictionary(grouping: documents.filter { ["RESOLVED", "FINISHED"].contains($0.state) }, by: \.end).mapValues { $0.count }
+            result.savedDays = Dictionary(grouping: documents.filter { ["VERIFIED", "RESOLVED", "FINISHED"].contains($0.state) }, by: \.end).mapValues { $0.count }
         }
         result.documents = []
         return result
@@ -307,7 +307,8 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
     @Published private(set) var showingPrevious = false
     @Published private(set) var summaryOnly = false
     private var cacheURL: URL?
-    private var latestSummary: ManagedReport?
+    /// Restore once per dashboard lifetime and account/factory scope, never on a child-page return.
+    private var restoredScope: UUID?
     var cachedRange: DateRange? {
         guard let window else { return nil }
         let formatter = DateFormatter()
@@ -317,13 +318,10 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
         return DateRange(from: from, to: to)
     }
     func restorePrevious(session: LiveSession) {
-        if !slices.isEmpty {
-            report = latestSummary ?? report.summary
-            slices = slices.map { SliceSummary($0).slice }
-            summaryOnly = true
-            showingPrevious = true
-            return
-        }
+        if let scope, scope != session.scopeRevision { clear() }
+        guard restoredScope != session.scopeRevision else { return }
+        restoredScope = session.scopeRevision
+        guard slices.isEmpty else { return }
         let key = SHA256.hash(data: Data(session.draftScope.utf8)).map { String(format: "%02x", $0) }.joined()
         guard let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
         let directory = folder.appendingPathComponent("ManagementCache", isDirectory: true)
@@ -332,19 +330,24 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
         let url = directory.appendingPathComponent(key + ".summary.json")
         cacheURL = url
         guard let data = try? Data(contentsOf: url),
-              let saved = try? JSONDecoder().decode(Snapshot.self, from: data), saved.version == 2 else { return }
+              let saved = try? JSONDecoder().decode(Snapshot.self, from: data), [2, 3].contains(saved.version) else { return }
         slices = saved.slices.map(\.slice); window = saved.window; detailConcurrency = saved.concurrency
-        report = saved.report; latestSummary = saved.report; summaryOnly = true
+        report = saved.report; summaryOnly = saved.version == 2
+        if !summaryOnly {
+            let documents = report.people.flatMap(\.documents)
+            guard Set(documents.map(\.id)).count == documents.count else { clear(); return }
+            for index in slices.indices {
+                slices[index].documents = Dictionary(uniqueKeysWithValues: documents.filter { $0.kind == slices[index].kind && $0.state == slices[index].state }.map { ($0.id, $0) })
+            }
+        }
         scope = session.scopeRevision; paused = hasUnfinished
         cachedAt = saved.savedAt; showingPrevious = true
     }
     private func savePrevious() {
-        guard let url = cacheURL, !slices.isEmpty,
+        guard !showingPrevious, let url = cacheURL, !slices.isEmpty,
               slices.contains(where: { $0.offset > 0 }) || slices.allSatisfy({ $0.complete }) else { return }
         let date = Date()
-        let summary = report.summary
-        latestSummary = summary
-        let saved = Snapshot(version: 2, savedAt: date, slices: slices.map(SliceSummary.init), report: summary, window: window, concurrency: detailConcurrency)
+        let saved = Snapshot(version: 3, savedAt: date, slices: slices.map(SliceSummary.init), report: report, window: window, concurrency: detailConcurrency)
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             var folder = url.deletingLastPathComponent()
@@ -359,7 +362,7 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
     private(set) var detailConcurrency = 8
     private var generation = UUID()
     private var runner: Task<Void, Never>?
-    var hasUnfinished: Bool { !summaryOnly && slices.contains { !$0.finished || $0.failed } }
+    var hasUnfinished: Bool { !showingPrevious && !summaryOnly && slices.contains { !$0.finished || $0.failed } }
     var canShowTrends: Bool {
         !running && !paused && !estimating && !slices.isEmpty
             && slices.allSatisfy { $0.complete && !$0.failed }
@@ -383,7 +386,6 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
         slices = []; report = ManagedReport(); window = nil; scope = nil; detailChecked = 0; detailExpected = 0
         cachedAt = nil; showingPrevious = false; cacheURL = nil
         summaryOnly = false
-        latestSummary = nil
     }
     func pause() {
         runner?.cancel(); runner = nil; generation = UUID(); running = false
@@ -398,7 +400,7 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
         let selected = historical ? range.map { ManagedWindow(range: $0) } : nil
         if historical && selected == nil { throw APIError(message: "请先选择维修结束日期范围") }
         var count = 0
-        for state in historical ? ["RESOLVED", "FINISHED"] : ["SIGNED", "REPAIRED"] {
+        for state in historical ? ["VERIFIED", "RESOLVED", "FINISHED"] : ["SIGNED", "REPAIRED"] {
             let slice = ManagedSlice(kind: .repair, state: state)
             let page = try await session.page(slice.kind.page, filters: slice.filters(window: selected), limit: 1)
             try Task.checkCancellation()
@@ -418,10 +420,10 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
         // Bind persistence only for live reads, never offline layout fixtures.
         let key = SHA256.hash(data: Data(session.draftScope.utf8)).map { String(format: "%02x", $0) }.joined()
         let selected = range.map { ManagedWindow(range: $0) } ?? days.map { ManagedWindow(days: $0) }
-        if restart || summaryOnly || scope != session.scopeRevision || window != selected || slices.isEmpty {
+        if restart || showingPrevious || summaryOnly || scope != session.scopeRevision || window != selected || slices.isEmpty {
             clear(); scope = session.scopeRevision; window = selected
             detailConcurrency = ManagedReadSettings.concurrencyLevels.contains(concurrency) ? concurrency : 8
-            slices = (selected == nil ? ["SIGNED", "REPAIRED"] : ["RESOLVED", "FINISHED"]).map {
+            slices = (selected == nil ? ["SIGNED", "REPAIRED"] : ["VERIFIED", "RESOLVED", "FINISHED"]).map {
                 var slice = ManagedSlice(kind: .repair, state: $0)
                 slice.pageSize = ManagedReadSettings.pageSizes.contains(pageSize) ? pageSize : 500
                 return slice

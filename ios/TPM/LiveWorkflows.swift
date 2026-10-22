@@ -65,6 +65,7 @@ struct LiveTabs: View {
 }
 struct LiveWorkflowList: View {
     @EnvironmentObject private var session: LiveSession
+    @EnvironmentObject private var queries: QueryAccountModel
     @EnvironmentObject private var navigation: BottomNavigationModel
     let kind: WorkflowKind
     @State private var state: String
@@ -110,6 +111,8 @@ struct LiveWorkflowList: View {
         return query == initialQuery ? (customTitle ?? kind.title) : kind.title
     }
     private var activeQuery: String { searchMode ? committed : query }
+    private var usesQueryAccount: Bool { kind == .fault && (searchMode || !activeQuery.isEmpty) }
+    private var readContext: String { usesQueryAccount ? queries.revision.uuidString : "operator" }
     private func commitQuery() {
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty { query = committed } else { query = text; committed = text }
@@ -123,6 +126,10 @@ struct LiveWorkflowList: View {
     }
     var body: some View {
         CardPage {
+            if usesQueryAccount {
+                Text("查询：" + queries.label(operator: session) + " · 操作：" + session.authentication.text("name"))
+                    .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
+            }
             if kind == .fault && !searchMode { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? -1 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
             if let activeRange = dateRange { DateRangeChip(range: activeRange) { self.dateRange = nil } }
             LoadingRow(isPresented: (loading || gate.busy) && !refreshing, title: "正在加载工单")
@@ -130,7 +137,7 @@ struct LiveWorkflowList: View {
             CardGroup {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, item in
                     let entry = batchItem(kind: kind, item: item)
-                    LiveOrderRow(kind: kind, item: item, selectionMode: batch.active, selected: batch.contains(entry.id), selectable: batch.isSelectable(entry), batch: batch).equatable()
+                    LiveOrderRow(kind: kind, item: item, usesQueryAccount: usesQueryAccount, selectionMode: batch.active, selected: batch.contains(entry.id), selectable: batch.isSelectable(entry), batch: batch).equatable()
                 }
                 if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无相关单据") }
             }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).interfaceMotion(loading || gate.busy, duration: 0.4)
@@ -143,7 +150,7 @@ struct LiveWorkflowList: View {
                           collapsesOnSubmit: searchMode, onSubmit: { if searchMode { commitQuery() } })
 
         .refreshable { refreshing = true; await reload(); await reloadCounts(); refreshing = false }
-        .reloadsToTop(on: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)"))
+        .reloadsToTop(on: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)-\(readContext)"))
         .interfaceMotion(loading || gate.busy, duration: 0.45)
         .toolbar {
             if kind == .fault {
@@ -155,11 +162,13 @@ struct LiveWorkflowList: View {
         }
         .refreshButton(busy: loading || loadingMore || gate.busy) { gate.request() }
         .batchHost(batch) { rows.map { batchItem(kind: kind, item: $0) } }
+        .environment(\.queryReading, usesQueryAccount)
         .onChange(of: state) { batch.clear() }
+        .onChange(of: readContext) { rows = []; stateCounts = [:]; total = nil; last = true; batch.end() }
         .sheet(isPresented: $choosingDates) { DateRangeSheet(range: $dateRange) }
         .errorDialog($error, retry: { Task { await reload() } })
-        .task(id: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)")) { await gate.run(key: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)", debounce: searchMode || activeQuery.isEmpty ? nil : .milliseconds(350), load: { await reload() }) }
-        .task(id: gate.id("counts-\(navigation.refresh)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)")) { await gate.run("counts", key: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)", debounce: searchMode || activeQuery.isEmpty ? nil : .milliseconds(350), load: { await reloadCounts() }) }
+        .task(id: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)-\(readContext)")) { await gate.run(key: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)-\(readContext)", debounce: searchMode || activeQuery.isEmpty ? nil : .milliseconds(350), load: { await reload() }) }
+        .task(id: gate.id("counts-\(navigation.refresh)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)-\(readContext)")) { await gate.run("counts", key: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)-\(readContext)", debounce: searchMode || activeQuery.isEmpty ? nil : .milliseconds(350), load: { await reloadCounts() }) }
         .onAppear {
             navigation.newDocument = kind; navigation.hideTabs = false
             if navigation.pendingListRefresh { navigation.pendingListRefresh = false; navigation.refresh = UUID() }
@@ -174,14 +183,15 @@ struct LiveWorkflowList: View {
         error = nil
         defer { loading = false; loadingMore = false }
         // A page for a filter the user has already left must never be appended to the new list.
-        let snapshot = "\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)"
+        let snapshot = "\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)-\(readContext)"
         do {
             var filters: [JSONValue] = []
             if kind == .fault && !state.isEmpty { filters.append(filter("faultState", state)) }
             filters += searchFilters
-            let data = try await session.page(kind.page, offset: more ? rows.count : 0, filters: filters)
+            let source = usesQueryAccount ? try await queries.source(for: session) : session
+            let data = try await source.page(kind.page, offset: more ? rows.count : 0, filters: filters)
             try Task.checkCancellation()
-            guard snapshot == "\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)" else { return }
+            guard snapshot == "\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)-\(readContext)" else { return }
             rows = more ? rows + data["content"].array : data["content"].array
             last = data["last"].bool
             total = serverPageCount(data)
@@ -193,7 +203,9 @@ struct LiveWorkflowList: View {
     private func reloadCounts() async {
         guard kind == .fault, !searchMode else { return }
         let searchFilters = self.searchFilters
-        let api = session
+        let api: LiveSession
+        do { api = usesQueryAccount ? try await queries.source(for: session) : session }
+        catch { return }
         await withTaskGroup(of: (String, Int?).self) { group in
             // The state being shown gets its number from the list's own answer, so it is not asked for twice.
             for stage in FaultState.allCases where !["UNTREATED", "FINISHED", state].contains(stage.code) {
@@ -217,6 +229,7 @@ struct LiveWorkflowList: View {
 struct LiveOrderRow: View, Equatable {
     let kind: WorkflowKind
     let item: JSONValue
+    var usesQueryAccount = false
     /// Selection mode of the list this card is in; the closures live in `batch`, only these values are compared.
     var selectionMode = false
     var selected = false
@@ -224,7 +237,7 @@ struct LiveOrderRow: View, Equatable {
     var batch: BatchSelection? = nil
     @EnvironmentObject private var session: LiveSession
     nonisolated static func == (a: LiveOrderRow, b: LiveOrderRow) -> Bool {
-        a.kind == b.kind && a.item == b.item && a.selectionMode == b.selectionMode && a.selected == b.selected && a.selectable == b.selectable
+        a.kind == b.kind && a.item == b.item && a.usesQueryAccount == b.usesQueryAccount && a.selectionMode == b.selectionMode && a.selected == b.selected && a.selectable == b.selectable
     }
     var body: some View {
         let entry = batchItem(kind: kind, item: item)
@@ -240,8 +253,8 @@ struct LiveOrderRow: View, Equatable {
             facts: (kind == .fault ? faultCardFacts(item) : erpCardFacts(item)),
             selecting: selectionMode ? batch.map { batch in
                 CardSelecting(selected: selected, enabled: selectable, toggle: { batch.toggle(entry) }, peek: { batch.peeking = entry })
-            } : nil) {
-            LiveWorkflowDetail(kind: kind, id: item[kind.idKey].text)
+            } : nil, reportAsset: kind == .fault ? item["asset"] : nil) {
+            LiveWorkflowDetail(kind: kind, id: item[kind.idKey].text, usesQueryAccount: usesQueryAccount)
         }
     }
 }
@@ -304,13 +317,18 @@ struct LiveWorkflowDetail: View {
         else { Task { await load() } }
     }
     @EnvironmentObject private var session: LiveSession
+    @EnvironmentObject private var queries: QueryAccountModel
     let kind: WorkflowKind
     let id: String
+    var usesQueryAccount = false
     @State private var detail: JSONValue = .null
     @State private var materials: [JSONValue] = []
     @State private var actions = DetailActionSnapshot()
     @State private var suppressActions = false
     @State private var detailLoadID = UUID()
+    @State private var sourceSession: LiveSession?
+    @State private var operatorDetail: JSONValue = .null
+    @State private var operationNotice: String?
     @State private var loading = true
     @State private var error: String?
     @State private var editing = false
@@ -329,6 +347,14 @@ struct LiveWorkflowDetail: View {
             if detail == .null { LoadingFailure(error: error) { Task { await load() } } }
             else {
                 List {
+                    if usesQueryAccount {
+                        Section {
+                            Text("查询：" + queries.label(operator: session) + " · 操作：" + session.authentication.text("name")).font(.caption).foregroundStyle(.secondary)
+                            if let operationNotice {
+                                Label(operationNotice, systemImage: "lock.fill").font(.subheadline).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                     if kind == .fault {
                         Section("故障报修工单信息") {
                             LabeledContent("报修名称", value: detail["faultName"].text)
@@ -344,7 +370,7 @@ struct LiveWorkflowDetail: View {
                             LabeledContent("维修班组", value: detail["userGroup"].object.label)
                             LabeledContent("ERP记账部门", value: detail["division"].object.label)
                         }
-                        if let sentBack = faultReturnKind(detail) { ReturnNoteSection(kind: sentBack, repair: repairResult, fault: detail).id(explanationRevision) }
+                        if let sentBack = faultReturnKind(detail) { ReturnNoteSection(kind: sentBack, repair: repairResult, fault: detail).environmentObject(sourceSession ?? session).id(explanationRevision) }
                         if !detail["faultDesc"].text.isEmpty { Section("故障描述") { Text(detail["faultDesc"].text).textSelection(.enabled).contextMenu { Button("复制", systemImage: "doc.on.doc") { copyToPasteboard(detail["faultDesc"].text) } } } }
                         if !detail["albums"].array.isEmpty { Section("现场照片") { ForEach(Array(detail["albums"].array.enumerated()), id: \.offset) { _, photo in AttachmentRow(photo: photo) } } }
                         if repairResult != .null, faultReturnKind(detail) == nil { RepairResultSection(repair: repairResult) }
@@ -365,7 +391,7 @@ struct LiveWorkflowDetail: View {
                     }
                     if !detail["processInstanceId"].text.isEmpty {
                         Section {
-                            NavigationLink { WorkflowNodesView(processID: detail["processInstanceId"].text) } label: {
+                            NavigationLink { WorkflowNodesView(processID: detail["processInstanceId"].text).environmentObject(sourceSession ?? session) } label: {
                                 Label("处理流程", systemImage: "point.3.connected.trianglepath.dotted")
                             }
                         }
@@ -378,7 +404,10 @@ struct LiveWorkflowDetail: View {
         .textSelection(.enabled).navigationTitle(kind == .fault ? "报修详情" : "出库详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .errorDialog($error, retry: { Task { await load() } })
         .modifier(DetailTabVisibility())
-        .task(id: gate.id("detail")) { await gate.run(key: "detail") { await load() } }
+        .task(id: gate.id("detail-" + (usesQueryAccount ? queries.revision.uuidString : "operator"))) { await gate.run(key: "detail-" + (usesQueryAccount ? queries.revision.uuidString : "operator")) { await load() } }
+        .onChange(of: queries.revision) {
+            if usesQueryAccount { detail = .null; operatorDetail = .null; actions = DetailActionSnapshot(); sourceSession = nil; operationNotice = nil }
+        }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if canEdit && !peeking { Button("编辑") { editing = true }.disabled(loading || gate.busy || returnToList || suppressActions) }
@@ -409,13 +438,16 @@ struct LiveWorkflowDetail: View {
                     .accessibilityHidden(!actionInteractionAllowed)
                     .transition(.opacity)
                 }
+                if kind == .fault && !peeking && !loading && !returnToList && !suppressActions {
+                    AssetReportButton(asset: detail["asset"]).padding(.horizontal, 16).padding(.vertical, 8)
+                }
             }
             .interfaceMotion(actions)
             .interfaceMotion(suppressActions)
         }
         .sheet(isPresented: $returning, onDismiss: taskSheetClosed) { NavigationStack { WorkflowTaskView(task: task, kind: kind, previewReturn: true, onCompleted: completed) } }
         .sheet(isPresented: $editing, onDismiss: taskSheetClosed) {
-            NavigationStack { if kind == .fault { OriginalFaultForm(existing: detail.object, onSaved: completed) } else { OriginalERPForm(existing: detail.object, onSaved: { _ in completed() }) } }
+            NavigationStack { if kind == .fault { OriginalFaultForm(existing: (usesQueryAccount ? operatorDetail : detail).object, onSaved: completed) } else { OriginalERPForm(existing: detail.object, onSaved: { _ in completed() }) } }
         }
         .sheet(isPresented: $processing, onDismiss: taskSheetClosed) {
             NavigationStack {
@@ -425,18 +457,40 @@ struct LiveWorkflowDetail: View {
         }
     }
     private var canEdit: Bool {
-        kind == .fault ? detail["faultState"].text == "UNTREATED" && !task["id"].text.isEmpty : detail["processInstanceId"].text.isEmpty && detail["createBy"].text == session.authentication.text("name")
+        if usesQueryAccount && (operatorDetail == .null || operationNotice != nil) { return false }
+        return kind == .fault ? detail["faultState"].text == "UNTREATED" && !task["id"].text.isEmpty : detail["processInstanceId"].text.isEmpty && detail["createBy"].text == session.authentication.text("name")
     }
     private func load() async {
-        let run = UUID(), scope = session.scopeRevision
+        let run = UUID(), scope = session.scopeRevision, queryRevision = queries.revision
         detailLoadID = run
-        loading = true; error = nil
+        loading = true; error = nil; operationNotice = nil; actions = DetailActionSnapshot(); operatorDetail = .null
         defer { if detailLoadID == run { loading = false } }
         do {
-            let loadedDetail = try await session.request(kind.detailPath, query: [kind.idKey: id])
+            let source = usesQueryAccount && kind == .fault ? try await queries.source(for: session) : session
+            let loadedDetail = try await source.request(kind.detailPath, query: [kind.idKey: id])
+            try Task.checkCancellation()
+            guard !usesQueryAccount || queryRevision == queries.revision else { return }
+            sourceSession = source
             guard detailLoadID == run, scope == session.scopeRevision, !returnToList else { return }
             detail = loadedDetail
             explanationRevision = UUID()
+            if source !== session {
+                if kind == .fault { Task { await loadExplanations(record: loadedDetail, run: run, scope: scope) } }
+                do {
+                    let access = try await operatorOrderAccess(session: session, kind: kind, id: id, viewed: loadedDetail)
+                    try Task.checkCancellation()
+                    guard detailLoadID == run, scope == session.scopeRevision, queryRevision == queries.revision, !returnToList else { return }
+                    operatorDetail = access.detail; actions = access.actions; operationNotice = access.notice; suppressActions = false
+                } catch {
+                    guard !isCancellation(error), detailLoadID == run, scope == session.scopeRevision, queryRevision == queries.revision else { return }
+                    actions = DetailActionSnapshot()
+                    if (error as? APIError)?.status == 403 {
+                        operationNotice = "当前登录账号 " + session.authentication.text("name") + " 没有此单据的操作权限"
+                    } else { operationNotice = "当前登录账号操作权限核对失败，已停用操作。请刷新重试：" + error.localizedDescription }
+                }
+                return
+            }
+            operatorDetail = loadedDetail
             // The materials and the task state both only need what the detail just said: ask for them together.
             let api = session, isERP = kind == .erp, orderID = id, instance = orderProcessID(loadedDetail)
             let loadedTask = loadedDetail["taskInfo"]
@@ -467,7 +521,7 @@ struct LiveWorkflowDetail: View {
     /// When it cannot be read the page simply does without. The process history is never read for this.
     private func loadExplanations(record: JSONValue, run: UUID, scope: UUID) async {
         guard faultMayHaveRepairNote(record) else { repairResult = .null; return }
-        let answer = try? await session.request("repair/getRepairsByFaultId", query: ["faultId": id])
+        let answer = try? await (sourceSession ?? session).request("repair/getRepairsByFaultId", query: ["faultId": id])
         guard !Task.isCancelled, detailLoadID == run, scope == session.scopeRevision, !returnToList else { return }
         if let answer, let repair = latestRepair(answer), !repair["user"].object.isEmpty || !repair["content"].text.isEmpty { repairResult = repair } else { repairResult = .null }
     }

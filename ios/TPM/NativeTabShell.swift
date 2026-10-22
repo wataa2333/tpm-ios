@@ -18,7 +18,7 @@ struct NativeTabShell<Home: View, Todo: View, Workspace: View, Mine: View>: View
             Tab("主页", systemImage: "house", value: 0) { home().newDocumentButton(preview: preview) }
             Tab("我的待办", systemImage: "checklist", value: 2) { todo().newDocumentButton(preview: preview) }
                 .badge(navigation.todoCount)
-            Tab("工作台", systemImage: "square.grid.2x2", value: 1) { workspace().newDocumentButton(preview: preview) }
+            Tab("看板", systemImage: "square.grid.2x2", value: 1) { workspace().newDocumentButton(preview: preview) }
             Tab(mineTitle, systemImage: "person.crop.circle", value: 3) { mine().newDocumentButton(preview: preview) }
         }
         .onChange(of: selection) {
