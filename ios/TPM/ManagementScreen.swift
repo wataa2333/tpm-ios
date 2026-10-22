@@ -1,6 +1,8 @@
 import SwiftUI
 
 enum ManagedReadSettings {
+    static let pageSizes = [50, 100, 200, 500, 1000, 2000]
+    static let concurrencyLevels = [1, 3, 5, 8, 10, 12, 15, 20]
     static let experimentalKey = "developer.managementReadExperiment"
     static let pageKey = "developer.managementPageSize"
     static let concurrencyKey = "developer.managementConcurrency"
@@ -58,6 +60,10 @@ struct ManagementScreen: View {
                         Label("折线图与统计表", systemImage: "chart.xyaxis.line")
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }.buttonStyle(.borderedProminent)
+                        .disabled(!model.canShowTrends)
+                    if !model.canShowTrends {
+                        Text("读取完成后可查看图表；暂停或失败时请先继续读取。").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 HStack {
                     Text("人员／已加载").font(.headline)

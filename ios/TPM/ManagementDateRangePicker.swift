@@ -14,8 +14,18 @@ struct ManagementDateRangePicker: View {
         NavigationStack {
             Form {
                 Section {
-                    DatePicker("开始日期", selection: $draft.from, in: ...draft.to, displayedComponents: .date)
-                    DatePicker("结束日期", selection: $draft.to, in: draft.from...Date(), displayedComponents: .date)
+                    HStack(alignment: .center, spacing: 12) {
+                        Text("开始日期").fixedSize()
+                        Spacer(minLength: 0)
+                        DatePicker("开始日期", selection: $draft.from, in: ...draft.to, displayedComponents: .date)
+                            .labelsHidden().datePickerStyle(.compact).fixedSize()
+                    }.frame(maxWidth: .infinity, minHeight: 44)
+                    HStack(alignment: .center, spacing: 12) {
+                        Text("结束日期").fixedSize()
+                        Spacer(minLength: 0)
+                        DatePicker("结束日期", selection: $draft.to, in: draft.from...Date(), displayedComponents: .date)
+                            .labelsHidden().datePickerStyle(.compact).fixedSize()
+                    }.frame(maxWidth: .infinity, minHeight: 44)
                 } footer: { Text("包含开始和结束当天。超过 7 个自然日，读取前会提示将获取大量工单。") }
                 Section("快捷选择") {
                     shortcut("这个月", range: preset(days: nil))

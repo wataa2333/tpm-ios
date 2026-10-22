@@ -311,6 +311,10 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
     private var generation = UUID()
     private var runner: Task<Void, Never>?
     var hasUnfinished: Bool { slices.contains { !$0.finished || $0.failed } }
+    var canShowTrends: Bool {
+        !running && !paused && !estimating && !slices.isEmpty
+            && slices.allSatisfy { $0.complete && !$0.failed }
+    }
     var incomplete: Bool {
         running || paused || slices.isEmpty || slices.contains { !$0.complete } || report.duplicateConflicts || report.identityUnclear
     }
@@ -365,10 +369,10 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
         let selected = range.map { ManagedWindow(range: $0) } ?? days.map { ManagedWindow(days: $0) }
         if restart || scope != session.scopeRevision || window != selected || slices.isEmpty {
             clear(); scope = session.scopeRevision; window = selected
-            detailConcurrency = [1, 3, 5, 8].contains(concurrency) ? concurrency : 8
+            detailConcurrency = ManagedReadSettings.concurrencyLevels.contains(concurrency) ? concurrency : 8
             slices = (selected == nil ? ["SIGNED", "REPAIRED"] : ["RESOLVED", "FINISHED"]).map {
                 var slice = ManagedSlice(kind: .repair, state: $0)
-                slice.pageSize = [50, 100, 200, 500].contains(pageSize) ? pageSize : 500
+                slice.pageSize = ManagedReadSettings.pageSizes.contains(pageSize) ? pageSize : 500
                 return slice
             }
         }

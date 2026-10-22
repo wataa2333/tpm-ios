@@ -87,17 +87,13 @@ struct DeveloperAccessSheet: View {
             Form {
                 if unlocked {
                     Section {
-                        Toggle("管理看板", isOn: $managementEnabled)
+                        settingToggle("管理看板", isOn: $managementEnabled)
                     } footer: { Text("开启后在工作台显示管理看板入口，不改变服务器权限。") }
                     Section("管理读取档位") {
-                        Toggle("实验读取档位", isOn: $experimental)
+                        settingToggle("实验读取档位", isOn: $experimental)
                         if experimental {
-                            Picker("每页数量", selection: $pageSize) {
-                                ForEach([50, 100, 200, 500], id: \.self) { Text("\($0) 单").tag($0) }
-                            }
-                            Picker("详情并发", selection: $concurrency) {
-                                ForEach([1, 3, 5, 8], id: \.self) { Text("\($0) 单").tag($0) }
-                            }
+                            settingPicker("每页数量", selection: $pageSize, options: ManagedReadSettings.pageSizes)
+                            settingPicker("详情并发", selection: $concurrency, options: ManagedReadSettings.concurrencyLevels)
                         }
                         Text("默认每页 500、详情并发 8。档位仅对下次新查询生效；服务端最大每页数量未实测。").font(.caption).foregroundStyle(.secondary)
                     }
@@ -119,6 +115,22 @@ struct DeveloperAccessSheet: View {
             .navigationTitle(unlocked ? "开发者选项" : "开发者验证").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("完成") { dismiss() } } }
         }
+    }
+    private func settingToggle(_ title: String, isOn: Binding<Bool>) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(title)
+            Spacer(minLength: 12)
+            Toggle(title, isOn: isOn).labelsHidden().fixedSize()
+        }.frame(maxWidth: .infinity, minHeight: 44)
+    }
+    private func settingPicker(_ title: String, selection: Binding<Int>, options: [Int]) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(title)
+            Spacer(minLength: 12)
+            Picker(title, selection: selection) {
+                ForEach(options, id: \.self) { Text("\($0) 单").tag($0) }
+            }.labelsHidden().pickerStyle(.menu).fixedSize()
+        }.frame(maxWidth: .infinity, minHeight: 44)
     }
     private func unlock() {
         unlocked = password == "1331"
