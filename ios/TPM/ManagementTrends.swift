@@ -69,6 +69,7 @@ struct ManagementTrendScreen: View {
     @State private var orientationError: String?
     @State private var suggestLandscape = false
     @State private var initialized = false
+    @State private var selectedIndex: Int?
     private var people: [ManagedPerson] { model.report.people.filter { $0.id != ManagedReport.unknown } }
     private var buckets: [ManagedTrendBucket] {
         guard let window = model.window else { return [] }
@@ -112,7 +113,7 @@ struct ManagementTrendScreen: View {
             Group {
                 if landscape {
                     HStack(alignment: .top, spacing: 16) {
-                        ScrollView { controls.padding(12) }.frame(width: min(320, geometry.size.width * 0.4))
+                        ScrollView { controls.padding(12) }.frame(width: min(240, geometry.size.width * 0.28))
                         ScrollView { results.padding(.vertical, 12).padding(.trailing, 16) }
                     }
                 } else {
@@ -137,7 +138,7 @@ struct ManagementTrendScreen: View {
                 suggestLandscape = (model.window?.dayCount ?? 0) > 7
             }
         }
-        .onChange(of: grain) { visibleCount = grain == .day ? 7 : 12; zoomStart = nil }
+        .onChange(of: grain) { visibleCount = grain == .day ? 7 : 12; zoomStart = nil; selectedIndex = nil }
         .onChange(of: session.scopeRevision) { model.clear(); dismiss() }
         .onChange(of: enabled) { _, value in if !value { dismiss() } }
         .onDisappear { restoreOrientation() }
@@ -158,9 +159,9 @@ struct ManagementTrendScreen: View {
                 Spacer(minLength: 8)
                 Button("清空人员") { selected.removeAll() }
             }.font(.subheadline).buttonStyle(.bordered)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], spacing: 8) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 6)], alignment: .leading, spacing: 6) {
                 ForEach(people) { person in
-                    ManagementChoice(title: seriesTitle(person), selected: selected.contains(person.id)) {
+                    ManagementChoice(title: seriesTitle(person), selected: selected.contains(person.id), fillWidth: true) {
                         if selected.contains(person.id) { selected.remove(person.id) } else { selected.insert(person.id) }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -176,7 +177,28 @@ struct ManagementTrendScreen: View {
                 if points.isEmpty {
                     ContentUnavailableView("没有可绘制数据", systemImage: "chart.xyaxis.line", description: Text("选择全部合计或人员，或返回管理页面完成读取。"))
                         .frame(minHeight: 230)
-                } else { trendChart; legend }
+                } else {
+                    trendChart
+                    if let index = selectedIndex, buckets.indices.contains(index) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(buckets[index].label).font(.subheadline.weight(.semibold))
+                            ForEach(seriesNames.indices, id: \.self) { series in
+                                let name = seriesNames[series]
+                                let point = points.first { $0.index == index && $0.series == name }
+                                HStack {
+                                    Circle().fill(seriesColors[series]).frame(width: 8, height: 8)
+                                    Text(name)
+                                    Spacer()
+                                    Text(point.map { "\($0.value) 单" } ?? "—").monospacedDigit()
+                                }.font(.caption)
+                            }
+                        }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                    } else {
+                        Text("点击图表查看该日期的数量").font(.caption).foregroundStyle(.secondary)
+                    }
+                    legend
+                }
                 HStack {
                     Button("放大", systemImage: "plus.magnifyingglass") { visibleCount = max(2, visibleCount / 1.5) }
                     Button("缩小", systemImage: "minus.magnifyingglass") { visibleCount = min(Double(max(2, buckets.count)), visibleCount * 1.5) }
@@ -194,11 +216,17 @@ struct ManagementTrendScreen: View {
         }.interfaceMotion(swapped).interfaceMotion(grain).interfaceMotion(selected).interfaceMotion(showTotal)
     }
     private var trendChart: some View {
-        Chart(points) { point in
+        Chart {
+            ForEach(points) { point in
             LineMark(x: .value("日期", point.index), y: .value("单数", point.value), series: .value("连续日期", point.series + ":" + String(point.segment)))
                 .foregroundStyle(by: .value("人员", point.series)).interpolationMethod(.monotone)
             PointMark(x: .value("日期", point.index), y: .value("单数", point.value))
                 .foregroundStyle(by: .value("人员", point.series)).symbolSize(18)
+            }
+            if let index = selectedIndex, buckets.indices.contains(index) {
+                RuleMark(x: .value("选中日期", index))
+                    .foregroundStyle(Color.secondary).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            }
         }
         .chartXScale(domain: 0...max(1, buckets.count - 1))
         .chartYScale(domain: 0...max(1, points.map(\.value).max() ?? 1))
@@ -215,6 +243,10 @@ struct ManagementTrendScreen: View {
         .chartYAxis { AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) }
         .chartForegroundStyleScale(domain: seriesNames, range: seriesColors)
         .chartLegend(.hidden)
+        .chartXSelection(value: $selectedIndex)
+        .chartGesture { proxy in
+            SpatialTapGesture().onEnded { value in proxy.selectXValue(at: value.location.x) }
+        }
         .frame(height: 280)
         .simultaneousGesture(MagnifyGesture().onChanged { value in
             if zoomStart == nil { zoomStart = visibleCount }
@@ -253,8 +285,8 @@ private struct ManagementTrendTable: View {
     let people: [ManagedPerson]
     let swapped: Bool
     let complete: Bool
-    @ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = 58
-    @ScaledMetric(relativeTo: .body) private var columnWidth: CGFloat = 112
+    @ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = 40
+    @ScaledMetric(relativeTo: .body) private var columnWidth: CGFloat = 88
     @State private var horizontalOffset: CGFloat = 0
     private var names: [String] {
         people.map { person in
@@ -264,63 +296,40 @@ private struct ManagementTrendTable: View {
     private var rowTitles: [String] { swapped ? names : buckets.map(\.label) }
     private var columnTitles: [String] { swapped ? buckets.map(\.label) : names }
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                fixedRow(swapped ? "人员" : "日期", "合计", header: true)
-                movingHeader(driving: rowTitles.isEmpty) {
-                    HStack(spacing: 0) { ForEach(columnTitles.indices, id: \.self) { column in cell(columnTitles[column], header: true) } }
-                }
-            }
-            if swapped {
+        ScrollView(.horizontal) {
+            VStack(spacing: 0) {
                 HStack(spacing: 0) {
-                    fixedRow("全部合计", text(fixedTotal(0)), header: true)
-                    movingHeader {
-                        HStack(spacing: 0) { ForEach(buckets.indices, id: \.self) { column in cell(text(value(0, column)), header: true) } }
+                    fixedRow(swapped ? "人员" : "日期", "合计", header: true)
+                    ForEach(columnTitles.indices, id: \.self) { column in
+                        cell(columnTitles[column], header: true)
+                    }
+                }
+                if swapped {
+                    HStack(spacing: 0) {
+                        fixedRow("全部合计", text(fixedTotal(0)), header: true)
+                        ForEach(buckets.indices, id: \.self) { column in
+                            cell(text(value(0, column)), header: true)
+                        }
+                    }
+                }
+                ForEach(rowTitles.indices, id: \.self) { row in
+                    HStack(spacing: 0) {
+                        fixedRow(rowTitles[row], text(fixedTotal(swapped ? row + 1 : row)), header: false)
+                        ForEach(columnTitles.indices, id: \.self) { column in
+                            cell(text(value(swapped ? row + 1 : row, column)), header: false)
+                        }
                     }
                 }
             }
-            ScrollView(.vertical) {
-                HStack(alignment: .top, spacing: 0) {
-                    VStack(spacing: 0) {
-                        ForEach(rowTitles.indices, id: \.self) { row in
-                            fixedRow(rowTitles[row], text(fixedTotal(swapped ? row + 1 : row)), header: false)
-                        }
-                    }
-                    .background(Color(uiColor: .secondarySystemGroupedBackground))
-                    .overlay(alignment: .trailing) {
-                        LinearGradient(colors: [.black.opacity(0.12), .clear], startPoint: .leading, endPoint: .trailing).frame(width: 8).offset(x: 8).allowsHitTesting(false)
-                    }.zIndex(1)
-                    ScrollView(.horizontal) {
-                        VStack(spacing: 0) {
-                            ForEach(rowTitles.indices, id: \.self) { row in
-                                HStack(spacing: 0) { ForEach(columnTitles.indices, id: \.self) { column in cell(text(value(swapped ? row + 1 : row, column)), header: false) } }
-                            }
-                        }
-                    }
-                    .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x + $0.contentInsets.leading } action: { _, value in horizontalOffset = value }
-                }
-            }.frame(height: min(360, CGFloat(rowTitles.count) * rowHeight))
         }
         .background(Color(uiColor: .secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 14))
-        .accessibilityLabel("维修处理统计表，空白 — 表示数量尚未明确")
-        .onChange(of: swapped) { horizontalOffset = 0 }
-    }
-    @ViewBuilder private func movingHeader<Content: View>(driving: Bool = false, @ViewBuilder content: @escaping () -> Content) -> some View {
-        if driving {
-            ScrollView(.horizontal) { content() }
-                .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x + $0.contentInsets.leading } action: { _, value in horizontalOffset = value }
-                .frame(height: rowHeight)
-        } else {
-            GeometryReader { _ in
-                content().fixedSize(horizontal: true, vertical: false).offset(x: -horizontalOffset)
-            }.frame(height: rowHeight).clipped()
-        }
+        .accessibilityLabel("维修处理统计表，横向滑动查看更多列，空白 — 表示数量尚未明确")
     }
     private func fixedRow(_ title: String, _ total: String, header: Bool) -> some View {
         HStack(spacing: 0) {
-            Text(title).font(header ? .caption.weight(.semibold) : .caption).frame(width: min(130, columnWidth), alignment: .leading)
-            Text(total).font(.caption.monospacedDigit()).frame(width: 58)
+            Text(title).font(header ? .caption.weight(.semibold) : .caption).frame(width: columnWidth, alignment: .leading)
+            Text(total).font(.caption.monospacedDigit()).frame(width: 48)
         }.padding(.horizontal, 6).frame(height: rowHeight)
             .background(header ? Color.accentColor.opacity(0.1) : Color.clear)
             .overlay(alignment: .bottom) { Divider() }

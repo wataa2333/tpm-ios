@@ -18,24 +18,36 @@ struct ManagementDateRangePicker: View {
                     DatePicker("结束日期", selection: $draft.to, in: draft.from...Date(), displayedComponents: .date)
                 } footer: { Text("包含开始和结束当天。超过 7 个自然日，读取前会提示将获取大量工单。") }
                 Section("快捷选择") {
-                    Button("这个月") {
-                        let today = Calendar.current.startOfDay(for: Date())
-                        let start = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: today)) ?? today
-                        draft = DateRange(from: start, to: today)
-                    }
+                    shortcut("这个月", range: preset(days: nil))
                     ForEach([7, 30, 90, 365], id: \.self) { days in
-                        Button(days == 365 ? "近一年" : "近 \(days) 天") {
-                            let today = Calendar.current.startOfDay(for: Date())
-                            draft = DateRange(from: Calendar.current.date(byAdding: .day, value: -(days - 1), to: today) ?? today, to: today)
-                        }
+                        shortcut(days == 365 ? "近一年" : "近 \(days) 天", range: preset(days: days))
                     }
                 }
             }
+            .environment(\.locale, Locale(identifier: "zh_CN"))
             .navigationTitle("设定日期范围").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) { Button("应用日期范围") { apply(draft); dismiss() } }
             }
         }
+    }
+    private func preset(days: Int?) -> DateRange {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let start = days.map { calendar.date(byAdding: .day, value: -($0 - 1), to: today) ?? today }
+            ?? calendar.date(from: calendar.dateComponents([.year, .month], from: today)) ?? today
+        return DateRange(from: start, to: today)
+    }
+    private func shortcut(_ title: String, range: DateRange) -> some View {
+        let selected = Calendar.current.isDate(draft.from, inSameDayAs: range.from)
+            && Calendar.current.isDate(draft.to, inSameDayAs: range.to)
+        return Button { draft = range } label: {
+            HStack {
+                Text(title)
+                Spacer()
+                if selected { Image(systemName: "checkmark.circle.fill") }
+            }.frame(maxWidth: .infinity).contentShape(.rect)
+        }.accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

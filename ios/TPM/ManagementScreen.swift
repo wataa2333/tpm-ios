@@ -138,14 +138,15 @@ struct ManagementScreen: View {
                 }.disabled(model.estimating || historical && range == nil)
             }
             if let first = model.slices.first { Text("本次每页 \(first.pageSize) · 详情并发 \(model.detailConcurrency)").font(.caption).foregroundStyle(.secondary) }
-        }.padding(16).background(.background, in: RoundedRectangle(cornerRadius: 20))
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
+            .background(.background, in: RoundedRectangle(cornerRadius: 20))
     }
     @ViewBuilder private var readButtons: some View {
         if model.hasUnfinished { Button("继续／重试", systemImage: "play") { start(restart: false) }.buttonStyle(.borderedProminent) }
         Button(model.slices.isEmpty ? "预估并读取" : "重新读取", systemImage: "arrow.clockwise") { prepare() }.buttonStyle(.bordered)
     }
     private func personCard(_ person: ManagedPerson) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 5) {
             Text(person.name).font(.headline).foregroundStyle(.primary)
             Text(person.identity).font(.caption).foregroundStyle(.secondary)
             if historical { Text("处理 \(person.processed) 单").font(.subheadline).foregroundStyle(Color.accentColor) }
@@ -153,7 +154,7 @@ struct ManagementScreen: View {
                 if showSigned { Text("待签到 \(person.signed)").font(.subheadline).foregroundStyle(Color.accentColor) }
                 if showWorking { Text("待完成 \(person.working)").font(.subheadline).foregroundStyle(Color.accentColor) }
             }
-        }.frame(maxWidth: .infinity, minHeight: 100, alignment: .topLeading).padding(12)
+        }.frame(maxWidth: .infinity, alignment: .topLeading).padding(12)
             .background(.background, in: RoundedRectangle(cornerRadius: 16)).contentShape(.rect)
     }
     private func start(restart: Bool) {
@@ -176,13 +177,14 @@ struct ManagementScreen: View {
 struct ManagementChoice: View {
     let title: String
     let selected: Bool
+    var fillWidth = false
     let action: () -> Void
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
                 if selected { Image(systemName: "checkmark").font(.caption.weight(.bold)).transition(.opacity) }
                 Text(title).font(.subheadline.weight(.medium)).fixedSize(horizontal: false, vertical: true)
-            }.frame(minHeight: 32).padding(.horizontal, 10).padding(.vertical, 4)
+            }.frame(maxWidth: fillWidth ? .infinity : nil, minHeight: 32).padding(.horizontal, 10).padding(.vertical, 4)
                 .foregroundStyle(selected ? Color.white : Color.primary)
                 .background(selected ? Color.accentColor : Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
         }.buttonStyle(.plain).accessibilityLabel(title).accessibilityAddTraits(selected ? .isSelected : []).interfaceMotion(selected, duration: 0.2)
