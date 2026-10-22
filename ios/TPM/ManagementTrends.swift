@@ -121,9 +121,13 @@ struct ManagementTrendScreen: View {
                 }
             }
             .background(Color(uiColor: .systemGroupedBackground))
+            // Side-by-side scroll views must not paint separate top-edge materials.
+            .scrollEdgeEffectHidden(true, for: .top)
             .interfaceMotion(landscape)
         }
         .navigationTitle("维修处理趋势").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .toolbarBackground(Color(uiColor: .systemGroupedBackground), for: .navigationBar)
+        .toolbarBackgroundVisibility(.visible, for: .navigationBar)
         .modifier(DetailTabVisibility())
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("横屏", systemImage: "rectangle.landscape.rotate") { requestLandscape() } } }
         .alert("建议横屏查看", isPresented: $suggestLandscape) {
