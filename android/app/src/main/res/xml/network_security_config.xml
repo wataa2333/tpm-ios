@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The business server only speaks plain HTTP (the iOS app has the same exception). Cleartext is allowed for
+     that one host and nothing else. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">tpm.forbetter.cn</domain>
+    </domain-config>
+</network-security-config>

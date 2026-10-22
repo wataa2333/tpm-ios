@@ -1,4 +1,8 @@
-# wataa · 原生 iOS TPM 工作台
+> 2026-10-23 双端源码：iOS **0.7.25 / build31**（`ios/`），Android **1.78.0 / code78**（`android/`）。iOS沿用Codemagic现有工作流；Android用Android Studio打开`android/`。本机账号密码、授权密钥、签名与构建产物不入库；新机器按各端说明配置。以下旧版本记录保留作历史参考。
+
+# wataa · Android / iOS 原生 TPM 工作台
+
+> **2026-10-21 当前入口：** 先读 [新对话交接目录](docs/handoff/README.md)。Android源码1.58.0（58），iOS配置0.7.22（28）。最近108项Android测试、Debug编译、lint通过；最新卡片交互和管理分析尚未人工/服务器验收。本页下方iOS构建基线属于历史记录。
 
 将原 Android TPM App 的报修、维修和 ERP 领料迁移到 SwiftUI，保留原服务端字段、权限及工作流。应用名称 **wataa**，工程与 Scheme 名称 **TPM**。
 

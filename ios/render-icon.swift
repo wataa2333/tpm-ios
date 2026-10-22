@@ -41,4 +41,3 @@ for path in ["ios/TPM/Assets.xcassets/AppIcon.appiconset/AppIcon.png", "build/sc
     CGImageDestinationAddImage(destination, image, nil)
     guard CGImageDestinationFinalize(destination) else { fatalError("Cannot write icon PNG") }
 }
-

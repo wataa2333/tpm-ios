@@ -1,0 +1,43 @@
+# wataa（安卓版）
+
+自动更新：启动检测、我的 → 应用更新；发布与首次从 0.57.0 迁移步骤见 [自动更新发布说明](自动更新发布说明.md)。
+
+Kotlin + Jetpack Compose + Material 3。最低 Android 10（API 29）。功能对照 iOS 版（`ios/`）逐步移植，业务接口、字段、规则以 iOS 源码和 `项目交接说明.md` 为准。
+**验证状态：本地构建与自动化结果见 [更新与批量处理验收记录](更新与批量处理验收记录-2026-10-20.md)；真机与生产业务流程尚未验收。**
+
+## 第一次打开
+
+1. Android Studio（Ladybug 以上）→ Open → 选 `android` 文件夹。没有 `gradle-wrapper.jar` 时，Studio 会提示用自带 Gradle（8.9）同步，接受即可。
+2. 密钥种子：在项目根目录运行 `python tools/license_keygen.py init`（需要 Python 3，不需要额外库），把它打印的两行粘进
+   `app/src/main/java/com/personal/tpm/license/LicenseSecret.kt`。种子保存在 `.private/license_secret.txt`，**务必备份，不要上传**。
+3. 每月给用户发密钥：`python tools/license_keygen.py issue 2026-11`，或 `python tools/license_keygen.py list` 一次看接下来 6 个月。
+4. 运行测试：Studio 里右键 `app/src/test` → Run。授权测试里的种子是测试专用的，不是真种子。
+5. 发布 APK：自己建 keystore（不要放进仓库），在本机 `~/.gradle/gradle.properties` 里设置 `TPM_STORE_FILE`、`TPM_STORE_PASSWORD`、`TPM_KEY_ALIAS`、`TPM_KEY_PASSWORD`，然后 Build → Generate Signed Bundle / APK。
+
+## 密钥规则
+
+6 位字母和数字，不区分大小写（不含 0/O/1/I），每月一个，所有人通用：`HMAC-SHA256(种子, "TPM|yyyy-MM|计数")` 取前 30 位写成 6 个符号；没有字母或没有数字时计数加一重算。输入哪个月的密钥，就能用那个月；每月前 3 天（北京时间）上个月的密钥仍可用；可提前输入下个月的。**时间以手机时间为准**（不联网校时，打开 App 不等任何网络请求；代价是改手机时间可以绕过月份）。这是轻量的锁，种子在 App 里，挡不住有意破解。
+
+## 外观
+
+白色亮面主题 + 一个强调色（我的 → 外观 → 主题色：Material 调色板 18 色或自定义 #RRGGBB；浅色/深色/跟随系统）。顶栏用强调色的浅色调（不是纯强调色），页面从顶栏下以圆角开始，卡片为白色；标签页的大标题随手指连续缩小并并入顶栏（同一段文字在缩放、移动，不是两段文字切换）；列表向下滚时搜索框与状态条收起、反向滚动时立即出现；底部是标准的贴底导航栏，系统导航条/手势条透明。全部颜色、字体、圆角集中在 `ui/theme/ThemeConfig.kt`。字体内置 Noto Sans SC（`res/font`，常用字子集，SIL OFL 1.1 许可），不受手机自带字体影响；系统字号只在 0.9–1.15 倍范围内生效；大屏上内容限宽 640dp 居中。
+
+## 流畅度与刷新率
+
+- 从 Android Studio 直接运行的是 **debug 版**，Compose 在 debug 下比正式版慢很多，滑动卡顿主要来自这里。要看真实流畅度：Build → Select Build Variant → app 选 **release**（没有自己的 keystore 时会自动用 debug 密钥签名，只能自己安装测试），再运行。
+- 窗口会请求屏幕最高刷新率（`preferredDisplayModeId`）。OPPO/ColorOS 等对未在白名单里的应用常锁 60Hz：在 设置 → 显示与亮度 → 屏幕刷新率 里选“高”（不要选“智能”）才会对所有应用生效，应用自己只能请求、不能强制。
+- 加载动画只有一个位置：顶栏下沿，样式可在 我的 → 外观 里选（横条 / 点点 / 跳点，默认点点；下拉时随手指逐渐填满）；首屏用灰色骨架卡片。
+- 动画时长：页面切换与卡片放大成详情 500ms（缓入缓出，圆角随放大连续变化）；卡片展开/收起高度与渐变同为 320ms 同一曲线；全部为非线性曲线。每个可滚动页面到头后有橡皮筋拉伸并弹回（`ui/Elastic.kt`），下拉刷新页面随手指下移。
+
+## 目录
+
+- `license/` 密钥算法、月份规则、加密存储、状态控制
+- `data/` `Jv`（宽松 JSON 读取，对应 iOS 的 JSONValue）、`Session`（登录、请求、厂区切换，对应 iOS 的 LiveSession）、`SecureFile`
+- `ui/theme/ThemeConfig.kt` 统一配色入口（以后统一配置；状态颜色也在这里）
+- `ui/` 授权页、登录页、四标签外壳（悬浮圆角底栏）、`AppNav`（页面切换与返回）、主页、工单列表/卡片/详情
+- 图标来自 `ios/TPM/Assets.xcassets/AppIcon.appiconset/AppIcon.png`（已生成各密度的 mipmap 与自适应图标前景）
+
+## 移植进度
+
+已做：工作台（资产台账、ERP 出库、ERP 库存、快速查询）、任务处理（受理/指派/抢单/签到/审批/驳回/退单，选人与选班组带置顶、最近使用、默认；无确认弹窗）、卡片到详情的共享元素过渡、主题色深度调节、我的待办（卡片、搜索、角标）、处理流程页、ERP 出库详情（只读）、授权、登录（记住密码、指纹/面容/锁屏验证后切换账号）、厂区切换、我的页、主题入口、主页（状态卡片与数量）、工单列表（状态条与数量、搜索与搜索分类、日期筛选、分页、卡片展开/打开）、工单详情（只读，含退单/驳回说明与维修解决方案）。
+待做（按此顺序）：维修完成（填写维修结果）→  新建报修/ERP 表单（含各选择页） → 草稿 → 批量处理（含驳回/退单、ERP 领料）。

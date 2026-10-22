@@ -36,12 +36,12 @@ if run_tests:
     subprocess.run(["xcrun", "xcresulttool", "export", "attachments",
                 "--path", "build/PreviewTests.xcresult", "--output-path", str(output / "ui-tests")], check=True)
 screens = [
-    "faults", "new-fault", "processing", "erp-form", "workflow", "loading",
+    "faults", "new-fault", "processing", "erp-form", "workflow",
 ]
 captures = [(f"{index:02d}-{screen}", "light", ["--screen", screen])
             for index, screen in enumerate(screens, 1)]
 captures += [("07-faults-dark", "dark", ["--screen", "faults"])]
-captures += [("11-factories", "light", ["--screen", "factories"])]
+captures += [("11-factories", "light", ["--screen", "home"])]
 for index, screen in enumerate(["home", "workspace", "profile", "assets", "asset-detail", "stock", "stock-detail", "fault-detail", "working", "verifying", "finished", "repair-pool", "maintenance-pool", "precision-pool"], 12):
     captures.append((f"{index:02d}-{screen}", "light", ["--screen", screen]))
 captures += [("26-processing-dark", "dark", ["--screen", "processing"]), ("27-new-fault-dark", "dark", ["--screen", "new-fault"])]

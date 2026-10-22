@@ -33,4 +33,3 @@ jobs:
           name: wataa-unsigned
           path: build/wataa.ipa
           retention-days: 3
-

@@ -3,12 +3,24 @@ apk-analysis/extracted/
 .DS_Store
 build/
 DerivedData/
+ios/builds/
 *.xcuserstate
 xcuserdata/
 *.p12
 *.mobileprovision
 *.ipa
+*.apk
+*.aab
+*.apks
+*.jks
+*.keystore
+*.p8
+*.pfx
+授权密钥*.csv
+license_private*.pem
+/android/app/src/main/java/com/personal/tpm/license/LicenseSecret.kt
 .private/
 apk-analysis/app-service.pretty.js
 apk-analysis/contracts/
+apk-analysis/latest-check/
 
