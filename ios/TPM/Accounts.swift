@@ -121,8 +121,6 @@ struct ProfileTab: View {
     @State private var resuming: FaultDraft?
     @State private var draftNotice: String?
     @State private var developer = false
-    @State private var titleTaps = 0
-    @State private var lastTitleTap = Date.distantPast
     /// Turning the protection off is a change the owner confirms with the same check.
     private func setProtection(_ on: Bool) {
         if on { BiometricGate.isEnabled = true; protect = true; return }
@@ -185,6 +183,10 @@ struct ProfileTab: View {
                     HStack { Label("切换账号", systemImage: "person.2.fill"); Spacer(); if session.signingIn { ProgressView() } }
                 }
                 .accessibilityIdentifier("switch-account")
+                Button { developer = true } label: {
+                    Label("开发者选项", systemImage: "hammer")
+                }
+                .accessibilityIdentifier("developer-options")
             }
             Section {
                 // Laid out by hand: text on the left, switch centred on the right of the same line.
@@ -199,16 +201,6 @@ struct ProfileTab: View {
             Section { Button("退出登录", role: .destructive) { session.signOut() } }
         }
         .navigationTitle("我的").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
-        .background {
-            ProfileTitleTapObserver {
-                guard !developer else { return }
-                let now = Date()
-                titleTaps = now.timeIntervalSince(lastTitleTap) <= 1.5 ? titleTaps + 1 : 1
-                lastTitleTap = now
-                if titleTaps >= 10 { titleTaps = 0; developer = true }
-            }.frame(width: 0, height: 0)
-        }
-        .onDisappear { titleTaps = 0; lastTitleTap = .distantPast }
         .sheet(isPresented: $developer) { DeveloperAccessSheet() }
         .rootTopBar(busy: refreshing) {
             Task { refreshing = true; try? await session.refreshFactories(); refreshing = false }
