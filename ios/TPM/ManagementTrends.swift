@@ -132,12 +132,12 @@ struct ManagementTrendScreen: View {
                 }
             }
             .background(Color(uiColor: .systemGroupedBackground))
-            // Side-by-side scroll views must not paint separate top-edge materials.
-            .scrollEdgeEffectHidden(true, for: .top)
+            // A single toolbar material bridges landscape panes; portrait keeps its native edge effect.
+            .scrollEdgeEffectHidden(landscape, for: .top)
             .interfaceMotion(landscape)
         }
         .navigationTitle("维修处理趋势").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
-        .toolbarBackground(Color(uiColor: .systemGroupedBackground), for: .navigationBar)
+        .toolbarBackground(.regularMaterial, for: .navigationBar)
         .toolbarBackgroundVisibility(.visible, for: .navigationBar)
         .modifier(DetailTabVisibility())
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("横屏", systemImage: "rectangle.landscape.rotate") { requestLandscape() } } }
