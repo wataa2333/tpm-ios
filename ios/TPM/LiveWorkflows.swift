@@ -362,6 +362,10 @@ struct LiveWorkflowDetail: View {
                             HStack { Text("状态"); Spacer(); Text(faultStateName(detail["faultState"].text)).font(.body.weight(.semibold)).foregroundStyle(faultDisplayColor(detail["faultState"].text)) }
                             LabeledContent("故障时间", value: readableDate(detail["faultTime"]))
                             NavigationLink { AssetRecordDetail(record: detail["asset"]) } label: { LabeledContent("报修资产", value: detail["asset"]["assetName"].text) }
+                            if !peeking && !loading && !returnToList && !suppressActions {
+                                AssetReportButton(asset: detail["asset"])
+                                    .listRowBackground(Color.clear).listRowSeparator(.hidden)
+                            }
                             LabeledContent("故障申请人", value: detail["applyUser"].object.label)
                             LabeledContent("申请部门", value: detail["applyDept"].object.label)
                             LabeledContent("受理部门", value: detail["dept"].object.label)
@@ -437,9 +441,6 @@ struct LiveWorkflowDetail: View {
                     .allowsHitTesting(actionInteractionAllowed)
                     .accessibilityHidden(!actionInteractionAllowed)
                     .transition(.opacity)
-                }
-                if kind == .fault && !peeking && !loading && !returnToList && !suppressActions {
-                    AssetReportButton(asset: detail["asset"]).padding(.horizontal, 16).padding(.vertical, 8)
                 }
             }
             .interfaceMotion(actions)

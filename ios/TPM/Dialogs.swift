@@ -88,7 +88,7 @@ extension View {
         modifier(ErrorDialog(error: error, title: title, clearsOnClose: clearsOnClose, retry: retry))
     }
 
-    /// Dismissing the keyboard by dragging the content, and a "收起键盘" button above the keyboard
+    /// Dismiss by dragging, or with the native keyboard accessory's "收起键盘" button.
     /// for fields that have no return key (numbers, phone numbers).
     func keyboardManaged() -> some View {
         scrollDismissesKeyboard(.interactively).modifier(KeyboardDismissRow())
@@ -174,36 +174,18 @@ struct FullRowButton: View {
 }
 
 extension View {
-    /// Padding for the action buttons at the bottom of a page. The bottom padding is negative on purpose:
-    /// the buttons then sit as far from the lower screen edge as from the side edges (20pt), which keeps
-    /// them concentric with the screen's rounded corners instead of floating above the home indicator.
+    /// Stable padding for bottom actions, including while the keyboard animates.
     func bottomBarPadding() -> some View {
         modifier(BottomBarPadding())
     }
 }
 
-/// The negative bottom padding only makes sense against the home indicator. With the keyboard up, the
-/// bar's bottom edge is the keyboard's top edge, and pulling it down would hide the buttons' labels
-/// behind the keys, so the padding is normal then. Follow the keyboard's own animation timing.
+/// Keep a stable action-bar inset; UIKit alone animates the keyboard safe area.
 private struct BottomBarPadding: ViewModifier {
-    @State private var keyboardUp = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
-        content.padding(.horizontal, 20).padding(.top, 8).padding(.bottom, keyboardUp ? 8 : -14)
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
-                updateKeyboard(notification)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
-                updateKeyboard(notification)
-            }
-    }
-    private func updateKeyboard(_ notification: Notification) {
-        let change = KeyboardMotionChange(notification)
-        guard keyboardUp != change.visible else { return }
-        withAnimation(change.animation(reduceMotion: reduceMotion)) { keyboardUp = change.visible }
+        content.padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 8)
     }
 }
-
 /// A short notice that slides in below the navigation bar, speaks itself to VoiceOver and goes away alone.
 private struct ToastModifier: ViewModifier {
     @Binding var message: String?
@@ -236,38 +218,17 @@ extension View {
 }
 
 
-/// The "收起键盘" button, as a thin row of its own between the page's bottom bar and the keyboard (and only while the keyboard is up). It is a
-/// bottom inset, so the page's own bar is pushed up by it and nothing lies under it; the keyboard-toolbar placement floated the button over
-/// the page's bottom bar instead. It serves every field, with or without a return key (numbers, a multi-line note).
+/// A native keyboard accessory avoids adding/removing a second page safe-area inset.
 private struct KeyboardDismissRow: ViewModifier {
-    @State private var keyboardUp = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
-        content
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if keyboardUp {
-                    HStack {
-                        Spacer()
-                        Button { endEditing() } label: {
-                            Label("收起键盘", systemImage: "keyboard.chevron.compact.down").font(.subheadline.weight(.medium)).lineLimit(1)
-                        }
-                        .buttonStyle(.glass).controlSize(.regular)
-                        .accessibilityIdentifier("keyboard-dismiss")
-                    }
-                    .padding(.horizontal, 20).padding(.vertical, 6)
-                    .transition(.opacity)
+        content.toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(action: endEditing) {
+                    Label("收起键盘", systemImage: "keyboard.chevron.compact.down")
                 }
+                .accessibilityIdentifier("keyboard-dismiss")
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
-                updateKeyboard(notification)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
-                updateKeyboard(notification)
-            }
-    }
-    private func updateKeyboard(_ notification: Notification) {
-        let change = KeyboardMotionChange(notification)
-        guard keyboardUp != change.visible else { return }
-        withAnimation(change.animation(reduceMotion: reduceMotion)) { keyboardUp = change.visible }
+        }
     }
 }

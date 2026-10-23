@@ -28,6 +28,10 @@ struct PrecisionDashboardScreen: View {
                 PrecisionPanel {
                     Text("017CNC 精密度检查看板").font(.headline)
                     Text("查询：\(queries.label(operator: session)) · \(session.currentFactoryName)").font(.caption).foregroundStyle(.secondary)
+                    if model.showingPrevious {
+                        Label("上次获取的数据，非最新", systemImage: "clock.arrow.circlepath")
+                            .font(.subheadline.weight(.semibold)).foregroundStyle(.orange)
+                    }
                     if let date = model.updatedAt { Text("更新：" + date.formatted(date: .numeric, time: .shortened)).font(.caption).foregroundStyle(.secondary) }
                     Button("刷新数据") { Task { await model.refresh(owner: session, queries: queries) } }.disabled(model.loading)
                     if model.loading { ProgressView("正在读取") }
@@ -82,7 +86,11 @@ struct PrecisionDashboardScreen: View {
                                     Text("等级：" + row["analysisResult"].text.replacingOccurrences(of: "RESULT_", with: "") + " · 检测日期：" + readableDate(row["analysisDate"])).font(.caption)
                                 }.frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect)
                             }.buttonStyle(.plain)
-                            PrecisionPeopleLabel(assetID: row["asset"]["assetId"].text, refreshID: model.updatedAt).id(row["asset"]["assetId"].text)
+                            if model.showingPrevious {
+                                Text("检测／上传人：刷新后获取").font(.caption).foregroundStyle(.secondary)
+                            } else {
+                                PrecisionPeopleLabel(assetID: row["asset"]["assetId"].text, refreshID: model.updatedAt).id(row["asset"]["assetId"].text)
+                            }
                         }.padding(14).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
                     }
                     if shown < matching.count { Button("加载更多（20台）") { shown += 20 }.frame(maxWidth: .infinity).buttonStyle(.bordered) }

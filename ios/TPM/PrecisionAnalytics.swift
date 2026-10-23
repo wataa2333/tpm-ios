@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import CryptoKit
 
 let precisionGrades = ["AA", "A", "B", "C", "D"]
 func precisionBrand(_ name: String) -> String {
@@ -31,7 +32,7 @@ func precisionAnalysisBody() -> JSONValue {
         "analysisResults": strings(precisionGrades.map { "RESULT_" + $0 }), "type": .string("region"), "layerCode": .string(""),
         "categoryIds": .array([]), "useStates": strings(["IN_USE"]), "assetStates": strings(["NORMAL", "WARNING", "FAULT"])])
 }
-struct PrecisionSnapshot {
+struct PrecisionSnapshot: Codable {
     let rows: [JSONValue]
     let total: Int?
     let brands: [String: Int]?
@@ -87,6 +88,12 @@ struct PrecisionSnapshot {
 }
 
 @MainActor final class PrecisionDashboardModel: ObservableObject {
+    private struct SavedSnapshot: Codable {
+        let version: Int
+        let updatedAt: Date
+        let snapshot: PrecisionSnapshot
+    }
+    @Published private(set) var showingPrevious = false
     @Published var snapshot: PrecisionSnapshot?
     @Published var loading = false
     @Published var error: String?
@@ -95,8 +102,14 @@ struct PrecisionSnapshot {
     private var generation = UUID()
     func enter(owner: LiveSession, queries: QueryAccountModel) async {
         let key = owner.scopeRevision.uuidString + queries.revision.uuidString
-        if context == key { return }
-        snapshot = nil; context = key
+        if context == key, snapshot != nil { return }
+        snapshot = nil; updatedAt = nil; error = nil; showingPrevious = false; context = key
+        generation = UUID(); loading = false
+        if let url = cacheURL(owner: owner, queries: queries), let data = try? Data(contentsOf: url),
+           let saved = try? JSONDecoder().decode(SavedSnapshot.self, from: data), saved.version == 1 {
+            snapshot = saved.snapshot; updatedAt = saved.updatedAt; showingPrevious = true
+            return
+        }
         await refresh(owner: owner, queries: queries)
     }
     func refresh(owner: LiveSession, queries: QueryAccountModel) async {
@@ -109,7 +122,36 @@ struct PrecisionSnapshot {
                 try Task.checkCancellation()
                 guard self.generation == token, key == owner.scopeRevision.uuidString + queries.revision.uuidString else { throw CancellationError() }
             }
-            snapshot = result; updatedAt = Date()
+            try Task.checkCancellation()
+            guard generation == token, key == owner.scopeRevision.uuidString + queries.revision.uuidString else { return }
+            let date = Date()
+            snapshot = result; updatedAt = date; showingPrevious = false
+            save(result, date: date, owner: owner, queries: queries)
         } catch is CancellationError { } catch { if generation == token { self.error = error.localizedDescription } }
+    }
+    private func cacheURL(owner: LiveSession, queries: QueryAccountModel) -> URL? {
+        guard let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
+        let identity = [owner.draftScope, queries.label(operator: owner).lowercased()]
+        guard let data = try? JSONEncoder().encode(identity) else { return nil }
+        let key = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        return root.appendingPathComponent("PrecisionCache", isDirectory: true).appendingPathComponent(key + ".json")
+    }
+    private func save(_ result: PrecisionSnapshot, date: Date, owner: LiveSession, queries: QueryAccountModel) {
+        guard let url = cacheURL(owner: owner, queries: queries) else { return }
+        // Keep only fields used by the dashboard, never workflow payloads or credentials.
+        let rows = result.rows.map { row -> JSONValue in
+            let asset = row["asset"]
+            let fields = ["assetId", "assetCode", "assetName", "addressCode", "brand", "assetCategory"]
+            return .object(["asset": .object(Dictionary(uniqueKeysWithValues: fields.map { ($0, asset[$0]) })),
+                            "analysisResult": row["analysisResult"], "analysisDate": row["analysisDate"]])
+        }
+        let saved = SavedSnapshot(version: 1, updatedAt: date, snapshot: PrecisionSnapshot(rows: rows, total: result.total, brands: result.brands, notice: result.notice))
+        do {
+            var folder = url.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            var values = URLResourceValues(); values.isExcludedFromBackup = true
+            try folder.setResourceValues(values)
+            try JSONEncoder().encode(saved).write(to: url, options: [.atomic, .completeFileProtection])
+        } catch { /* Keep the current result usable when local persistence is unavailable. */ }
     }
 }

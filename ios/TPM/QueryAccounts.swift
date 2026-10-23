@@ -162,26 +162,29 @@ private enum QueryCredentialVault {
 struct QueryAccountSettingsView: View {
     @EnvironmentObject private var session: LiveSession
     @EnvironmentObject private var queries: QueryAccountModel
-    @State private var username = "C0382522"
+    @State private var username = ""
     @State private var password = ""
     @State private var busy = false
     @State private var error: String?
     @State private var saved: [SavedAccount] = []
     @State private var verification: Task<Void, Never>?
+    @State private var success: String?
     var body: some View {
         Form {
-            Section {
-                LabeledContent("查询使用", value: queries.label(operator: session))
+            Section("当前生效") {
+                LabeledContent("当前查询账号", value: queries.label(operator: session))
+                Label(queries.username.isEmpty ? "使用当前登录账号查询" : "已启用独立查询账号", systemImage: "checkmark.circle.fill")
+                    .font(.subheadline).foregroundStyle(Color.accentColor)
                 LabeledContent("操作使用", value: session.authentication.text("name"))
-                Text("仅维修看板、维修搜索和详情读取使用此账号；所有单据操作始终使用当前登录账号并核对服务器权限。").font(.footnote).foregroundStyle(.secondary)
-                Button("使用当前登录账号查询") { queries.useOperator(); password = "" }
+                Text("维修看板、维修搜索、精密度看板及查询详情使用此账号；单据操作始终使用当前登录账号。").font(.footnote).foregroundStyle(.secondary)
+                Button("改用当前登录账号查询") { queries.useOperator(); password = ""; success = "已切换为当前登录账号查询" }
             }
-            Section("独立查询账号") {
-                TextField("账号", text: $username).textInputAutocapitalization(.never).autocorrectionDisabled()
+            Section("设置独立查询账号") {
+                TextField("输入独立查询账号", text: $username).textInputAutocapitalization(.never).autocorrectionDisabled()
                 SecureField("密码（已保存可留空）", text: $password).textContentType(.password)
                 Button("验证并使用") { verify() }.disabled(username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if busy { ProgressView("正在验证账号与当前厂区") }
-                Text("验证成功后密码仅保存在本机钥匙串中，不修改当前登录账号。查询账号无当前厂区权限时会提示。").font(.caption).foregroundStyle(.secondary)
+                Text("输入或选择账号后，点击“验证并使用”才会生效。验证成功会保留选择及本机钥匙串凭据；无当前厂区权限时会提示。").font(.caption).foregroundStyle(.secondary)
             }
             if !saved.isEmpty {
                 Section("选择已保存账号") {
@@ -200,7 +203,10 @@ struct QueryAccountSettingsView: View {
             }
         }.disabled(busy)
         .navigationTitle("独立查询账号").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .modifier(DetailTabVisibility())
+        .keyboardManaged()
         .errorDialog($error, title: "查询账号", clearsOnClose: true)
+        .toast($success)
         .onAppear { saved = queries.savedAccounts; if !queries.username.isEmpty { username = queries.username } }
         .onDisappear { verification?.cancel(); password = "" }
         .interfaceMotion(busy).interfaceMotion(queries.username)
@@ -209,7 +215,12 @@ struct QueryAccountSettingsView: View {
         busy = true
         verification = Task {
             defer { busy = false }
-            do { try await queries.select(username: username, password: password, operator: session); password = ""; saved = queries.savedAccounts }
+            do {
+                endEditing()
+                try await queries.select(username: username, password: password, operator: session)
+                password = ""; saved = queries.savedAccounts
+                success = "查询账号已切换为 " + queries.label(operator: session)
+            }
             catch { if !isCancellation(error) { self.error = error.localizedDescription } }
         }
     }

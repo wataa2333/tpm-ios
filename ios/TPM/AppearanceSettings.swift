@@ -95,7 +95,7 @@ struct DeveloperAccessSheet: View {
                             settingPicker("每页数量", selection: $pageSize, options: ManagedReadSettings.pageSizes)
                             settingPicker("详情并发", selection: $concurrency, options: ManagedReadSettings.concurrencyLevels)
                         }
-                        Text("默认每页 500、详情并发 8。档位仅对下次新查询生效；服务端最大每页数量未实测。").font(.caption).foregroundStyle(.secondary)
+                        Text("档位会保留至下次使用，关闭实验读取不会清除已选数量。默认读取每页 500、详情并发 8；修改仅对下次新查询生效。").font(.caption).foregroundStyle(.secondary)
                     }
                     Section("应用信息") {
                         LabeledContent("版本", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
@@ -111,7 +111,6 @@ struct DeveloperAccessSheet: View {
                 }
             }
             .interfaceMotion(unlocked).interfaceMotion(experimental).interfaceMotion(incorrect)
-            .onChange(of: experimental) { _, value in if !value { pageSize = 500; concurrency = 8 } }
             .navigationTitle(unlocked ? "开发者选项" : "开发者验证").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("完成") { dismiss() } } }
         }

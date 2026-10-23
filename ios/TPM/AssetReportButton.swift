@@ -8,10 +8,11 @@ struct AssetReportButton: View {
     var body: some View {
         if !asset["assetId"].text.isEmpty && !asset["assetCode"].text.isEmpty {
             Button { presenting = true } label: {
-                Text("使用此资产编码进行新建报修")
+                Label("使用此资产编码新建报修", systemImage: "plus.circle")
                     .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-            }.buttonStyle(.bordered).accessibilityIdentifier("report-with-asset")
+                    .frame(maxWidth: .infinity).padding(.vertical, 8)
+            }.buttonStyle(.glass).buttonBorderShape(.roundedRectangle(radius: 16))
+                .accessibilityIdentifier("report-with-asset")
                 .sheet(isPresented: $presenting) {
                     NavigationStack { OriginalFaultForm(initialAsset: reference) }
                         .environment(\.queryReading, false)

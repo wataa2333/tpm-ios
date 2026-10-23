@@ -1,3 +1,5 @@
+最新iOS源码：0.7.26/build32。报修入口原生玻璃与位置修复、精密度上次数据缓存、共用键盘布局简化、开发者档位保留及查询账号状态说明。见 docs/handoff/iOS报修按钮与精密度缓存键盘-2026-10-23.md。未编译或运行测试，Android不变。
+
 最新iOS：0.7.25/build31，精密度曲线点选值、原生搜索和移除外置箭头，已上传GitHub main 55dd591bd916c15413be9ca3626bb77a8be02a7d。见 docs/handoff/iOS精密度点选与原生搜索-2026-10-23.md。源码检查通过，未Xcode构建或运行测试，未启动Codemagic。Android仍1.78.0/code78。
 
 最新Android进展：1.78.0/code78，资产报修按钮统一SoftButton实心样式，四Tab标题下拉优先展开及标题直接拖动。见 docs/handoff/Android按钮统一与标题展开-2026-10-23.md。未编译、运行测试或推送，用户Studio验收。iOS仍0.7.24/build30，GitHub main为d0dc699。
