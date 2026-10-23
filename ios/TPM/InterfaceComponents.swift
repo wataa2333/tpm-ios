@@ -48,18 +48,32 @@ struct BottomAction: View {
     let symbol: String
     var color: Color = .accentColor
     var busy = false
+    var compact = false
     let action: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 5) {
-                Group { if busy { ProgressView() } else { Image(systemName: symbol).font(.system(size: 28, weight: .medium)) } }
-                    .frame(width: 58, height: 48)
+            Group {
+                if compact {
+                    HStack(spacing: 8) {
+                        if busy { ProgressView() }
+                        else { Image(systemName: symbol).font(.title3) }
+                        Text(title).font(.subheadline.weight(.semibold))
+                    }
                     .foregroundStyle(color)
-                Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
-            }.padding(.horizontal, 8).padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, minHeight: 28)
+                    .padding(.vertical, 4)
+                } else {
+                    VStack(spacing: 5) {
+                        Group { if busy { ProgressView() } else { Image(systemName: symbol).font(.system(size: 28, weight: .medium)) } }
+                            .frame(width: 58, height: 48)
+                            .foregroundStyle(color)
+                        Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
+                    }.padding(.horizontal, 8).padding(.vertical, 6)
+                }
+            }
         }
-        .buttonStyle(.glass).buttonBorderShape(.roundedRectangle(radius: 24))
+        .buttonStyle(.glass).buttonBorderShape(.roundedRectangle(radius: compact ? 16 : 24))
         .accessibilityLabel(title)
         .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.2), value: busy)
     }

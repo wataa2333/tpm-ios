@@ -342,6 +342,10 @@ struct LiveWorkflowDetail: View {
     private var actionInteractionAllowed: Bool {
         !loading && !gate.busy && !returnToList && !suppressActions && !editing && !processing && !returning
     }
+    private var showsAssetReport: Bool {
+        kind == .fault && !peeking && !loading && !returnToList && !suppressActions
+            && !detail["asset"]["assetId"].text.isEmpty && !detail["asset"]["assetCode"].text.isEmpty
+    }
     var body: some View {
         Group {
             if detail == .null { LoadingFailure(error: error) { Task { await load() } } }
@@ -362,10 +366,6 @@ struct LiveWorkflowDetail: View {
                             HStack { Text("状态"); Spacer(); Text(faultStateName(detail["faultState"].text)).font(.body.weight(.semibold)).foregroundStyle(faultDisplayColor(detail["faultState"].text)) }
                             LabeledContent("故障时间", value: readableDate(detail["faultTime"]))
                             NavigationLink { AssetRecordDetail(record: detail["asset"]) } label: { LabeledContent("报修资产", value: detail["asset"]["assetName"].text) }
-                            if !peeking && !loading && !returnToList && !suppressActions {
-                                AssetReportButton(asset: detail["asset"])
-                                    .listRowBackground(Color.clear).listRowSeparator(.hidden)
-                            }
                             LabeledContent("故障申请人", value: detail["applyUser"].object.label)
                             LabeledContent("申请部门", value: detail["applyDept"].object.label)
                             LabeledContent("受理部门", value: detail["dept"].object.label)
@@ -418,23 +418,21 @@ struct LiveWorkflowDetail: View {
                 RefreshButton(busy: loading || gate.busy) { gate.request() }
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 0) {
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 8) {
                 if !peeking && actions.hasActions {
                     HStack {
                         if actions.canReturn {
-                            BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) {
+                            BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange, compact: true) {
                                 guard actionInteractionAllowed else { return }
                                 returning = true
                             }.transition(.opacity)
                         }
-                        Spacer()
-                        BottomAction(title: taskActionTitle(task, kind: kind), symbol: "arrow.right.circle") {
+                        BottomAction(title: taskActionTitle(task, kind: kind), symbol: "arrow.right.circle", compact: true) {
                             guard actionInteractionAllowed else { return }
                             processing = true
                         }
                     }
-                    .bottomBarPadding()
                     // Block stale actions without toggling the glass button's disabled tint on every refresh.
                     // Preserve the inset while dismissing the sheet / popping the detail.
                     .opacity(returnToList || suppressActions ? 0 : 1)
@@ -442,7 +440,13 @@ struct LiveWorkflowDetail: View {
                     .accessibilityHidden(!actionInteractionAllowed)
                     .transition(.opacity)
                 }
+                if showsAssetReport {
+                    AssetReportButton(asset: detail["asset"])
+                }
             }
+            .padding(.horizontal, 16).padding(.vertical, !peeking && (actions.hasActions || showsAssetReport) ? 10 : 0)
+            .frame(maxWidth: .infinity)
+            .background(.bar)
             .interfaceMotion(actions)
             .interfaceMotion(suppressActions)
         }

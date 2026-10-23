@@ -88,8 +88,8 @@ extension View {
         modifier(ErrorDialog(error: error, title: title, clearsOnClose: clearsOnClose, retry: retry))
     }
 
-    /// Dismiss by dragging, or with the native keyboard accessory's "收起键盘" button.
-    /// for fields that have no return key (numbers, phone numbers).
+    /// Dismiss by dragging, or with the navigation bar's "收起键盘" button.
+    /// Also serves fields without a return key (numbers, phone numbers).
     func keyboardManaged() -> some View {
         scrollDismissesKeyboard(.interactively).modifier(KeyboardDismissRow())
     }
@@ -218,17 +218,32 @@ extension View {
 }
 
 
-/// A native keyboard accessory avoids adding/removing a second page safe-area inset.
+/// Keep keyboard dismissal in the navigation bar, away from bottom form actions.
 private struct KeyboardDismissRow: ViewModifier {
+    @State private var keyboardUp = false
     func body(content: Content) -> some View {
         content.toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button(action: endEditing) {
-                    Label("收起键盘", systemImage: "keyboard.chevron.compact.down")
+            ToolbarItem(placement: .topBarTrailing) {
+                if keyboardUp {
+                    Button(action: endEditing) {
+                        Label("收起键盘", systemImage: "keyboard.chevron.compact.down")
+                    }
+                    .accessibilityIdentifier("keyboard-dismiss")
                 }
-                .accessibilityIdentifier("keyboard-dismiss")
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
+            update(notification)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
+            update(notification)
+        }
+        .onDisappear { keyboardUp = false }
+    }
+    private func update(_ notification: Notification) {
+        let visible = KeyboardMotionChange(notification).visible
+        guard visible != keyboardUp else { return }
+        var transaction = Transaction(); transaction.disablesAnimations = true
+        withTransaction(transaction) { keyboardUp = visible }
     }
 }
