@@ -423,12 +423,13 @@ struct LiveWorkflowDetail: View {
                 if !peeking && actions.hasActions {
                     HStack {
                         if actions.canReturn {
-                            BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange, compact: true) {
+                            BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) {
                                 guard actionInteractionAllowed else { return }
                                 returning = true
                             }.transition(.opacity)
                         }
-                        BottomAction(title: taskActionTitle(task, kind: kind), symbol: "arrow.right.circle", compact: true) {
+                        Spacer()
+                        BottomAction(title: taskActionTitle(task, kind: kind), symbol: "arrow.right.circle") {
                             guard actionInteractionAllowed else { return }
                             processing = true
                         }
@@ -446,7 +447,6 @@ struct LiveWorkflowDetail: View {
             }
             .padding(.horizontal, 16).padding(.vertical, !peeking && (actions.hasActions || showsAssetReport) ? 10 : 0)
             .frame(maxWidth: .infinity)
-            .background(.bar)
             .interfaceMotion(actions)
             .interfaceMotion(suppressActions)
         }
