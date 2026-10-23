@@ -202,6 +202,7 @@ struct ProfileTab: View {
             Section { Button("退出登录", role: .destructive) { session.signOut() } }
         }
         .navigationTitle("我的").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
+        .modifier(ListTabVisibility())
         .sheet(isPresented: $developer) { DeveloperAccessSheet() }
         .rootTopBar(busy: refreshing) {
             Task { refreshing = true; try? await session.refreshFactories(); refreshing = false }
