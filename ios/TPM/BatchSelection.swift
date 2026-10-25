@@ -340,7 +340,11 @@ struct BatchHost: ViewModifier {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     if batch.active { Button("取消") { batch.end() }.accessibilityIdentifier("batch-cancel") }
-                    else { Button("选择") { batch.begin() }.accessibilityIdentifier("batch-select") }
+                    else {
+                        Button("多选", systemImage: "checkmark.circle") { batch.begin() }
+                            .labelStyle(.iconOnly)
+                            .accessibilityIdentifier("batch-select")
+                    }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -425,21 +429,21 @@ struct BatchBar: View {
         VStack(spacing: 10) {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("已选 \(batch.items.count)/\(BatchSelection.limit)").font(.headline).monospacedDigit()
+                    Text("已选 \(batch.items.count)/\(BatchSelection.limit)").font(AppFont.headline).monospacedDigit()
                         .contentTransition(.numericText())
-                    Text(batch.groupTitle).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(batch.groupTitle).font(AppFont.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
                 Menu {
                     Button("全选已加载的单据", systemImage: "checkmark.circle", action: onSelectAll)
                     Button("清空已选", systemImage: "circle", role: .destructive) { batch.clear() }
-                } label: { Text("全选").font(.subheadline.weight(.medium)).padding(.horizontal, 8).frame(minHeight: 28) }
+                } label: { Text("全选").font(AppFont.subheadline.weight(.medium)).padding(.horizontal, 8).frame(minHeight: 28) }
                     .buttonStyle(.glass).accessibilityIdentifier("batch-select-all")
             }
             if let action = batch.action {
                 HStack(spacing: 10) {
                     Button { onRun(.reject) } label: {
-                        Label(action.rejectTitle, systemImage: action.rejectSymbol).font(.headline).lineLimit(1).frame(maxWidth: .infinity, minHeight: 28)
+                        Label(action.rejectTitle, systemImage: action.rejectSymbol).font(AppFont.headline).lineLimit(1).frame(maxWidth: .infinity, minHeight: 28)
                     }
                     .buttonStyle(.glass).tint(.red).controlSize(.large)
                     .disabled(batch.items.isEmpty || busy)
@@ -451,7 +455,7 @@ struct BatchBar: View {
                                 .interfaceMotion(busy, duration: 0.2)
                             Text(action.title).lineLimit(1)
                         }
-                        .font(.headline).frame(maxWidth: .infinity, minHeight: 28)
+                        .font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28)
                     }
                     .buttonStyle(.glassProminent).controlSize(.large)
                     .disabled(batch.items.isEmpty || busy)
@@ -533,7 +537,7 @@ struct BatchPresetSheet: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 Button(role: operation == .reject ? .destructive : nil) { start(preset) } label: {
-                    Text("开始处理 \(count) 张").font(.headline).frame(maxWidth: .infinity, minHeight: 28)
+                    Text("开始处理 \(count) 张").font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28)
                 }
                 .buttonStyle(.glassProminent).controlSize(.large)
                 .tint(operation == .reject ? .red : .accentColor)
@@ -592,8 +596,8 @@ struct BatchPresetSheet: View {
             ForEach(Array(preset.outboundLines.enumerated()), id: \.element.id) { index, entry in
                 let left = entry.line["actualQuantity"].number - entry.line["usedQuantity"].number
                 VStack(alignment: .leading, spacing: RowMetrics.spacing) {
-                    WrappingContent { Text(entry.line["material"]["materialDesc"].text).font(.headline) }
-                    WrappingContent { Text([entry.line["outbound"]["outNumber"].text, entry.line["material"]["materialCode"].text, "现可用 " + materialQuantity(String(left), material: entry.line["material"])].filter { !$0.isEmpty }.joined(separator: " · ")).font(.subheadline).foregroundStyle(.secondary) }
+                    WrappingContent { Text(entry.line["material"]["materialDesc"].text).font(AppFont.headline) }
+                    WrappingContent { Text([entry.line["outbound"]["outNumber"].text, entry.line["material"]["materialCode"].text, "现可用 " + materialQuantity(String(left), material: entry.line["material"])].filter { !$0.isEmpty }.joined(separator: " · ")).font(AppFont.subheadline).foregroundStyle(.secondary) }
                     HStack { Text("每单使用数量"); Spacer(); TextField("数量", value: outboundQuantity(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(minWidth: 70); Text(materialUnit(entry.line["material"])).foregroundStyle(.secondary) }
                 }
                 .swipeActions { Button("删除", role: .destructive) { preset.outboundLines.remove(at: index) } }
@@ -606,14 +610,14 @@ struct BatchPresetSheet: View {
     /// Every order takes the same material in the same quantity: each gets its own ERP outbound order.
     @ViewBuilder private var erpSections: some View {
         if request.erp == nil {
-            Section { Text("没能读取 ERP 领料设置，这次不能批量领料。").font(.footnote).foregroundStyle(.secondary) } header: { Text("ERP 领料") }
+            Section { Text("没能读取 ERP 领料设置，这次不能批量领料。").font(AppFont.footnote).foregroundStyle(.secondary) } header: { Text("ERP 领料") }
         } else {
             Section {
                 FullRowButton("添加领料物料", systemImage: "plus") { choosingMaterial = true }
                 ForEach(Array(preset.materials.enumerated()), id: \.element.id) { index, line in
                     VStack(alignment: .leading, spacing: RowMetrics.spacing) {
-                        WrappingContent { Text(line.material["materialDesc"].text).font(.headline) }
-                        WrappingContent { Text([line.material["materialCode"].text, "库存 " + materialQuantity(line.material["onhandQty"].text, material: line.material)].filter { !$0.isEmpty }.joined(separator: " · ")).font(.subheadline).foregroundStyle(.secondary) }
+                        WrappingContent { Text(line.material["materialDesc"].text).font(AppFont.headline) }
+                        WrappingContent { Text([line.material["materialCode"].text, "库存 " + materialQuantity(line.material["onhandQty"].text, material: line.material)].filter { !$0.isEmpty }.joined(separator: " · ")).font(AppFont.subheadline).foregroundStyle(.secondary) }
                         HStack { Text("每单数量"); Spacer(); TextField("数量", value: quantity(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(minWidth: 70); Text(materialUnit(line.material)).foregroundStyle(.secondary) }
                     }
                     .swipeActions { Button("删除", role: .destructive) { preset.materials.remove(at: index) } }
@@ -651,16 +655,16 @@ struct BatchRunSheet: View {
                         ProgressView(value: Double(run.processed), total: Double(max(run.total, 1)))
                             .accessibilityIdentifier("batch-progress")
                         HStack {
-                            Text(headline).font(.subheadline.weight(.medium))
+                            Text(headline).font(AppFont.subheadline.weight(.medium))
                             Spacer()
-                            Text("\(run.processed)/\(run.total)").font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+                            Text("\(run.processed)/\(run.total)").font(AppFont.subheadline).monospacedDigit().foregroundStyle(.secondary)
                                 .contentTransition(.numericText()).interfaceMotion(run.processed)
                         }
                     }.padding(.vertical, 4)
                     if let current = run.current {
                         LabeledContent("正在处理", value: current.name + (current.reference.isEmpty ? "" : " · " + current.reference))
                     }
-                    if let early = run.endedEarly { Text(early).font(.subheadline).foregroundStyle(.orange) }
+                    if let early = run.endedEarly { Text(early).font(AppFont.subheadline).foregroundStyle(.orange) }
                 }
                 Section("统计") {
                     LabeledContent("全部", value: "\(run.total)")
@@ -673,9 +677,9 @@ struct BatchRunSheet: View {
                     Section("跳过的单据") {
                         ForEach(run.skipped) { skip in
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(skip.name).font(.headline)
-                                if !skip.reference.isEmpty { Text(skip.reference).font(.subheadline).foregroundStyle(.secondary) }
-                                Text(skip.message).font(.subheadline).foregroundStyle(.orange).textSelection(.enabled)
+                                Text(skip.name).font(AppFont.headline)
+                                if !skip.reference.isEmpty { Text(skip.reference).font(AppFont.subheadline).foregroundStyle(.secondary) }
+                                Text(skip.message).font(AppFont.subheadline).foregroundStyle(.orange).textSelection(.enabled)
                             }
                         }
                     }
@@ -684,9 +688,9 @@ struct BatchRunSheet: View {
                     Section("失败的单据") {
                         ForEach(run.failures) { failure in
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(failure.name).font(.headline)
-                                if !failure.reference.isEmpty { Text(failure.reference).font(.subheadline).foregroundStyle(.secondary) }
-                                Text(failure.message).font(.subheadline).foregroundStyle(.red).textSelection(.enabled)
+                                Text(failure.name).font(AppFont.headline)
+                                if !failure.reference.isEmpty { Text(failure.reference).font(AppFont.subheadline).foregroundStyle(.secondary) }
+                                Text(failure.message).font(AppFont.subheadline).foregroundStyle(.red).textSelection(.enabled)
                             }
                         }
                     }
@@ -699,11 +703,11 @@ struct BatchRunSheet: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 HStack(spacing: 12) {
                     if run.running {
-                        Button { run.stop() } label: { Text("停止").font(.headline).frame(maxWidth: .infinity, minHeight: 28) }
+                        Button { run.stop() } label: { Text("停止").font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28) }
                             .buttonStyle(.glass).controlSize(.large).accessibilityIdentifier("batch-stop")
                             .transition(.opacity)
                     }
-                    Button { dismiss() } label: { Text("完成").font(.headline).frame(maxWidth: .infinity, minHeight: 28) }
+                    Button { dismiss() } label: { Text("完成").font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28) }
                         .buttonStyle(.glassProminent).controlSize(.large).disabled(run.running)
                         .accessibilityIdentifier("batch-done")
                 }
@@ -756,18 +760,18 @@ struct BatchProblemSheet: View {
     var body: some View {
         VStack(spacing: 18) {
             VStack(spacing: 8) {
-                Text(problem.title).font(.title3.weight(.semibold))
-                Text(problem.order.name + (problem.order.reference.isEmpty ? "" : " · " + problem.order.reference)).font(.subheadline).foregroundStyle(.secondary)
-                ScrollView { Text(problem.message).font(.body).multilineTextAlignment(.center).textSelection(.enabled).frame(maxWidth: .infinity) }
+                Text(problem.title).font(AppFont.title3.weight(.semibold))
+                Text(problem.order.name + (problem.order.reference.isEmpty ? "" : " · " + problem.order.reference)).font(AppFont.subheadline).foregroundStyle(.secondary)
+                ScrollView { Text(problem.message).font(AppFont.body).multilineTextAlignment(.center).textSelection(.enabled).frame(maxWidth: .infinity) }
                     .frame(maxHeight: 220)
             }.multilineTextAlignment(.center)
-            Toggle("后面遇到同样的情况，都这样处理", isOn: $applyToRest).font(.subheadline)
+            Toggle("后面遇到同样的情况，都这样处理", isOn: $applyToRest).font(AppFont.subheadline)
             VStack(spacing: 10) {
-                Button { answer(.withoutMaterials, applyToRest) } label: { Text("不领料，继续完成这张单").font(.headline).frame(maxWidth: .infinity, minHeight: 28) }
+                Button { answer(.withoutMaterials, applyToRest) } label: { Text("不领料，继续完成这张单").font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28) }
                     .buttonStyle(.glassProminent).controlSize(.large).accessibilityIdentifier("problem-without")
-                Button { answer(.skip, applyToRest) } label: { Text("跳过这张单").font(.headline).frame(maxWidth: .infinity, minHeight: 28) }
+                Button { answer(.skip, applyToRest) } label: { Text("跳过这张单").font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28) }
                     .buttonStyle(.glass).controlSize(.large).accessibilityIdentifier("problem-skip")
-                Button(role: .destructive) { answer(.stop, false) } label: { Text("停止批量处理").font(.headline).frame(maxWidth: .infinity, minHeight: 28) }
+                Button(role: .destructive) { answer(.stop, false) } label: { Text("停止批量处理").font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28) }
                     .buttonStyle(.glass).controlSize(.large).accessibilityIdentifier("problem-stop")
             }
         }

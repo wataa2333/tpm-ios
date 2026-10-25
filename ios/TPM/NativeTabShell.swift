@@ -48,7 +48,7 @@ struct NewDocumentButton: ViewModifier {
                             navigation.presentingDocument = true
                             creating = kind
                         } label: {
-                            Image(systemName: "plus").font(.title2.weight(.semibold)).frame(width: 44, height: 44)
+                            Image(systemName: "plus").font(AppFont.title2.weight(.semibold)).frame(width: 44, height: 44)
                         }
                         .buttonStyle(.glassProminent).buttonBorderShape(.circle)
                         .accessibilityLabel(kind == .erp ? "新建领料单" : "新建报修")

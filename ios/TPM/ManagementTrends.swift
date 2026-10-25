@@ -77,12 +77,12 @@ struct ManagementTrendScreen: View {
     @State private var zoomStart: Double?
     @State private var originalOrientation: UIInterfaceOrientation?
     @State private var orientationError: String?
-    @State private var suggestLandscape = false
     @State private var choosingPeople = false
     @State private var initialized = false
     @State private var selectedIndex: Int?
     @State private var focusedSeries: String?
-    @State private var chartScrollIndex = 0
+    @State private var chartScrollIndex = 0.0
+    @State private var zoomAnchor = 0.0
     private var people: [ManagedPerson] { model.report.people.filter { $0.id != ManagedReport.unknown } }
     private var buckets: [ManagedTrendBucket] {
         guard let window = model.window else { return [] }
@@ -91,15 +91,17 @@ struct ManagementTrendScreen: View {
     private var points: [ManagedTrendPoint] {
         var result: [ManagedTrendPoint] = []
         var segments: [String: Int] = [:]
+        let selectedPeople = people.filter { selected.contains($0.id) }
+        let titles = Dictionary(uniqueKeysWithValues: selectedPeople.map { ($0.id, seriesTitle($0)) })
         for (index, bucket) in buckets.enumerated() {
             if showTotal {
                 if bucket.total > 0 || !model.incomplete {
                     result.append(ManagedTrendPoint(series: "全部合计", index: index, value: bucket.total, segment: segments["total", default: 0]))
                 } else { segments["total", default: 0] += 1 }
             }
-            for person in people where selected.contains(person.id) {
+            for person in selectedPeople {
                 if let count = bucket.counts[person.id] ?? (model.incomplete ? nil : 0) {
-                    result.append(ManagedTrendPoint(series: seriesTitle(person), index: index, value: count, segment: segments[person.id, default: 0]))
+                    result.append(ManagedTrendPoint(series: titles[person.id] ?? person.name, index: index, value: count, segment: segments[person.id, default: 0]))
                 } else { segments[person.id, default: 0] += 1 }
             }
         }
@@ -115,7 +117,7 @@ struct ManagementTrendScreen: View {
             ForEach(seriesNames.indices, id: \.self) { index in
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Circle().fill(seriesColors[index]).frame(width: 8, height: 8)
-                    Text(seriesNames[index]).font(.caption).fixedSize(horizontal: false, vertical: true)
+                    Text(seriesNames[index]).font(AppFont.caption).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -143,10 +145,6 @@ struct ManagementTrendScreen: View {
         .toolbarBackgroundVisibility(.visible, for: .navigationBar)
         .modifier(DetailTabVisibility())
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("切换屏幕方向", systemImage: "rectangle.landscape.rotate") { toggleOrientation() } } }
-        .alert("建议横屏查看", isPresented: $suggestLandscape) {
-            Button("继续竖屏", role: .cancel) { }
-            Button("切换横屏") { requestLandscape() }
-        } message: { Text("日期跨度超过 7 天，横屏可同时查看人员选择、图表和统计表。") }
         .sheet(isPresented: $choosingPeople) {
             ManagementPeoplePicker(people: people, initial: selected, initialTotal: showTotal) { values, total in
                 selected = values; showTotal = total
@@ -157,7 +155,6 @@ struct ManagementTrendScreen: View {
             if !initialized {
                 initialized = true
                 grain = (model.window?.dayCount ?? 0) > 90 ? .month : .day
-                suggestLandscape = (model.window?.dayCount ?? 0) > 7
             }
         }
         .onChange(of: grain) { visibleCount = grain == .day ? 7 : 12; zoomStart = nil; selectedIndex = nil }
@@ -172,12 +169,11 @@ struct ManagementTrendScreen: View {
     private var controls: some View {
         VStack(alignment: .leading, spacing: 14) {
             if model.showingPrevious {
-                Label("上次读取的数据，非最新", systemImage: "clock.arrow.circlepath")
-                    .font(.caption.weight(.semibold)).foregroundStyle(.orange)
+                PreviousDataNotice(date: model.cachedAt, message: "请返回分析页重新查询获取最新数据。")
             }
-            if let window = model.window { Text(window.from + " 至 " + window.to).font(.subheadline.weight(.medium)) }
-            Text(model.status).font(.caption).foregroundStyle(.secondary)
-            Text("待确认／待复线／已完结 · 维修结束日期").font(.caption).foregroundStyle(.secondary)
+            if let window = model.window { Text(window.from + " 至 " + window.to).font(AppFont.subheadline.weight(.medium)) }
+            Text(model.status).font(AppFont.caption).foregroundStyle(.secondary)
+            Text("待确认／待复线／已完结 · 故障发现日期").font(AppFont.caption).foregroundStyle(.secondary)
             HStack {
                 ForEach(ManagedGrain.allCases) { option in
                     ManagementChoice(title: option.title, selected: grain == option) { grain = option }
@@ -187,14 +183,14 @@ struct ManagementTrendScreen: View {
                 Label("选择对比人员 · 已选\(selected.count)人", systemImage: "person.2")
                     .frame(maxWidth: .infinity, minHeight: 44)
             }.buttonStyle(.bordered).accessibilityIdentifier("trend-people-picker")
-            Text("全部合计含身份未明确工单；选择人员不会改变全部合计。单指横向查看日期，双指缩放；纵向滚动页面。").font(.caption).foregroundStyle(.secondary)
-            if model.incomplete { Text("读取未完整，空白值用 —；图表仅绘制已知数量。").font(.caption).foregroundStyle(.secondary) }
+            Text("全部合计含身份未明确工单；选择人员不会改变全部合计。单指横向查看日期，双指缩放；纵向滚动页面。").font(AppFont.caption).foregroundStyle(.secondary)
+            if model.incomplete { Text("读取未完整，空白值用 —；图表仅绘制已知数量。").font(AppFont.caption).foregroundStyle(.secondary) }
         }.interfaceMotion(selected).interfaceMotion(showTotal)
     }
     private var results: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("处理数量").font(.headline)
+                Text("处理数量").font(AppFont.headline)
                 if points.isEmpty {
                     ContentUnavailableView("没有可绘制数据", systemImage: "chart.xyaxis.line", description: Text("选择全部合计或人员，或返回管理页面完成读取。"))
                         .frame(minHeight: 230)
@@ -202,7 +198,7 @@ struct ManagementTrendScreen: View {
                     trendChart
                     if let index = selectedIndex, buckets.indices.contains(index) {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(buckets[index].label).font(.subheadline.weight(.semibold))
+                            Text(buckets[index].label).font(AppFont.subheadline.weight(.semibold))
                             ForEach(seriesNames.indices, id: \.self) { series in
                                 let name = seriesNames[series]
                                 let point = points.first { $0.index == index && $0.series == name }
@@ -211,23 +207,23 @@ struct ManagementTrendScreen: View {
                                     Text(name)
                                     Spacer()
                                     Text(point.map { "\($0.value) 单" } ?? "—").monospacedDigit()
-                                }.font(.caption)
+                                }.font(AppFont.caption)
                                     .padding(4)
                                     .background(focusedSeries == name ? Color.gray.opacity(0.18) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
                             }
                         }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
                     } else {
-                        Text("点击图表查看该日期的数量").font(.caption).foregroundStyle(.secondary)
+                        Text("点击图表查看该日期的数量").font(AppFont.caption).foregroundStyle(.secondary)
                     }
                     legend
                 }
 
             }.padding(14).background(.background, in: RoundedRectangle(cornerRadius: 18))
             HStack {
-                Text("统计表").font(.headline)
+                Text("统计表").font(AppFont.headline)
                 Spacer()
-                Button(swapped ? "日期为行" : "人员为行", systemImage: "arrow.triangle.swap") { swapped.toggle() }.font(.subheadline).buttonStyle(.bordered)
+                Button(swapped ? "日期为行" : "人员为行", systemImage: "arrow.triangle.swap") { swapped.toggle() }.font(AppFont.subheadline).buttonStyle(.bordered)
             }
             ManagementTrendTable(buckets: buckets, people: people.filter { selected.contains($0.id) }, swapped: swapped, complete: !model.incomplete,
                                  selectedIndex: $selectedIndex, focusedSeries: $focusedSeries)
@@ -235,7 +231,9 @@ struct ManagementTrendScreen: View {
         }.interfaceMotion(swapped).interfaceMotion(grain).interfaceMotion(selected).interfaceMotion(showTotal)
     }
     private var trendChart: some View {
-        Chart {
+        let buckets = self.buckets
+        let points = self.points
+        return Chart {
             ForEach(points) { point in
             LineMark(x: .value("日期", point.index), y: .value("单数", point.value), series: .value("连续日期", point.series + ":" + String(point.segment)))
                 .foregroundStyle(by: .value("人员", point.series)).interpolationMethod(.monotone)
@@ -258,11 +256,14 @@ struct ManagementTrendScreen: View {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine(); AxisTick()
                 AxisValueLabel {
-                    if let index = value.as(Int.self), buckets.indices.contains(index) { Text(buckets[index].label).font(.caption2) }
+                    if let index = value.as(Int.self), buckets.indices.contains(index) { Text(buckets[index].label).font(AppFont.caption2) }
                 }
             }
         }
-        .chartYAxis { AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) }
+        .chartYAxis { AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
+            AxisGridLine(); AxisTick()
+            AxisValueLabel { if let count = value.as(Int.self) { Text(String(count)).font(AppFont.caption2) } }
+        } }
         .chartForegroundStyleScale(domain: seriesNames, range: seriesColors)
         .chartLegend(.hidden)
         .chartXSelection(value: $selectedIndex)
@@ -273,14 +274,22 @@ struct ManagementTrendScreen: View {
             }
         }
         .onChange(of: selectedIndex) { _, index in
-            if let index { chartScrollIndex = max(0, index - Int(visibleCount / 2)) }
+            if zoomStart == nil, let index { chartScrollIndex = max(0, Double(index) - visibleCount / 2) }
         }
         .frame(height: 280)
         .simultaneousGesture(MagnifyGesture().onChanged { value in
-            if zoomStart == nil { zoomStart = visibleCount }
-            visibleCount = max(2, min(Double(max(2, buckets.count)), (zoomStart ?? visibleCount) / Double(value.magnification)))
+            if zoomStart == nil {
+                zoomStart = min(visibleCount, Double(max(2, buckets.count)))
+                zoomAnchor = chartScrollIndex + (zoomStart ?? visibleCount) / 2
+            }
+            let length = max(2, min(Double(max(2, buckets.count)), (zoomStart ?? visibleCount) / Double(value.magnification)))
+            var transaction = Transaction(); transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                visibleCount = length
+                chartScrollIndex = min(max(0, Double(buckets.count - 1) - length), max(0, zoomAnchor - length / 2))
+            }
         }.onEnded { _ in zoomStart = nil })
-        .interfaceMotion(points.map { $0.id + ":" + String($0.value) }).interfaceMotion(visibleCount, duration: 0.2)
+        .transaction { if zoomStart != nil { $0.animation = nil; $0.disablesAnimations = true } }
     }
     private func seriesTitle(_ person: ManagedPerson) -> String {
         let repeated = people.filter { $0.name == person.name }.count > 1
@@ -402,14 +411,14 @@ private struct ManagementTrendTable: View {
     }
     private func fixedRow(_ title: String, _ total: String, header: Bool) -> some View {
         HStack(spacing: 0) {
-            Text(title).font(header ? .caption.weight(.semibold) : .caption).frame(width: 78, alignment: .leading)
-            Text(total).font(.caption.monospacedDigit()).frame(width: 40)
+            Text(title).font(header ? AppFont.caption.weight(.semibold) : AppFont.caption).frame(width: 78, alignment: .leading)
+            Text(total).font(AppFont.caption.monospacedDigit()).frame(width: 40)
         }.padding(.horizontal, 6).frame(height: rowHeight)
             .background(header ? Color.accentColor.opacity(0.1) : Color.clear)
 
     }
     private func cell(_ title: String, header: Bool) -> some View {
-        Text(title).font(header ? .caption.weight(.semibold) : .caption.monospacedDigit())
+        Text(title).font(header ? AppFont.caption.weight(.semibold) : AppFont.caption.monospacedDigit())
             .frame(width: columnWidth, height: rowHeight).padding(.horizontal, 4)
             .background(header ? Color.accentColor.opacity(0.1) : Color(uiColor: .secondarySystemGroupedBackground))
 
@@ -443,7 +452,7 @@ struct ManagementTrendLayoutPreview: View {
                     guard slice.state == "RESOLVED", let window else { return .object(["content": .array([]), "last": .bool(true)]) }
                     let rows: [JSONValue] = (0..<41).map { index in
                         .object(["faultId": .string("fixture-" + String(index)), "faultName": .string("示例维修工单"), "faultState": .string("RESOLVED"),
-                                 "repairEndTime": .string(window.from), "repairUser": .object(["userName": .string(index == 40 ? "" : "fixture-account-" + String(index)),
+                                 "faultTime": .string(window.from), "repairUser": .object(["userName": .string(index == 40 ? "" : "fixture-account-" + String(index)),
                                                                                          "realName": .string(index < 2 ? "同名人员" : "较长的示例维修人员姓名")])])
                     }
                     return .object(["content": .array(rows), "last": .bool(true), "totalElements": .number(41)])

@@ -31,7 +31,7 @@ struct DashboardCard: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .center) {
                 // Keep the same text identity from unknown → known; a hidden zero only reserves space.
-                Text(count.map(String.init) ?? "0").font(.system(size: 30, weight: .bold, design: .rounded)).monospacedDigit()
+                Text(count.map(String.init) ?? "0").font(.custom("GoogleSans-Bold", size: 30, relativeTo: .title)).monospacedDigit()
                     .lineLimit(1).minimumScaleFactor(0.45).layoutPriority(1)
                     .foregroundStyle(.primary)
                     .opacity(count == nil ? 0 : 1)
@@ -39,11 +39,11 @@ struct DashboardCard: View {
                     .accessibilityHidden(count == nil)
                     .accessibilityIdentifier("dashboard-count-" + title)
                 Spacer(minLength: 8)
-                Image(systemName: symbol).font(.title2.weight(.semibold)).foregroundStyle(tint)
+                Image(systemName: symbol).font(AppFont.title2.weight(.semibold)).foregroundStyle(tint)
             }
             Spacer(minLength: 6)
-            Text(title).font(largeTitle ? .title2.weight(.bold) : .headline).foregroundStyle(.primary).multilineTextAlignment(.leading)
-            if !subtitle.isEmpty { Text(subtitle).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.leading) }
+            Text(title).font(largeTitle ? AppFont.title2.weight(.bold) : AppFont.headline).foregroundStyle(.primary).multilineTextAlignment(.leading)
+            if !subtitle.isEmpty { Text(subtitle).font(AppFont.caption).foregroundStyle(.secondary).multilineTextAlignment(.leading) }
         }
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: wide ? wideHeight : smallHeight, alignment: .leading)
@@ -59,12 +59,14 @@ struct DashboardBackground: View {
     var seed = 0
     var body: some View {
         GeometryReader { proxy in
+            let companions: [Color] = [.cyan, .indigo, .pink, .mint, .orange, .blue, .teal, .purple]
+            let companion = companions[abs(seed % companions.count)]
             ZStack {
                 Color(uiColor: .secondarySystemGroupedBackground)
-                LinearGradient(colors: [tint.opacity(0.30), tint.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                LinearGradient(colors: [tint.opacity(0.38), companion.opacity(0.22), tint.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing)
                 DashboardWave(offset: 0.15 + CGFloat(seed % 3) * 0.1, mirrored: seed % 2 == 0).fill(tint.opacity(0.10))
                 DashboardWave(offset: 0.40, mirrored: seed % 2 == 1).fill(tint.opacity(0.07))
-                Circle().fill(tint.opacity(0.14)).frame(width: proxy.size.height * 1.1)
+                Circle().fill(companion.opacity(0.22)).frame(width: proxy.size.height * 1.1)
                     .offset(x: proxy.size.width * (seed % 2 == 0 ? 0.42 : 0.30), y: -proxy.size.height * 0.45)
             }
         }
@@ -89,9 +91,9 @@ struct QuickQueryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center) {
-                Text(title).font(.headline).foregroundStyle(.primary)
+                Text(title).font(AppFont.headline).foregroundStyle(.primary)
                 Spacer(minLength: 8)
-                Image(systemName: symbol).font(.title2.weight(.semibold)).foregroundStyle(tint)
+                Image(systemName: symbol).font(AppFont.title2.weight(.semibold)).foregroundStyle(tint)
             }
             HStack(spacing: 10) {
                 TextField(placeholder, text: $text)
@@ -142,7 +144,7 @@ private struct DashboardWave: Shape {
 private struct DashboardHeading: View {
     let title: String
     var body: some View {
-        Text(title).font(.title3.weight(.semibold)).foregroundStyle(.primary)
+        Text(title).font(AppFont.title3.weight(.semibold)).foregroundStyle(.primary)
             .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8).accessibilityAddTraits(.isHeader)
     }
 }

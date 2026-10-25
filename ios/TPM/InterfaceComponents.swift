@@ -1,5 +1,23 @@
 import SwiftUI
 
+/// Shared stale-data treatment for analytics dashboards and their drill-down pages.
+struct PreviousDataNotice: View {
+    var date: Date?
+    var message = "请刷新获取最新数据。"
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("上次读取的数据，非最新").font(AppFont.subheadline.weight(.semibold))
+                if let date { Text(date.formatted(date: .numeric, time: .shortened)).font(AppFont.caption) }
+                Text(message).font(AppFont.caption)
+            }
+        } icon: { Image(systemName: "clock.arrow.circlepath").foregroundStyle(.orange) }
+        .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct SearchPageChrome: ViewModifier {
     var isSearching = false
     /// Tab root pages use the large title; pushed pages keep the inline one.
@@ -48,32 +66,18 @@ struct BottomAction: View {
     let symbol: String
     var color: Color = .accentColor
     var busy = false
-    var compact = false
     let action: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         Button(action: action) {
-            Group {
-                if compact {
-                    HStack(spacing: 8) {
-                        if busy { ProgressView() }
-                        else { Image(systemName: symbol).font(.title3) }
-                        Text(title).font(.subheadline.weight(.semibold))
-                    }
+            VStack(spacing: 5) {
+                Group { if busy { ProgressView() } else { Image(systemName: symbol).font(.system(size: 28, weight: .medium)) } }
+                    .frame(width: 58, height: 48)
                     .foregroundStyle(color)
-                    .frame(maxWidth: .infinity, minHeight: 28)
-                    .padding(.vertical, 4)
-                } else {
-                    VStack(spacing: 5) {
-                        Group { if busy { ProgressView() } else { Image(systemName: symbol).font(.system(size: 28, weight: .medium)) } }
-                            .frame(width: 58, height: 48)
-                            .foregroundStyle(color)
-                        Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
-                    }.padding(.horizontal, 8).padding(.vertical, 6)
-                }
-            }
+                Text(title).font(AppFont.subheadline.weight(.medium)).foregroundStyle(.primary)
+            }.padding(.horizontal, 8).padding(.vertical, 6)
         }
-        .buttonStyle(.glass).buttonBorderShape(.roundedRectangle(radius: compact ? 16 : 24))
+        .buttonStyle(.glass).buttonBorderShape(.roundedRectangle(radius: 24))
         .accessibilityLabel(title)
         .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.2), value: busy)
     }
@@ -147,14 +151,14 @@ struct LoadMoreFooter: View {
     var body: some View {
         Group {
             if hasMore && !failed {
-                HStack(spacing: 10) { ProgressView(); Text("正在加载更多…").font(.subheadline).foregroundStyle(.secondary) }
+                HStack(spacing: 10) { ProgressView(); Text("正在加载更多…").font(AppFont.subheadline).foregroundStyle(.secondary) }
                     .frame(maxWidth: .infinity)
                     .task(id: loaded) { if !loading { await loadMore() } }
                     .accessibilityElement(children: .combine)
                     .transition(.opacity)
             } else if loaded > 0 && !hasMore {
                 Text(total.map { "共 \($0) 单" } ?? "已显示全部 \(loaded) 条")
-                    .font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+                    .font(AppFont.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
                     .contentTransition(.numericText()).transition(.opacity)
             }
         }
@@ -229,9 +233,9 @@ struct ChipStrip: View {
                         Button { selection = item.id } label: {
                             VStack(spacing: 6) {
                                 HStack(spacing: 5) {
-                                    Text(item.title).font(.subheadline.weight(selection == item.id ? .semibold : .regular)).lineLimit(1)
+                                    Text(item.title).font(AppFont.subheadline.weight(selection == item.id ? .semibold : .regular)).lineLimit(1)
                                     if item.showsCount {
-                                        Text(item.count.map(String.init) ?? "…").font(.caption.weight(.semibold)).monospacedDigit()
+                                        Text(item.count.map(String.init) ?? "…").font(AppFont.caption.weight(.semibold)).monospacedDigit()
                                             .contentTransition(.numericText()).interfaceMotion(item.count, duration: 0.5)
                                     }
                                 }
@@ -272,8 +276,8 @@ struct CompactEmptyState: View {
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: "tray").font(.system(size: 28)).foregroundStyle(.secondary)
-            Text(title).font(.headline)
-            Text("可切换状态或调整搜索条件").font(.subheadline).foregroundStyle(.secondary)
+            Text(title).font(AppFont.headline)
+            Text("可切换状态或调整搜索条件").font(AppFont.subheadline).foregroundStyle(.secondary)
         }.frame(maxWidth: .infinity).padding(.vertical, 28)
     }
 }

@@ -25,48 +25,45 @@ struct PrecisionDashboardScreen: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
+                if model.showingPrevious { PreviousDataNotice(date: model.updatedAt) }
                 PrecisionPanel {
-                    Text("017CNC 精密度检查看板").font(.headline)
-                    Text("查询：\(queries.label(operator: session)) · \(session.currentFactoryName)").font(.caption).foregroundStyle(.secondary)
-                    if model.showingPrevious {
-                        Label("上次获取的数据，非最新", systemImage: "clock.arrow.circlepath")
-                            .font(.subheadline.weight(.semibold)).foregroundStyle(.orange)
-                    }
-                    if let date = model.updatedAt { Text("更新：" + date.formatted(date: .numeric, time: .shortened)).font(.caption).foregroundStyle(.secondary) }
+                    Text("017CNC 精密度检查看板").font(AppFont.headline)
+                    Text("查询：\(queries.label(operator: session)) · \(session.currentFactoryName)").font(AppFont.caption).foregroundStyle(.secondary)
+                    if let date = model.updatedAt { Text("更新：" + date.formatted(date: .numeric, time: .shortened)).font(AppFont.caption).foregroundStyle(.secondary) }
                     Button("刷新数据") { Task { await model.refresh(owner: session, queries: queries) } }.disabled(model.loading)
                     if model.loading { ProgressView("正在读取") }
                     if let error = model.error { Text(error).foregroundStyle(.red) }
                 }
                 if let data = model.snapshot {
                     PrecisionPanel {
-                        Text("检测进度").font(.headline)
-                        Text("已检 \(data.rows.count) 台").font(.title2.bold())
+                        Text("检测进度").font(AppFont.headline)
+                        Text("已检 \(data.rows.count) 台").font(AppFont.title2.bold())
                         if let total = data.total, total > 0 {
                             Text("共\(total)台 · 未检\(max(0, total - data.rows.count))台")
                             ProgressView(value: Double(data.rows.count), total: Double(total))
-                            Text("覆盖率：" + precisionPercent(data.rows.count, total)).font(.subheadline)
+                            Text("覆盖率：" + precisionPercent(data.rows.count, total)).font(AppFont.subheadline)
                         }
-                        if !data.notice.isEmpty { Text(data.notice).font(.caption).foregroundStyle(.orange) }
+                        if !data.notice.isEmpty { Text(data.notice).font(AppFont.caption).foregroundStyle(.orange) }
                     }
                     PrecisionPanel {
-                        Text("精度等级分布").font(.headline)
+                        Text("精度等级分布").font(AppFont.headline)
                         PrecisionGradeSummary(data: data, rows: data.rows, total: data.total)
                     }
                     ForEach(data.brandNames, id: \.self) { brand in
                         PrecisionPanel {
-                            Text(brand).font(.headline)
+                            Text(brand).font(AppFont.headline)
                             let rows = data.rows.filter { precisionBrand($0["asset"]["brand"]["brandName"].text) == brand }
                             let total = data.brands?[brand]
-                            Text("已检\(rows.count)台" + (total.map { " / 共\($0)台" } ?? " · 总数未知")).font(.subheadline)
+                            Text("已检\(rows.count)台" + (total.map { " / 共\($0)台" } ?? " · 总数未知")).font(AppFont.subheadline)
                             if let total, total > 0 {
-                                Text("已检 " + precisionPercent(rows.count, total) + " · 未检 " + precisionPercent(max(0, total - rows.count), total)).font(.caption)
+                                Text("已检 " + precisionPercent(rows.count, total) + " · 未检 " + precisionPercent(max(0, total - rows.count), total)).font(AppFont.caption)
                             }
                             PrecisionGradeSummary(data: data, rows: rows, total: total)
                         }
                     }
                     PrecisionDateDistribution(rows: data.rows)
                     PrecisionPanel {
-                        Text("设备检测明细").font(.headline)
+                        Text("设备检测明细").font(AppFont.headline)
                         ScrollView(.horizontal) {
                             HStack(spacing: 8) {
                                 ForEach(["全部"] + precisionGrades, id: \.self) { value in
@@ -74,24 +71,26 @@ struct PrecisionDashboardScreen: View {
                                 }
                             }
                         }
-                        Text("共\(matching.count)台 · 已显示\(min(shown, matching.count))台").font(.caption).foregroundStyle(.secondary)
+                        Text("共\(matching.count)台 · 已显示\(min(shown, matching.count))台").font(AppFont.caption).foregroundStyle(.secondary)
                     }
                     ForEach(Array(matching.prefix(shown).enumerated()), id: \.offset) { _, row in
-                        VStack(alignment: .leading, spacing: 6) {
-                            NavigationLink { PrecisionDeviceScreen(asset: row["asset"]) } label: {
+                        NavigationLink { PrecisionDeviceScreen(asset: row["asset"]) } label: {
+                            HStack(alignment: .center, spacing: 12) {
                                 VStack(alignment: .leading, spacing: 5) {
-                                    Text(row["asset"]["addressCode"].text.isEmpty ? row["asset"]["assetCode"].text : row["asset"]["addressCode"].text).font(.title3.bold())
-                                    Text(row["asset"]["assetName"].text).font(.subheadline)
-                                    Text(row["asset"]["assetCode"].text).font(.caption)
-                                    Text("等级：" + row["analysisResult"].text.replacingOccurrences(of: "RESULT_", with: "") + " · 检测日期：" + readableDate(row["analysisDate"])).font(.caption)
-                                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect)
-                            }.buttonStyle(.plain)
-                            if model.showingPrevious {
-                                Text("检测／上传人：刷新后获取").font(.caption).foregroundStyle(.secondary)
-                            } else {
-                                PrecisionPeopleLabel(assetID: row["asset"]["assetId"].text, refreshID: model.updatedAt).id(row["asset"]["assetId"].text)
-                            }
-                        }.padding(14).background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+                                    Text(row["asset"]["addressCode"].text.isEmpty ? row["asset"]["assetCode"].text : row["asset"]["addressCode"].text).font(AppFont.precisionText(.title3, size: 20))
+                                    Text(row["asset"]["assetName"].text).font(AppFont.precisionText(.subheadline, size: 15))
+                                    Text(row["asset"]["assetCode"].text).font(AppFont.precisionText(.caption, size: 12))
+                                    Text("检测日期：" + readableDate(row["analysisDate"])).font(AppFont.precisionText(.caption, size: 12))
+                                    PrecisionPeopleLabel(assetID: row["asset"]["assetId"].text, refreshID: model.updatedAt).id(row["asset"]["assetId"].text)
+                                }.frame(maxWidth: .infinity, alignment: .leading)
+                                Text(row["analysisResult"].text.replacingOccurrences(of: "RESULT_", with: ""))
+                                    .font(AppFont.precisionGrade)
+                                    .foregroundStyle(Color.accentColor.opacity(0.65))
+                                    .lineLimit(1).minimumScaleFactor(0.65).frame(minWidth: 80)
+                                    .accessibilityLabel("精度判定等级 " + row["analysisResult"].text.replacingOccurrences(of: "RESULT_", with: ""))
+                            }.contentShape(.rect).padding(14)
+                                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+                        }.buttonStyle(.plain)
                     }
                     if shown < matching.count { Button("加载更多（20台）") { shown += 20 }.frame(maxWidth: .infinity).buttonStyle(.bordered) }
                 }
@@ -128,12 +127,12 @@ private struct PrecisionGradeSummary: View {
                 HStack {
                     Text(grade).frame(width: 28, alignment: .leading)
                     ProgressView(value: Double(count), total: Double(max(1, total ?? rows.count))).tint(colors[index])
-                    Text("\(count)台").font(.caption).monospacedDigit().frame(minWidth: 42, alignment: .trailing)
+                    Text("\(count)台").font(AppFont.caption).monospacedDigit().frame(minWidth: 42, alignment: .trailing)
                 }
             }
             if let total {
                 let missing = max(0, total - rows.count)
-                HStack { Text("未检"); Spacer(); Text("\(missing)台 · " + precisionPercent(missing, total)).font(.caption) }
+                HStack { Text("未检"); Spacer(); Text("\(missing)台 · " + precisionPercent(missing, total)).font(AppFont.caption) }
             }
         }
     }
@@ -144,6 +143,8 @@ private struct PrecisionDateDistribution: View {
     @State private var days = 30
     @State private var visibleDays = 14.0
     @State private var magnifyStart: Double?
+    @State private var chartScrollIndex = 0.0
+    @State private var zoomAnchor = 0.0
     @State private var selectedIndex: Int?
     private var selectedPoint: (String, Int)? {
         guard let selectedIndex, dates.indices.contains(selectedIndex) else { return nil }
@@ -164,11 +165,13 @@ private struct PrecisionDateDistribution: View {
         return result
     }
     var body: some View {
+        // Reuse one date distribution throughout this render, including every axis label.
+        let dates = self.dates
         PrecisionPanel {
-            Text("检测日期分布").font(.headline)
+            Text("检测日期分布").font(AppFont.headline)
             Picker("日期范围", selection: $days) { Text("7天").tag(7); Text("30天").tag(30); Text("90天").tag(90); Text("全部").tag(0) }.pickerStyle(.segmented)
-            Text("当前分析结果的检测日期分布，并非历史每日新增；点选查看台数，左右拖动、双指缩放。").font(.caption).foregroundStyle(.secondary)
-            if dates.isEmpty { Text("该范围暂无检测日期").font(.subheadline) }
+            Text("当前分析结果的检测日期分布，并非历史每日新增；点选查看台数，左右拖动、双指缩放。").font(AppFont.caption).foregroundStyle(.secondary)
+            if dates.isEmpty { Text("该范围暂无检测日期").font(AppFont.subheadline) }
             else {
                 Chart {
                     ForEach(Array(dates.enumerated()), id: \.offset) { index, point in
@@ -183,28 +186,42 @@ private struct PrecisionDateDistribution: View {
                 .chartXScale(domain: 0...max(1, dates.count - 1))
                 .chartYScale(domain: 0...max(1, dates.map { $0.1 }.max() ?? 1))
                 .chartScrollableAxes(.horizontal).chartXVisibleDomain(length: min(visibleDays, Double(max(2, dates.count))))
+                .chartScrollPosition(x: $chartScrollIndex)
                 .chartXSelection(value: $selectedIndex)
                 .chartGesture { proxy in
                     SpatialTapGesture().onEnded { value in proxy.selectXValue(at: value.location.x) }
                 }
                 .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { value in
-                    AxisGridLine(); AxisTick(); AxisValueLabel { if let index = value.as(Int.self), dates.indices.contains(index) { Text(String(dates[index].0.suffix(5))) } }
+                    AxisGridLine(); AxisTick(); AxisValueLabel { if let index = value.as(Int.self), dates.indices.contains(index) { Text(String(dates[index].0.suffix(5))).font(AppFont.caption2) } }
+                } }
+                .chartYAxis { AxisMarks { value in
+                    AxisGridLine(); AxisTick()
+                    AxisValueLabel { if let count = value.as(Int.self) { Text(String(count)).font(AppFont.caption2) } }
                 } }
                 .frame(height: 220)
                 .simultaneousGesture(MagnifyGesture().onChanged { value in
-                    if magnifyStart == nil { magnifyStart = visibleDays }
-                    visibleDays = min(Double(max(2, dates.count)), max(2, (magnifyStart ?? 14) / Double(value.magnification)))
+                    if magnifyStart == nil {
+                        magnifyStart = min(visibleDays, Double(max(2, dates.count)))
+                        zoomAnchor = chartScrollIndex + (magnifyStart ?? visibleDays) / 2
+                    }
+                    let length = min(Double(max(2, dates.count)), max(2, (magnifyStart ?? 14) / Double(value.magnification)))
+                    var transaction = Transaction(); transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        visibleDays = length
+                        chartScrollIndex = min(max(0, Double(dates.count - 1) - length), max(0, zoomAnchor - length / 2))
+                    }
                 }.onEnded { _ in magnifyStart = nil })
+                .transaction { if magnifyStart != nil { $0.animation = nil; $0.disablesAnimations = true } }
                 if let point = selectedPoint {
                     HStack {
-                        Text(point.0).font(.subheadline.weight(.semibold))
+                        Text(point.0).font(AppFont.subheadline.weight(.semibold))
                         Spacer()
-                        Text("\(point.1) 台").font(.headline).foregroundStyle(Color.accentColor).monospacedDigit()
+                        Text("\(point.1) 台").font(AppFont.headline).foregroundStyle(Color.accentColor).monospacedDigit()
                     }.accessibilityElement(children: .combine).accessibilityIdentifier("precision-selected-value")
                 }
             }
         }
-        .onChange(of: days) { selectedIndex = nil }
+        .onChange(of: days) { selectedIndex = nil; chartScrollIndex = 0; magnifyStart = nil }
         .onChange(of: dates.map { $0.0 + ":" + String($0.1) }) { selectedIndex = nil }
     }
 }

@@ -114,6 +114,19 @@ final class LiveSession: ObservableObject {
     /// Query sessions never restore/persist the operator token and cannot call business write endpoints.
     let queryOnly: Bool
     var queryOwnerScope = ""
+    private weak var readFallbackOwner: LiveSession?
+    private var readFallbackScope: UUID?
+    private var usingReadFallback = false
+    private var onReadFallback: (() -> Void)?
+    func configureReadFallback(owner: LiveSession, onUse: @escaping () -> Void) {
+        guard queryOnly, !owner.queryOnly else { return }
+        readFallbackOwner = owner; readFallbackScope = owner.scopeRevision; onReadFallback = onUse
+    }
+    private func fallbackOwner() throws -> LiveSession {
+        guard let owner = readFallbackOwner, owner.signedIn, owner.scopeRevision == readFallbackScope,
+              owner.currentFactoryID == currentFactoryID else { throw CancellationError() }
+        return owner
+    }
     var signedIn: Bool { !authentication.text("token").isEmpty }
     var factories: [JSONValue] { authentication["factories"]?.array ?? [] }
     var currentFactoryID: String { authentication.text("factoryId") }
@@ -147,6 +160,7 @@ final class LiveSession: ObservableObject {
         } else if update != errSecSuccess { throw APIError(message: "无法更新登录会话") }
     }
     func signOut() {
+        readFallbackOwner = nil; readFallbackScope = nil; usingReadFallback = false; onReadFallback = nil
         if !queryOnly { UserDirectory.shared.clear() }
         scopeRevision = UUID()
         authentication = [:]
@@ -197,6 +211,9 @@ final class LiveSession: ObservableObject {
     }
     func request(_ path: String, query: [String: String] = [:], body: JSONValue? = nil) async throws -> JSONValue {
         if queryOnly { try QueryReadPolicy.validate(path: path, body: body) }
+        if queryOnly, usingReadFallback {
+            return try await fallbackOwner().request(path, query: query, body: body)
+        }
         var components = URLComponents(url: root.appendingPathComponent("rest").appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) } }
         var request = URLRequest(url: components.url!)
@@ -206,7 +223,16 @@ final class LiveSession: ObservableObject {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONEncoder().encode(body)
         }
-        return try await perform(request)
+        do {
+            return try await perform(request, signOutOnUnauthorized: !queryOnly || readFallbackOwner == nil)
+        } catch {
+            guard queryOnly, readFallbackOwner != nil, let api = error as? APIError,
+                  api.status == 401 || api.status == 403 else { throw error }
+            try Task.checkCancellation()
+            let owner = try fallbackOwner()
+            if !usingReadFallback { usingReadFallback = true; onReadFallback?() }
+            return try await owner.request(path, query: query, body: body)
+        }
     }
     private func perform(_ input: URLRequest, allowPlainText: Bool = false, signOutOnUnauthorized: Bool = true) async throws -> JSONValue {
         let scope = scopeRevision
@@ -316,7 +342,7 @@ struct NativeLoginView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(account.displayName.isEmpty ? account.username : account.displayName).foregroundStyle(Color.primary)
-                                    Text(account.username).font(.footnote).foregroundStyle(Color.secondary)
+                                    Text(account.username).font(AppFont.footnote).foregroundStyle(Color.secondary)
                                 }.frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect)
                             }
                             .buttonStyle(.plain).disabled(session.signingIn)

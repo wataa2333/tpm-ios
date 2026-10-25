@@ -238,8 +238,8 @@ struct ReferenceBadges: View {
     var body: some View {
         if menu.enabled {
             HStack(spacing: 6) {
-                if menu.isPinned(value) { Image(systemName: "pin.fill").font(.caption).foregroundStyle(Color.accentColor).accessibilityLabel("已置顶") }
-                if menu.isDefault(value) { Text("默认").font(.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 2).background(Color.orange.opacity(0.18), in: .capsule).foregroundStyle(.orange) }
+                if menu.isPinned(value) { Image(systemName: "pin.fill").font(AppFont.caption).foregroundStyle(Color.accentColor).accessibilityLabel("已置顶") }
+                if menu.isDefault(value) { Text("默认").font(AppFont.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 2).background(Color.orange.opacity(0.18), in: .capsule).foregroundStyle(.orange) }
             }
         }
     }

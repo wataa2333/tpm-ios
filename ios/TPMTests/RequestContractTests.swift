@@ -49,6 +49,45 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
 @Suite(.serialized) @MainActor
 struct RequestContractTests {
+    @Test func expiredQueryRetriesOnceWithOperatorAndKeepsReadOnlyPolicy() async throws {
+        let operation = makeSession(), query = makeQuerySession()
+        // Factory identity must match before any automatic fallback is allowed.
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubURLProtocol.self]
+        let owner = LiveSession(urlSession: URLSession(configuration: configuration), authentication: [
+            "token": .string("OPERATOR-TOKEN"), "name": .string("operator"), "factoryId": .string("factory")])
+        var fallbackCount = 0
+        query.configureReadFallback(owner: owner) { fallbackCount += 1 }
+        StubURLProtocol.responder = { request in
+            request.value(forHTTPHeaderField: "Authorization") == "Bearer READ-TOKEN" ? (401, Data("{}".utf8)) : (200, Data("{}".utf8))
+        }
+        _ = try await query.page("fault/pageAssetFault")
+        _ = try await query.page("asset/pageAsset")
+        #expect(fallbackCount == 1)
+        #expect(StubURLProtocol.captured.map(\.authorization) == ["Bearer READ-TOKEN", "Bearer OPERATOR-TOKEN", "Bearer OPERATOR-TOKEN"])
+        #expect(owner.signedIn && operation.signedIn)
+        do {
+            _ = try await query.request("process/commitTask", body: .object([:]))
+            Issue.record("fallback must not expand the query capability to writes")
+        } catch { }
+        #expect(StubURLProtocol.captured.count == 3)
+        owner.signOut()
+        do {
+            _ = try await query.page("fault/pageAssetFault")
+            Issue.record("a signed-out owner must invalidate fallback")
+        } catch { }
+        #expect(StubURLProtocol.captured.count == 3)
+    }
+
+    @Test func serverErrorsDoNotActivateQueryFallback() async throws {
+        let owner = makeSession(), query = makeQuerySession()
+        var activated = false
+        query.configureReadFallback(owner: owner) { activated = true }
+        StubURLProtocol.responder = { _ in (500, Data("{}".utf8)) }
+        do { _ = try await query.page("fault/pageAssetFault") } catch { }
+        #expect(!activated)
+        #expect(StubURLProtocol.captured.count == 1)
+    }
     private func makeSession() -> LiveSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]

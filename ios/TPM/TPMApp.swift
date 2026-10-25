@@ -7,7 +7,7 @@ struct TPMApp: App {
     @StateObject private var session = LiveSession()
     @StateObject private var navigation = BottomNavigationModel()
     @StateObject private var queryAccounts = QueryAccountModel()
-    @AppStorage(AppAccent.defaultsKey) private var accent = AppAccent.system.rawValue
+    init() { DeveloperPreferences.start(); AppFont.configureNativeControls() }
     var body: some Scene {
         WindowGroup {
             GeometryReader { geometry in
@@ -16,8 +16,8 @@ struct TPMApp: App {
                     .environmentObject(store).environmentObject(session).environmentObject(navigation).environmentObject(queryAccounts)
                     .onChange(of: session.scopeRevision) { queryAccounts.invalidate() }
                     .labeledContentStyle(SafeFactsStyle())
-                    .tint((AppAccent(rawValue: accent) ?? .system).color)
-                    .accentColor((AppAccent(rawValue: accent) ?? .system).color)
+                    .modifier(AppTheme())
+                    .font(AppFont.body)
             }
         }
     }
@@ -125,14 +125,14 @@ final class DemoStore: ObservableObject {
 }
 
 struct DemoNotice: View {
-    var body: some View { Text("模拟数据 · 操作仅保存在本次运行中").font(.footnote).foregroundStyle(.secondary) }
+    var body: some View { Text("模拟数据 · 操作仅保存在本次运行中").font(AppFont.footnote).foregroundStyle(.secondary) }
 }
 
 struct StatusLabel: View {
     let state: FaultState
     var body: some View {
         HStack(spacing: 5) { Image(systemName: state.symbol); Text(state.rawValue) }
-            .font(.subheadline.weight(.medium)).foregroundStyle(state.color).fixedSize()
+            .font(AppFont.subheadline.weight(.medium)).foregroundStyle(state.color).fixedSize()
     }
 }
 
@@ -168,7 +168,7 @@ struct PoolEntry: View {
         Label {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title)
-                Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+                Text(subtitle).font(AppFont.subheadline).foregroundStyle(.secondary)
             }.padding(.vertical, 6)
         } icon: { Image(systemName: symbol).foregroundStyle(.tint).frame(width: 26) }
     }
@@ -294,8 +294,8 @@ struct FaultDetailView: View {
                     Section("设备") {
                         NavigationLink { AssetDetailView(asset: fault.asset) } label: {
                             VStack(alignment: .leading, spacing: 5) {
-                                Text(fault.name).font(.headline)
-                                Text("\(fault.asset.id) · \(fault.asset.location)").font(.subheadline).foregroundStyle(.secondary)
+                                Text(fault.name).font(AppFont.headline)
+                                Text("\(fault.asset.id) · \(fault.asset.location)").font(AppFont.subheadline).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -305,7 +305,7 @@ struct FaultDetailView: View {
                     Section { NavigationLink { WorkflowNodesView(processID: "", preview: true) } label: { Label("处理流程", systemImage: "point.3.connected.trianglepath.dotted") } }
                     Section("处理记录") {
                         ForEach(Array(fault.records.enumerated()), id: \.offset) { index, record in
-                            Label(record, systemImage: index == fault.records.count - 1 ? "circle.inset.filled" : "circle").font(.subheadline)
+                            Label(record, systemImage: index == fault.records.count - 1 ? "circle.inset.filled" : "circle").font(AppFont.subheadline)
                         }
                     }
                     Section { DemoNotice() }
@@ -366,9 +366,9 @@ struct AssetRow: View {
     let asset: Asset
     var body: some View {
         VStack(alignment: .leading, spacing: RowMetrics.spacing) {
-            WrappingContent { Text(asset.name).font(.headline) }
-            WrappingContent { Text("\(asset.id) · \(asset.model)").font(.subheadline).foregroundStyle(.secondary) }
-            WrappingContent { Text(asset.location).font(.subheadline).foregroundStyle(.secondary) }
+            WrappingContent { Text(asset.name).font(AppFont.headline) }
+            WrappingContent { Text("\(asset.id) · \(asset.model)").font(AppFont.subheadline).foregroundStyle(.secondary) }
+            WrappingContent { Text(asset.location).font(AppFont.subheadline).foregroundStyle(.secondary) }
         }
     }
 }
@@ -421,7 +421,6 @@ struct OrderDetailView: View {
     @EnvironmentObject private var store: DemoStore
     let kind: String
     let asset: Asset
-    @State private var confirming = false
     private var claimed: Bool { store.claimedOrders.contains(kind + asset.id) }
     var body: some View {
         List {
@@ -438,8 +437,7 @@ struct OrderDetailView: View {
         }
         .navigationTitle("工单详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility())
-        .safeAreaInset(edge: .bottom) { HStack { Spacer(); BottomAction(title: claimed ? "已抢单" : "抢单", symbol: "hand.raised") { confirming = true }.disabled(claimed) }.bottomBarPadding() }
-        .confirmationDialog("领取这张模拟工单？", isPresented: $confirming, titleVisibility: .visible) { Button("领取模拟工单") { store.claimedOrders.insert(kind + asset.id) } }
+        .safeAreaInset(edge: .bottom) { HStack { Spacer(); BottomAction(title: claimed ? "已抢单" : "抢单", symbol: "hand.raised") { store.claimedOrders.insert(kind + asset.id) }.disabled(claimed) }.bottomBarPadding() }
     }
 }
 
@@ -453,12 +451,12 @@ struct StockListView: View {
                     NavigationLink { MaterialDetailView(material: material) } label: {
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: RowMetrics.spacing) {
-                                Text(material.name).font(.headline)
-                                Text(material.specification).font(.subheadline).foregroundStyle(.secondary)
-                                Text(material.shelf).font(.subheadline).foregroundStyle(.secondary)
+                                Text(material.name).font(AppFont.headline)
+                                Text(material.specification).font(AppFont.subheadline).foregroundStyle(.secondary)
+                                Text(material.shelf).font(AppFont.subheadline).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Text("\(material.quantity) \(material.unit)").font(.subheadline.monospacedDigit())
+                            Text("\(material.quantity) \(material.unit)").font(AppFont.subheadline.monospacedDigit())
                         }
                     }.uniformRow()
                 }
@@ -476,7 +474,7 @@ struct MaterialDetailView: View {
     var body: some View {
         List {
             Section {
-                Text(material.name).font(.title2.bold())
+                Text(material.name).font(AppFont.title2.bold())
                 LabeledContent("物料编号", value: material.id)
                 LabeledContent("规格型号", value: material.specification)
             }
@@ -519,7 +517,6 @@ struct OutboundListView: View {
 struct OutboundDetailView: View {
     @EnvironmentObject private var store: DemoStore
     let id: String
-    @State private var confirming = false
     var body: some View {
         if let item = store.outbounds.first(where: { $0.id == id }) {
             List {
@@ -532,7 +529,7 @@ struct OutboundDetailView: View {
                 }
                 Section("出库明细") {
                     NavigationLink { MaterialDetailView(material: item.material) } label: {
-                        VStack(alignment: .leading, spacing: 5) { Text(item.material.name).font(.headline); Text(item.material.specification).font(.subheadline).foregroundStyle(.secondary) }
+                        VStack(alignment: .leading, spacing: 5) { Text(item.material.name).font(AppFont.headline); Text(item.material.specification).font(AppFont.subheadline).foregroundStyle(.secondary) }
                     }
                     LabeledContent("申请数量", value: "\(item.quantity) \(item.material.unit)")
                     LabeledContent("出库库位", value: item.material.shelf)
@@ -542,10 +539,7 @@ struct OutboundDetailView: View {
             .navigationTitle("出库详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
             .modifier(DetailTabVisibility())
             .safeAreaInset(edge: .bottom) {
-                if !item.completed { HStack { Spacer(); BottomAction(title: "确认出库", symbol: "checkmark.circle") { confirming = true } }.bottomBarPadding() }
-            }
-            .confirmationDialog("确认本地模拟出库？", isPresented: $confirming, titleVisibility: .visible) {
-                Button("确认模拟出库") { if let i = store.outbounds.firstIndex(where: { $0.id == id }) { store.outbounds[i].completed = true } }
+                if !item.completed { HStack { Spacer(); BottomAction(title: "确认出库", symbol: "checkmark.circle") { if let i = store.outbounds.firstIndex(where: { $0.id == id }) { store.outbounds[i].completed = true } } }.bottomBarPadding() }
             }
         } else { ContentUnavailableView("单据不存在", systemImage: "doc.questionmark") }
     }

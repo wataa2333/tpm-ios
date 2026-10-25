@@ -14,7 +14,7 @@ enum ManagedKind: String, CaseIterable, Identifiable, Sendable, Codable {
     var stateField: String { switch self { case .repair: "faultState"; case .maintenance: "maintainState"; case .precision: "preciseState" } }
     var workingState: String { switch self { case .repair: "REPAIRED"; case .maintenance: "MAINTAINED"; case .precision: "PRECISED" } }
     var executorField: String { switch self { case .repair: "repairUser"; case .maintenance: "maintainUser"; case .precision: "user" } }
-    var endField: String { self == .repair ? "repairEndTime" : "endTime" }
+    var endField: String { self == .repair ? "faultTime" : "endTime" }
 }
 
 struct ManagedWindow: Equatable, Codable {
@@ -163,7 +163,7 @@ struct ManagedSlice: Identifiable, Codable {
                 documents.removeValue(forKey: key)
                 let actualState = row[kind.stateField].text
                 guard !actualState.isEmpty, managementDay(row[kind.endField]) != nil else {
-                    reasons.insert("工单状态或维修结束日期缺失"); continue
+                    reasons.insert("工单状态或故障发现日期缺失"); continue
                 }
                 if ["VERIFIED", "RESOLVED", "FINISHED"].contains(actualState),
                    let doc = managedDocument(kind: kind, row: row, state: actualState, window: window) {
@@ -263,6 +263,11 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
 }
 
 @MainActor final class ManagementAnalyticsModel: ObservableObject {
+    private let historicalMode: Bool?
+    init(historical: Bool? = nil) { historicalMode = historical }
+    private var cacheSuffix: String {
+        historicalMode.map { $0 ? ".history.summary.json" : ".pending.summary.json" } ?? ".summary.json"
+    }
     private struct SliceSummary: Codable {
         let kind: ManagedKind
         let state: String
@@ -292,6 +297,7 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
         let report: ManagedReport
         let window: ManagedWindow?
         let concurrency: Int
+        let elapsedSeconds: TimeInterval?
     }
     typealias PageReader = @MainActor (ManagedSlice, ManagedWindow?) async throws -> JSONValue
     @Published private(set) var slices: [ManagedSlice] = []
@@ -327,10 +333,13 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
         let directory = folder.appendingPathComponent("ManagementCache", isDirectory: true)
         // Retire the old document cache without decoding its potentially large contents.
         try? FileManager.default.removeItem(at: directory.appendingPathComponent(key + ".json"))
-        let url = directory.appendingPathComponent(key + ".summary.json")
+        let url = directory.appendingPathComponent(key + cacheSuffix)
         cacheURL = url
-        guard let data = try? Data(contentsOf: url),
-              let saved = try? JSONDecoder().decode(Snapshot.self, from: data), [2, 3].contains(saved.version) else { return }
+        let legacy = directory.appendingPathComponent(key + ".summary.json")
+        guard let data = (try? Data(contentsOf: url)) ?? (try? Data(contentsOf: legacy)),
+              let saved = try? JSONDecoder().decode(Snapshot.self, from: data),
+              saved.version == 4 || (saved.window == nil && [2, 3].contains(saved.version)),
+              historicalMode == nil || historicalMode == (saved.window != nil) else { return }
         slices = saved.slices.map(\.slice); window = saved.window; detailConcurrency = saved.concurrency
         report = saved.report; summaryOnly = saved.version == 2
         if !summaryOnly {
@@ -342,12 +351,13 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
         }
         scope = session.scopeRevision; paused = hasUnfinished
         cachedAt = saved.savedAt; showingPrevious = true
+        elapsedSeconds = saved.elapsedSeconds ?? 0
     }
     private func savePrevious() {
         guard !showingPrevious, let url = cacheURL, !slices.isEmpty,
               slices.contains(where: { $0.offset > 0 }) || slices.allSatisfy({ $0.complete }) else { return }
         let date = Date()
-        let saved = Snapshot(version: 3, savedAt: date, slices: slices.map(SliceSummary.init), report: report, window: window, concurrency: detailConcurrency)
+        let saved = Snapshot(version: 4, savedAt: date, slices: slices.map(SliceSummary.init), report: report, window: window, concurrency: detailConcurrency, elapsedSeconds: elapsedSeconds)
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             var folder = url.deletingLastPathComponent()
@@ -362,6 +372,15 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
     private(set) var detailConcurrency = 8
     private var generation = UUID()
     private var runner: Task<Void, Never>?
+    @Published private(set) var elapsedSeconds: TimeInterval = 0
+    private var timer: Task<Void, Never>?
+    private var readStarted: TimeInterval?
+    private var elapsedBeforeRead: TimeInterval = 0
+    private func finishTiming() {
+        if let readStarted { elapsedSeconds = elapsedBeforeRead + ProcessInfo.processInfo.systemUptime - readStarted }
+        readStarted = nil; timer?.cancel(); timer = nil
+    }
+
     var hasUnfinished: Bool { !showingPrevious && !summaryOnly && slices.contains { !$0.finished || $0.failed } }
     var canShowTrends: Bool {
         !running && !paused && !estimating && !slices.isEmpty
@@ -381,15 +400,16 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
         return (incomplete ? "结果不完整／" : "本轮读取结束／") + progress
     }
     func clear() {
-        runner?.cancel(); runner = nil; generation = UUID()
+        finishTiming(); runner?.cancel(); runner = nil; generation = UUID()
         running = false; paused = false; estimating = false; estimatedCount = nil
         slices = []; report = ManagedReport(); window = nil; scope = nil; detailChecked = 0; detailExpected = 0
         cachedAt = nil; showingPrevious = false; cacheURL = nil
-        summaryOnly = false
+        summaryOnly = false; elapsedSeconds = 0
     }
     func pause() {
-        runner?.cancel(); runner = nil; generation = UUID(); running = false
+        finishTiming(); runner?.cancel(); runner = nil; generation = UUID(); running = false
         paused = hasUnfinished; estimating = false
+        savePrevious()
     }
     /// Each state is estimated with limit=1; no detail requests until the user confirms.
     func estimate(session: LiveSession, historical: Bool, range: DateRange?) async throws -> Int {
@@ -398,7 +418,7 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
         generation = token; estimating = true; estimatedCount = nil
         defer { if generation == token { estimating = false } }
         let selected = historical ? range.map { ManagedWindow(range: $0) } : nil
-        if historical && selected == nil { throw APIError(message: "请先选择维修结束日期范围") }
+        if historical && selected == nil { throw APIError(message: "请先选择故障发现日期范围") }
         var count = 0
         for state in historical ? ["VERIFIED", "RESOLVED", "FINISHED"] : ["SIGNED", "REPAIRED"] {
             let slice = ManagedSlice(kind: .repair, state: state)
@@ -434,11 +454,20 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
             slices[i].reasons = slices[i].reasons.filter { !$0.hasPrefix("读取失败：") }
         }
         if pageReader == nil, let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-            cacheURL = folder.appendingPathComponent("ManagementCache", isDirectory: true).appendingPathComponent(key + ".summary.json")
+            cacheURL = folder.appendingPathComponent("ManagementCache", isDirectory: true).appendingPathComponent(key + cacheSuffix)
         }
         guard hasUnfinished else { return }
         showingPrevious = false
         running = true; paused = false
+        elapsedBeforeRead = elapsedSeconds
+        readStarted = ProcessInfo.processInfo.systemUptime
+        timer = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, let began = self.readStarted else { return }
+                self.elapsedSeconds = self.elapsedBeforeRead + ProcessInfo.processInfo.systemUptime - began
+                do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+            }
+        }
         let token = UUID(), capturedScope = session.scopeRevision
         let limitConcurrency = detailConcurrency
         let reader: PageReader = pageReader ?? { slice, window in
@@ -461,7 +490,7 @@ func managedReport(_ input: [ManagedDocument]) -> ManagedReport {
         }
     }
     private func read(session: LiveSession, token: UUID, capturedScope: UUID, reader: PageReader) async {
-        defer { if generation == token { running = false; runner = nil } }
+        defer { if generation == token { finishTiming(); running = false; runner = nil; savePrevious() } }
         for index in slices.indices {
             while generation == token && !slices[index].finished {
                 guard session.scopeRevision == capturedScope else { clear(); return }
