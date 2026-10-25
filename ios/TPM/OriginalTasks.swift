@@ -17,7 +17,6 @@ struct OriginalRepairForm: View {
     @State private var choosingAssistants = false
     @State private var workflow = false
     @State private var workflowCompleted = false
-    @State private var confirming = false
     @State private var submitAfterSave = false
     @State private var draftID: UUID?
     @State private var toast: String?
@@ -30,7 +29,7 @@ struct OriginalRepairForm: View {
     private var workflowTask: JSONValue { latestTask["id"].text.isEmpty ? task : latestTask }
     private func field(_ key: String) -> Binding<JSONValue> { Binding(get: { data[key] ?? .null }, set: { data[key] = $0 }) }
     private func text(_ key: String) -> Binding<String> { Binding(get: { data.text(key) }, set: { data[key] = .string($0) }) }
-    private func useQuantity(_ index: Int) -> Binding<Double> { Binding(get: { data["erpRepairMaterials"]!.array[index]["useNum"].number }, set: { quantity in var rows = data["erpRepairMaterials"]!.array; var row = rows[index].object; row["useNum"] = .number(quantity); rows[index] = .object(row); data["erpRepairMaterials"] = .array(rows) }) }
+    private func useQuantity(_ index: Int) -> Binding<Double> { Binding(get: { data["erpRepairMaterials"]!.array[index]["useNum"].number }, set: { quantity in var rows = data["erpRepairMaterials"]!.array; var row = rows[index].object; row["useNum"] = .number(cappedMaterialQuantity(quantity, maximum: (row["materialOutbound"]?["actualQuantity"].number ?? 0) - (row["materialOutbound"]?["usedQuantity"].number ?? 0))); rows[index] = .object(row); data["erpRepairMaterials"] = .array(rows) }) }
     var body: some View {
         Form {
             Section {
@@ -55,15 +54,15 @@ struct OriginalRepairForm: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(row["material"]["materialDesc"].text)
-                            Text("料号：" + repairMaterialCode(row)).font(.subheadline).foregroundStyle(.secondary)
-                            Text("使用数量：\(materialQuantity(row["useNum"].text, material: row["material"]))").font(.subheadline).foregroundStyle(.secondary)
+                            Text("料号：" + repairMaterialCode(row)).font(AppFont.subheadline).foregroundStyle(.secondary)
+                            Text("使用数量：\(materialQuantity(row["useNum"].text, material: row["material"]))").font(AppFont.subheadline).foregroundStyle(.secondary)
                         }
                     }
                 }
             }
             Section { EntryField(placeholder: "请输入说明", text: text("content"), limit: 255, axis: .vertical, lines: 3...8) } header: { RequiredLabel(title: "工作说明") }
             Section("图片") { OriginalPhotosField(albums: field("albums"), directory: "asset_fault", preview: preview, uploading: $photoUploading) }
-            if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
+            if preview { Section { Text("原包字段预览，未连接服务器").font(AppFont.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(loading || saving)
         .initialLoadingContent(loading && data.isEmpty)
@@ -165,6 +164,11 @@ struct OriginalRepairForm: View {
         toast = "已加载上次保存的草稿（" + draft.title + "）"
     }
     private func prepare(_ submit: Bool) {
+        data["erpRepairMaterials"] = .array((data["erpRepairMaterials"]?.array ?? []).map { value in
+            var row = value.object
+            row["useNum"] = .number(cappedMaterialQuantity(value["useNum"].number, maximum: value["materialOutbound"]["actualQuantity"].number - value["materialOutbound"]["usedQuantity"].number))
+            return .object(row)
+        })
         failedOnServer = false
         showValidation = true
         guard data["faultType"] != nil, data["faultType"] != .null else { error = "请选择故障类型"; return }
@@ -217,7 +221,6 @@ struct WorkflowTaskView: View {
     @State private var materials: [JSONValue] = []
     @State private var loading = true
     @State private var submitting = false
-    @State private var confirming = false
     @State private var error: String?
     /// Shown in an alert: a missing next-node approver, or a failed server call with its stage.
     @State private var failure: String?
@@ -271,7 +274,7 @@ struct WorkflowTaskView: View {
                 AssigneesFields(elements: assignments.assignees, selections: $assignments.selections, defaultPrefix: approverDefaultPrefix)
             } }
             Section(isReturning ? "退单原因" : isRejecting ? "驳回意见" : "意见") { EntryField(placeholder: isReturning ? "请输入退单原因" : isRejecting ? "请输入驳回意见" : "请输入意见", text: $comment, limit: 255, axis: .vertical, lines: 3...8) }
-            if preview { Section { Text("流程页面预览，使用示例数据，不执行真实提交。").font(.footnote).foregroundStyle(.secondary) } }
+            if preview { Section { Text("流程页面预览，使用示例数据，不执行真实提交。").font(AppFont.footnote).foregroundStyle(.secondary) } }
         }
         .interfaceMotion(condition)
         .interfaceMotion(assignmentsLoading)
@@ -421,7 +424,6 @@ struct TaskHandoffView: View {
     @State private var reason = ""
     @State private var saving = false
     @State private var error: String?
-    @State private var confirming = false
     private var title: String { operation == "transfer" ? "流程转办" : operation == "delegate" ? "流程委派" : "委派完成" }
     var body: some View {
         Form {

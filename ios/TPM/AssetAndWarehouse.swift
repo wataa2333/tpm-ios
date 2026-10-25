@@ -13,7 +13,7 @@ struct SignInPreview: View {
     var body: some View {
         List {
             Section("待签到设备") {
-                Text(asset.name).font(.headline)
+                Text(asset.name).font(AppFont.headline)
                 LabeledContent("机台号", value: asset.id)
                 LabeledContent("资产编码", value: "FA-" + asset.id)
                 LabeledContent("地址", value: asset.location)
@@ -55,12 +55,12 @@ struct AssetRecordDetail: View {
             LoadingRow(isPresented: loading || gate.busy, title: "正在加载" + tabs[tab])
             CardGroup {
                 VStack(alignment: .leading, spacing: RowMetrics.spacing) {
-                    WrappingContent { Text(asset["assetName"].text).font(.headline) }
-                    WrappingContent { Text(asset["assetCode"].text).font(.subheadline).foregroundStyle(.secondary) }
+                    WrappingContent { Text(asset["assetName"].text).font(AppFont.headline) }
+                    WrappingContent { Text(asset["assetCode"].text).font(AppFont.subheadline).foregroundStyle(.secondary) }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(RowMetrics.insets)
             }
             if tab == 0 {
-                Text("基本信息").font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 32)
+                Text("基本信息").font(AppFont.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 32)
                 CardGroup {
                     ForEach(assetFields, id: \.0) { key, label in
                         LabeledContent(label, value: assetDisplayValue(asset.at(key), key: key)).padding(RowMetrics.insets)
@@ -88,9 +88,9 @@ struct AssetRecordDetail: View {
                 CardGroup {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(row["taskName"].text.isEmpty ? row.object.label : row["taskName"].text).font(.headline)
-                            Text(readableDate(row["createTime"])).font(.subheadline).foregroundStyle(.secondary)
-                            if !row["content"].text.isEmpty { Text(row["content"].text).font(.subheadline) }
+                            Text(row["taskName"].text.isEmpty ? row.object.label : row["taskName"].text).font(AppFont.headline)
+                            Text(readableDate(row["createTime"])).font(AppFont.subheadline).foregroundStyle(.secondary)
+                            if !row["content"].text.isEmpty { Text(row["content"].text).font(AppFont.subheadline) }
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(RowMetrics.insets)
                     }
                 }
@@ -99,8 +99,8 @@ struct AssetRecordDetail: View {
             if preview { DemoNotice().padding(.horizontal, 32).frame(maxWidth: .infinity, alignment: .leading) }
         }
         .searchPageChrome()
-        .safeAreaInset(edge: .bottom) {
-            if !preview { AssetReportButton(asset: asset).padding(.horizontal, 16).padding(.vertical, 8).background(.bar) }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !preview { AssetReportButton(asset: asset, screenEdge: true).bottomBarPadding() }
         }
         .textSelection(.enabled).navigationTitle("资产详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility())
@@ -154,10 +154,10 @@ struct WarehouseStockView: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 NavigationLink { WarehouseStockFacts(row: row) } label: {
                     VStack(alignment: .leading, spacing: RowMetrics.spacing) {
-                        HStack { Text(row["material"]["materialName"].text).font(.headline); Spacer(); Text(quantity(row)).font(.subheadline.weight(.medium)) }
-                        Text("编号：" + row["material"]["materialNum"].text).font(.subheadline).foregroundStyle(.secondary)
-                        Text("仓库：" + row["warehouse"]["warehouseName"].text).font(.subheadline).foregroundStyle(.secondary)
-                        Text("记录时间：" + readableDate(row["createTime"])).font(.subheadline).foregroundStyle(.secondary)
+                        HStack { Text(row["material"]["materialName"].text).font(AppFont.headline); Spacer(); Text(quantity(row)).font(AppFont.subheadline.weight(.medium)) }
+                        Text("编号：" + row["material"]["materialNum"].text).font(AppFont.subheadline).foregroundStyle(.secondary)
+                        Text("仓库：" + row["warehouse"]["warehouseName"].text).font(AppFont.subheadline).foregroundStyle(.secondary)
+                        Text("记录时间：" + readableDate(row["createTime"])).font(AppFont.subheadline).foregroundStyle(.secondary)
                     }
                 }.uniformRow()
             }

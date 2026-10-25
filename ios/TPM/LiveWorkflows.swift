@@ -128,7 +128,7 @@ struct LiveWorkflowList: View {
         CardPage {
             if usesQueryAccount {
                 Text("查询：" + queries.label(operator: session) + " · 操作：" + session.authentication.text("name"))
-                    .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
+                    .font(AppFont.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
             }
             if kind == .fault && !searchMode { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? -1 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
             if let activeRange = dateRange { DateRangeChip(range: activeRange) { self.dateRange = nil } }
@@ -342,10 +342,6 @@ struct LiveWorkflowDetail: View {
     private var actionInteractionAllowed: Bool {
         !loading && !gate.busy && !returnToList && !suppressActions && !editing && !processing && !returning
     }
-    private var showsAssetReport: Bool {
-        kind == .fault && !peeking && !loading && !returnToList && !suppressActions
-            && !detail["asset"]["assetId"].text.isEmpty && !detail["asset"]["assetCode"].text.isEmpty
-    }
     var body: some View {
         Group {
             if detail == .null { LoadingFailure(error: error) { Task { await load() } } }
@@ -353,9 +349,9 @@ struct LiveWorkflowDetail: View {
                 List {
                     if usesQueryAccount {
                         Section {
-                            Text("查询：" + queries.label(operator: session) + " · 操作：" + session.authentication.text("name")).font(.caption).foregroundStyle(.secondary)
+                            Text("查询：" + queries.label(operator: session) + " · 操作：" + session.authentication.text("name")).font(AppFont.caption).foregroundStyle(.secondary)
                             if let operationNotice {
-                                Label(operationNotice, systemImage: "lock.fill").font(.subheadline).foregroundStyle(.secondary)
+                                Label(operationNotice, systemImage: "lock.fill").font(AppFont.subheadline).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -363,7 +359,7 @@ struct LiveWorkflowDetail: View {
                         Section("故障报修工单信息") {
                             LabeledContent("报修名称", value: detail["faultName"].text)
                             LabeledContent("单号", value: detail["sn"].text)
-                            HStack { Text("状态"); Spacer(); Text(faultStateName(detail["faultState"].text)).font(.body.weight(.semibold)).foregroundStyle(faultDisplayColor(detail["faultState"].text)) }
+                            HStack { Text("状态"); Spacer(); Text(faultStateName(detail["faultState"].text)).font(AppFont.body.weight(.semibold)).foregroundStyle(faultDisplayColor(detail["faultState"].text)) }
                             LabeledContent("故障时间", value: readableDate(detail["faultTime"]))
                             NavigationLink { AssetRecordDetail(record: detail["asset"]) } label: { LabeledContent("报修资产", value: detail["asset"]["assetName"].text) }
                             LabeledContent("故障申请人", value: detail["applyUser"].object.label)
@@ -441,12 +437,11 @@ struct LiveWorkflowDetail: View {
                     .accessibilityHidden(!actionInteractionAllowed)
                     .transition(.opacity)
                 }
-                if showsAssetReport {
-                    AssetReportButton(asset: detail["asset"])
+                if kind == .fault && !peeking && !loading && !returnToList && !suppressActions {
+                    AssetReportButton(asset: detail["asset"], screenEdge: true)
                 }
             }
-            .padding(.horizontal, 16).padding(.vertical, !peeking && (actions.hasActions || showsAssetReport) ? 10 : 0)
-            .frame(maxWidth: .infinity)
+            .bottomBarPadding()
             .interfaceMotion(actions)
             .interfaceMotion(suppressActions)
         }
@@ -576,13 +571,13 @@ struct LiveCatalogView: View {
                     if source == .assets { AssetRecordDetail(record: record) }
                     else { List { Section(record["materialDesc"].text) { MaterialFacts(material: record); LabeledContent("库存数量", value: materialQuantity(record["onhandQty"].text, material: record)) } }.textSelection(.enabled).navigationTitle("库存详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome().modifier(DetailTabVisibility()) }
                 } label: { VStack(alignment: .leading, spacing: RowMetrics.spacing) {
-                    WrappingContent { Text(record.object.label).font(.headline) }
-                    WrappingContent { Text(record[source == .assets ? "assetCode" : "materialCode"].text).font(.subheadline).foregroundStyle(.secondary) }
+                    WrappingContent { Text(record.object.label).font(AppFont.headline) }
+                    WrappingContent { Text(record[source == .assets ? "assetCode" : "materialCode"].text).font(AppFont.subheadline).foregroundStyle(.secondary) }
                     if source != .assets {
                         // As in the original app: organisation, batch, sub-inventory and locator, then the time of the record at the foot.
                         let facts = [record["erpTpmCompany"]["organizationName"].text, record["lot"].text, record["subInv"].text, record["locatorCode"].text].filter { !$0.isEmpty }.joined(separator: " · ")
-                        if !facts.isEmpty { WrappingContent { Text(facts).font(.footnote).foregroundStyle(.secondary) } }
-                        if !readableDate(record["updateTime"]).isEmpty { Text("入库 " + readableDate(record["updateTime"])).font(.footnote).foregroundStyle(.secondary) }
+                        if !facts.isEmpty { WrappingContent { Text(facts).font(AppFont.footnote).foregroundStyle(.secondary) } }
+                        if !readableDate(record["updateTime"]).isEmpty { Text("入库 " + readableDate(record["updateTime"])).font(AppFont.footnote).foregroundStyle(.secondary) }
                     }
                 } }
                 .uniformRow()
@@ -646,15 +641,15 @@ struct WorkflowNodesView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(node["taskName"].text)
                         let records = history.filter { $0["activityId"].text == node["taskKey"].text }
-                        Text(records.isEmpty ? "尚无处理记录" : records.contains { $0["endTime"] == .null } ? "当前节点" : "已有处理记录").font(.subheadline).foregroundStyle(.secondary)
+                        Text(records.isEmpty ? "尚无处理记录" : records.contains { $0["endTime"] == .null } ? "当前节点" : "已有处理记录").font(AppFont.subheadline).foregroundStyle(.secondary)
                         let participant = workflowParticipantLabel(node["assignees"].text)
-                        if !participant.isEmpty { Text(participant).font(.subheadline).foregroundStyle(.secondary) }
+                        if !participant.isEmpty { Text(participant).font(AppFont.subheadline).foregroundStyle(.secondary) }
                     }
                 }
             }
             }
             if !loading && history.isEmpty && definition.isEmpty && error == nil { CompactEmptyState(title: "暂无流程记录") }
-            if preview { Text("流程结构演示，不是真实工单记录").font(.footnote).foregroundStyle(.secondary) }
+            if preview { Text("流程结构演示，不是真实工单记录").font(AppFont.footnote).foregroundStyle(.secondary) }
         }
         .textSelection(.enabled).navigationTitle("处理流程").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .errorDialog($error, retry: { Task { await load() } })

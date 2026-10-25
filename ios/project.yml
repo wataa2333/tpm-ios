@@ -20,6 +20,12 @@ targets:
     info:
       path: TPM/Info.plist
       properties:
+        UIAppFonts:
+          - GoogleSans-Regular.ttf
+          - GoogleSans-Medium.ttf
+          - GoogleSans-SemiBold.ttf
+          - GoogleSans-Bold.ttf
+          - GoogleSansFlex-Light.ttf
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
@@ -39,8 +45,8 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         TARGETED_DEVICE_FAMILY: '1'
         SWIFT_VERSION: '6.0'
-        CURRENT_PROJECT_VERSION: '35'
-        MARKETING_VERSION: '0.7.29'
+        CURRENT_PROJECT_VERSION: '39'
+        MARKETING_VERSION: '0.7.33'
   TPMTests:
     type: bundle.unit-test
     platform: iOS

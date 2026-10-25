@@ -45,14 +45,8 @@ private actor PrecisionPeopleGate {
         }
         offset += rows.count
     } while offset < (expected ?? 0)
-    guard let latest = executions.max(by: { precisionExecutionDate($0["endTime"]) < precisionExecutionDate($1["endTime"]) }) else { return "检测／上传人：暂无已完成检测记录" }
-    let id = latest["orderId"].text
-    guard !id.isEmpty else { throw APIError(message: "检测执行记录缺少ID") }
-    let answer = try await source.request("precise/getPreciseRecordsByPreciseId", query: ["preciseId": id])
-    try check()
-    guard case .array(let records) = answer else { throw APIError(message: "检测项目格式异常") }
-    let names = try await precisionUploaderNames(records, source: source, check: check)
-    return "检测人：" + (latest["user"].object.label.isEmpty ? "未记录" : latest["user"].object.label) + " · 上传人：" + names
+    guard let latest = executions.max(by: { precisionExecutionDate($0["endTime"]) < precisionExecutionDate($1["endTime"]) }) else { return "工单检测人：暂无已完成检测记录" }
+    return "工单检测人：" + (latest["user"].object.label.isEmpty ? "未记录" : latest["user"].object.label)
 }
 
 struct PrecisionPeopleLabel: View {
@@ -60,13 +54,13 @@ struct PrecisionPeopleLabel: View {
     var refreshID: Date? = nil
     @EnvironmentObject private var session: LiveSession
     @EnvironmentObject private var queries: QueryAccountModel
-    @State private var text = "检测／上传人：读取中…"
+    @State private var text = "工单检测人：读取中…"
     private var context: String { session.scopeRevision.uuidString + queries.revision.uuidString }
     var body: some View {
-        Text(text).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        Text(text).font(AppFont.precisionText(.caption, size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             .task(id: context + (refreshID?.description ?? "")) {
                 let key = context
-                text = "检测／上传人：读取中…"
+                text = "工单检测人：读取中…"
                 await PrecisionPeopleGate.shared.acquire()
                 defer { Task { await PrecisionPeopleGate.shared.release() } }
                 do {
@@ -76,7 +70,7 @@ struct PrecisionPeopleLabel: View {
                         try Task.checkCancellation(); guard key == context else { throw CancellationError() }
                     }
                     text = result
-                } catch is CancellationError { } catch { if key == context { text = "检测／上传人：暂未读取到" } }
+                } catch is CancellationError { } catch { if key == context { text = "工单检测人：暂未读取到" } }
             }
     }
 }
@@ -107,16 +101,16 @@ struct PrecisionDeviceScreen: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
                 PrecisionPanel {
-                    Text(asset["addressCode"].text.isEmpty ? asset["assetCode"].text : asset["addressCode"].text).font(.title2.bold())
-                    Text(asset["assetName"].text); Text(asset["assetCode"].text).font(.caption).foregroundStyle(.secondary)
-                    Text("查询：" + queries.label(operator: session)).font(.caption)
+                    Text(asset["addressCode"].text.isEmpty ? asset["assetCode"].text : asset["addressCode"].text).font(AppFont.title2.bold())
+                    Text(asset["assetName"].text); Text(asset["assetCode"].text).font(AppFont.caption).foregroundStyle(.secondary)
+                    Text("查询：" + queries.label(operator: session)).font(AppFont.caption)
                     Button("重新读取") { retry += 1 }.disabled(pageLoading || executionLoading || recordLoading)
                     if pageLoading || executionLoading || recordLoading { ProgressView("正在读取检测记录") }
-                    if let error { Text(error).font(.subheadline).foregroundStyle(.red) }
+                    if let error { Text(error).font(AppFont.subheadline).foregroundStyle(.red) }
                 }
                 if !orders.isEmpty {
                     PrecisionPanel {
-                        Text("检测工单").font(.headline)
+                        Text("检测工单").font(AppFont.headline)
                         Picker("选择工单", selection: $selectedOrder) {
                             ForEach(Array(orders.enumerated()), id: \.offset) { _, order in
                                 Text(readableDate(order["planStartDate"]) + " · " + order["sn"].text).tag(order["preciseId"].text)
@@ -124,7 +118,7 @@ struct PrecisionDeviceScreen: View {
                         }
                         HStack {
                             Button("上一页") { page -= 1 }.disabled(page == 0 || pageLoading)
-                            Spacer(); Text("第\(page + 1)页 · 共\(total ?? 0)单").font(.caption); Spacer()
+                            Spacer(); Text("第\(page + 1)页 · 共\(total ?? 0)单").font(AppFont.caption); Spacer()
                             Button("下一页") { page += 1 }.disabled(pageLoading || (page + 1) * 20 >= (total ?? 0))
                         }
                         if !executions.isEmpty {
@@ -134,8 +128,8 @@ struct PrecisionDeviceScreen: View {
                                 }
                             }
                             Text("检测人：" + (execution["user"].object.label.isEmpty ? "未记录" : execution["user"].object.label))
-                            Text("上传人：" + (uploader.isEmpty ? "读取中…" : uploader)).font(.subheadline)
-                        } else if !executionLoading { Text("该工单暂无检测执行记录").font(.subheadline) }
+                            Text("上传人：" + (uploader.isEmpty ? "读取中…" : uploader)).font(AppFont.subheadline)
+                        } else if !executionLoading { Text("该工单暂无检测执行记录").font(AppFont.subheadline) }
                     }
                 } else if !pageLoading && error == nil {
                     PrecisionPanel { Text("当前查询账号未返回该设备的检测工单，不能从汇总等级还原逐项数据。") }
@@ -143,10 +137,10 @@ struct PrecisionDeviceScreen: View {
                 ForEach(Array(records.enumerated()), id: \.offset) { _, record in
                     PrecisionPanel {
                         let title = record["itemName"].text.isEmpty ? record["preciseItem"]["itemName"].text : record["itemName"].text
-                        Text(title).font(.headline).fixedSize(horizontal: false, vertical: true)
+                        Text(title).font(AppFont.headline).fixedSize(horizontal: false, vertical: true)
                         Text("精度判定：" + (record["preciseResult"].text.isEmpty ? "未记录" : record["preciseResult"].text))
                         Text("记录值：" + (record["description"].text.isEmpty ? "未记录" : record["description"].text)).textSelection(.enabled)
-                        if record["executeResult"].text != "EXECUTED" { Text("执行状态：" + record["executeResult"].text).font(.caption).foregroundStyle(.secondary) }
+                        if record["executeResult"].text != "EXECUTED" { Text("执行状态：" + record["executeResult"].text).font(AppFont.caption).foregroundStyle(.secondary) }
                     }
                 }
             }.padding(16)

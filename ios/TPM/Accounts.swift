@@ -164,7 +164,7 @@ struct ProfileTab: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(account.displayName.isEmpty ? account.username : account.displayName).foregroundStyle(Color.primary)
-                                    Text(account.username).font(.footnote).foregroundStyle(Color.secondary)
+                                    Text(account.username).font(AppFont.footnote).foregroundStyle(Color.secondary)
                                 }
                                 Spacer()
                                 if account.username == current { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
@@ -176,7 +176,7 @@ struct ProfileTab: View {
                         .accessibilityIdentifier("saved-account-" + account.username)
                     }
                     if saved.accounts.isEmpty {
-                        Text("还没有记住的账号。登录时打开“记住密码”，之后就可以在这里一键切换。").font(.footnote).foregroundStyle(.secondary)
+                        Text("还没有记住的账号。登录时打开“记住密码”，之后就可以在这里一键切换。").font(AppFont.footnote).foregroundStyle(.secondary)
                     }
                     Button("添加其他账号", systemImage: "plus") { session.signOut() }
                 } label: {

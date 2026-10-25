@@ -1,6 +1,10 @@
 import SwiftUI
 import Security
 
+private struct QueryCredentialsUnavailable: LocalizedError {
+    var errorDescription: String? { "查询账号凭据不可用" }
+}
+
 /// A separate login is a read capability, never an alternate credential for workflow operations.
 enum QueryReadPolicy {
     static let getPaths: Set<String> = [
@@ -56,14 +60,18 @@ private enum QueryCredentialVault {
     static let selectionKey = "developer.queryAccount.username"
     @Published private(set) var username: String
     @Published private(set) var revision = UUID()
+    @Published private(set) var fallbackNotice: String?
+    private var fallbackScope: UUID?
     private var reader: LiveSession?
     private var binding: String?
     private var connecting: Task<LiveSession, Error>?
     private let defaults: UserDefaults
     init(defaults: UserDefaults = .standard) {
+        if defaults === UserDefaults.standard { DeveloperPreferences.restoreMissing(defaults: defaults) }
         self.defaults = defaults; username = defaults.string(forKey: Self.selectionKey) ?? ""
     }
     func invalidate() {
+        fallbackScope = nil; fallbackNotice = nil
         connecting?.cancel(); connecting = nil; reader?.signOut(); reader = nil; binding = nil; revision = UUID()
     }
     func useOperator() {
@@ -81,7 +89,19 @@ private enum QueryCredentialVault {
         }
     }
     func label(operator session: LiveSession) -> String {
-        username.isEmpty ? session.authentication.text("name") : username
+        if fallbackScope == session.scopeRevision { return session.authentication.text("name") + "（自动回退）" }
+        return username.isEmpty ? session.authentication.text("name") : username
+    }
+    private func activateFallback(for session: LiveSession) {
+        fallbackScope = session.scopeRevision
+        fallbackNotice = "查询账号已失效或无查询权限，已自动使用当前登录账号查询。"
+    }
+    private func bindFallback(_ source: LiveSession, owner: LiveSession) {
+        let scope = owner.scopeRevision, token = revision
+        source.configureReadFallback(owner: owner) { [weak self, weak owner] in
+            guard let self, let owner, owner.scopeRevision == scope, self.revision == token else { return }
+            self.activateFallback(for: owner)
+        }
     }
     private func authorizeSavedPassword() async throws {
         switch await BiometricGate.authenticate(reason: "使用独立查询账号读取维修数据") {
@@ -95,7 +115,7 @@ private enum QueryCredentialVault {
         let factory = session.currentFactoryID
         if source.factories.isEmpty { try await source.refreshFactories() }
         guard source.factories.contains(where: { $0["factoryId"].text == factory }) else {
-            throw APIError(message: "查询账号没有当前厂区的访问权限，请更换查询账号或厂区")
+            throw APIError(message: "查询账号没有当前厂区的访问权限，请更换查询账号或厂区", status: 403)
         }
         try await source.changeFactory(to: factory)
         source.queryOwnerScope = session.draftScope
@@ -123,8 +143,10 @@ private enum QueryCredentialVault {
         try QueryCredentialVault.save(password, username: name)
         invalidate(); username = name; defaults.set(name, forKey: Self.selectionKey)
         reader = source; binding = session.scopeRevision.uuidString + ":" + revision.uuidString
+        bindFallback(source, owner: session)
     }
     func source(for session: LiveSession) async throws -> LiveSession {
+        if fallbackScope == session.scopeRevision, session.signedIn { return reader ?? session }
         guard !username.isEmpty else { return session }
         if username.caseInsensitiveCompare(session.authentication.text("name")) == .orderedSame { return session }
         let key = session.scopeRevision.uuidString + ":" + revision.uuidString
@@ -134,7 +156,7 @@ private enum QueryCredentialVault {
             let name = username, token = revision, owner = session.scopeRevision
             connecting = Task {
                 try await self.authorizeSavedPassword()
-                guard let password = QueryCredentialVault.password(name) else { throw APIError(message: "查询账号凭据不可用，请到开发者选项重新验证") }
+                guard let password = QueryCredentialVault.password(name) else { throw QueryCredentialsUnavailable() }
                 let source = LiveSession(queryOnly: true)
                 try await source.login(username: name, password: password)
                 try Task.checkCancellation()
@@ -151,9 +173,16 @@ private enum QueryCredentialVault {
             try Task.checkCancellation()
             guard token == revision, owner == session.scopeRevision else { throw CancellationError() }
             reader = source; connecting = nil
+            bindFallback(source, owner: session)
             return source
         } catch {
             if token == revision, owner == session.scopeRevision { connecting = nil }
+            if token == revision, owner == session.scopeRevision, session.signedIn, !isCancellation(error),
+               error is QueryCredentialsUnavailable || (error as? APIError)?.status == 401 || (error as? APIError)?.status == 403 {
+                reader?.signOut(); reader = nil
+                activateFallback(for: session)
+                return session
+            }
             throw error
         }
     }
@@ -162,29 +191,27 @@ private enum QueryCredentialVault {
 struct QueryAccountSettingsView: View {
     @EnvironmentObject private var session: LiveSession
     @EnvironmentObject private var queries: QueryAccountModel
-    @State private var username = ""
+    @State private var username = "C0382522"
     @State private var password = ""
     @State private var busy = false
     @State private var error: String?
     @State private var saved: [SavedAccount] = []
     @State private var verification: Task<Void, Never>?
-    @State private var success: String?
     var body: some View {
         Form {
-            Section("当前生效") {
-                LabeledContent("当前查询账号", value: queries.label(operator: session))
-                Label(queries.username.isEmpty ? "使用当前登录账号查询" : "已启用独立查询账号", systemImage: "checkmark.circle.fill")
-                    .font(.subheadline).foregroundStyle(Color.accentColor)
+            Section {
+                LabeledContent("查询使用", value: queries.label(operator: session))
                 LabeledContent("操作使用", value: session.authentication.text("name"))
-                Text("维修看板、维修搜索、精密度看板及查询详情使用此账号；单据操作始终使用当前登录账号。").font(.footnote).foregroundStyle(.secondary)
-                Button("改用当前登录账号查询") { queries.useOperator(); password = ""; success = "已切换为当前登录账号查询" }
+                if let notice = queries.fallbackNotice { Text(notice).font(AppFont.footnote).foregroundStyle(.orange) }
+                Text("仅维修看板、维修搜索和详情读取使用此账号；所有单据操作始终使用当前登录账号并核对服务器权限。").font(AppFont.footnote).foregroundStyle(.secondary)
+                Button("使用当前登录账号查询") { queries.useOperator(); password = "" }
             }
-            Section("设置独立查询账号") {
-                TextField("输入独立查询账号", text: $username).textInputAutocapitalization(.never).autocorrectionDisabled()
+            Section("独立查询账号") {
+                TextField("账号", text: $username).textInputAutocapitalization(.never).autocorrectionDisabled()
                 SecureField("密码（已保存可留空）", text: $password).textContentType(.password)
                 Button("验证并使用") { verify() }.disabled(username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if busy { ProgressView("正在验证账号与当前厂区") }
-                Text("输入或选择账号后，点击“验证并使用”才会生效。验证成功会保留选择及本机钥匙串凭据；无当前厂区权限时会提示。").font(.caption).foregroundStyle(.secondary)
+                Text("验证成功后密码仅保存在本机钥匙串中，不修改当前登录账号。查询账号无当前厂区权限时会提示。").font(AppFont.caption).foregroundStyle(.secondary)
             }
             if !saved.isEmpty {
                 Section("选择已保存账号") {
@@ -192,7 +219,7 @@ struct QueryAccountSettingsView: View {
                         Button { username = account.username; password = "" } label: {
                             VStack(alignment: .leading) {
                                 Text(account.displayName.isEmpty ? account.username : account.displayName)
-                                Text(account.username).font(.caption).foregroundStyle(.secondary)
+                                Text(account.username).font(AppFont.caption).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -203,10 +230,7 @@ struct QueryAccountSettingsView: View {
             }
         }.disabled(busy)
         .navigationTitle("独立查询账号").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
-        .modifier(DetailTabVisibility())
-        .keyboardManaged()
         .errorDialog($error, title: "查询账号", clearsOnClose: true)
-        .toast($success)
         .onAppear { saved = queries.savedAccounts; if !queries.username.isEmpty { username = queries.username } }
         .onDisappear { verification?.cancel(); password = "" }
         .interfaceMotion(busy).interfaceMotion(queries.username)
@@ -215,12 +239,7 @@ struct QueryAccountSettingsView: View {
         busy = true
         verification = Task {
             defer { busy = false }
-            do {
-                endEditing()
-                try await queries.select(username: username, password: password, operator: session)
-                password = ""; saved = queries.savedAccounts
-                success = "查询账号已切换为 " + queries.label(operator: session)
-            }
+            do { try await queries.select(username: username, password: password, operator: session); password = ""; saved = queries.savedAccounts }
             catch { if !isCancellation(error) { self.error = error.localizedDescription } }
         }
     }

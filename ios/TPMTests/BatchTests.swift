@@ -1,4 +1,5 @@
 import Testing
+// Regressions for overlapping outbound-material pages.
 import Foundation
 @testable import TPM
 
@@ -155,4 +156,14 @@ import Foundation
     #expect(preset.outboundLines[0].id == "1-2")
     preset.outboundLines[0].quantity = 0
     #expect(!preset.isComplete(for: .complete))
+}
+
+@Test func outboundPickerMergesRepeatedLinesButKeepsDifferentMaterials() {
+    func line(_ material: Int, quantity: Double) -> JSONValue {
+        .object(["id": .object(["outboundId": .number(1), "materialId": .number(Double(material))]), "actualQuantity": .number(quantity)])
+    }
+    let rows = uniqueOutboundLines([line(2, quantity: 1), line(3, quantity: 4), line(2, quantity: 6)])
+    #expect(rows.count == 2)
+    #expect(rows.map(outboundLineIdentity) == ["1-2", "1-3"])
+    #expect(rows.first?["actualQuantity"].number == 6)
 }

@@ -53,7 +53,7 @@ struct DateRangeChip: View {
             Button { clear() } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary).frame(minWidth: 44, minHeight: 32) }
                 .buttonStyle(.plain).accessibilityLabel("清除日期筛选").accessibilityIdentifier("date-range-clear")
         }
-        .font(.subheadline).foregroundStyle(Color.accentColor)
+        .font(AppFont.subheadline).foregroundStyle(Color.accentColor)
         .padding(.leading, 16).padding(.trailing, 4)
         .accessibilityElement(children: .contain).accessibilityIdentifier("date-range-chip")
     }

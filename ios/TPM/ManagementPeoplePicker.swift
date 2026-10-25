@@ -23,7 +23,7 @@ struct ManagementPeoplePicker: View {
                         Spacer()
                         Button("清空人员") { selected.removeAll() }
                     }
-                    Text("已选\(selected.count)人 / 共\(people.count)人").font(.caption).foregroundStyle(.secondary)
+                    Text("已选\(selected.count)人 / 共\(people.count)人").font(AppFont.caption).foregroundStyle(.secondary)
                 }
                 Section("对比人员") {
                     ForEach(matching) { person in
@@ -33,7 +33,7 @@ struct ManagementPeoplePicker: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(person.name).foregroundStyle(.primary)
-                                    Text(person.identity).font(.caption).foregroundStyle(.secondary)
+                                    Text(person.identity).font(AppFont.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer()
                                 Image(systemName: selected.contains(person.id) ? "checkmark.circle.fill" : "circle")

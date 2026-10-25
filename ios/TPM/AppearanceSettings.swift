@@ -48,13 +48,29 @@ enum AppAccent: String, CaseIterable, Identifiable {
     static let defaultsKey = "appearance.accent"
 }
 
+/// Coalesce rapid choices before invalidating the app-wide tint environment.
+struct AppTheme: ViewModifier {
+    @AppStorage(AppAccent.defaultsKey) private var selected = AppAccent.system.rawValue
+    @State private var applied = UserDefaults.standard.string(forKey: AppAccent.defaultsKey) ?? AppAccent.system.rawValue
+    func body(content: Content) -> some View {
+        let color = (AppAccent(rawValue: applied) ?? .system).color
+        content.tint(color).accentColor(color)
+            .task(id: selected) {
+                do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+                guard !Task.isCancelled, applied != selected else { return }
+                var transaction = Transaction(); transaction.disablesAnimations = true
+                withTransaction(transaction) { applied = selected }
+            }
+    }
+}
+
 struct AppearanceSettings: View {
     @AppStorage(AppAccent.defaultsKey) private var selected = AppAccent.system.rawValue
     var body: some View {
         List {
             Section("主题强调色") {
                 ForEach(AppAccent.allCases) { accent in
-                    Button { selected = accent.rawValue } label: {
+                    Button { if selected != accent.rawValue { selected = accent.rawValue } } label: {
                         HStack {
                             Circle().fill(accent.color).frame(width: 22, height: 22)
                             Text(accent.title).foregroundStyle(.primary)
@@ -62,7 +78,6 @@ struct AppearanceSettings: View {
                             Image(systemName: "checkmark").foregroundStyle(accent.color)
                                 .frame(width: 22).opacity(selected == accent.rawValue ? 1 : 0)
                                 .accessibilityHidden(true)
-                                .interfaceMotion(selected == accent.rawValue, duration: 0.2)
                         }.contentShape(.rect)
                     }.buttonStyle(.plain)
                         .accessibilityAddTraits(selected == accent.rawValue ? .isSelected : [])
@@ -95,7 +110,7 @@ struct DeveloperAccessSheet: View {
                             settingPicker("每页数量", selection: $pageSize, options: ManagedReadSettings.pageSizes)
                             settingPicker("详情并发", selection: $concurrency, options: ManagedReadSettings.concurrencyLevels)
                         }
-                        Text("档位会保留至下次使用，关闭实验读取不会清除已选数量。默认读取每页 500、详情并发 8；修改仅对下次新查询生效。").font(.caption).foregroundStyle(.secondary)
+                        Text("默认每页 500、详情并发 8。档位仅对下次新查询生效；服务端最大每页数量未实测。").font(AppFont.caption).foregroundStyle(.secondary)
                     }
                     Section("应用信息") {
                         LabeledContent("版本", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")

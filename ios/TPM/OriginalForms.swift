@@ -196,6 +196,8 @@ struct ReferencePicker: View {
     @State private var userGroups: [JSONValue] = []
     @State private var loading = true
     @State private var loadingMore = false
+    @State private var rawOffset = 0
+    @State private var loadGeneration = UUID()
     @State private var selecting = false
     @State private var last = true
     @State private var error: String?
@@ -207,21 +209,23 @@ struct ReferencePicker: View {
         if source == .outboundMaterials { return outboundLineIdentity(v) }
         return v["id"].text
     }
+    @State private var hideUsedMaterials = true
     @State private var notice: String?
     private func available(_ v: JSONValue) -> Double { v["actualQuantity"].number - v["usedQuantity"].number }
     private var visible: [JSONValue] {
-        (!preview && source.pagePath != nil) || query.isEmpty ? values : [.faultTypes, .departments].contains(source) ? matchingFaultTypes(values, query: query) : values.filter { $0.encodedString.localizedCaseInsensitiveContains(query) }
+        let values = source == .outboundMaterials && hideUsedMaterials ? self.values.filter { available($0) > 0 } : self.values
+        return (!preview && source.pagePath != nil) || query.isEmpty ? values : [.faultTypes, .departments].contains(source) ? matchingFaultTypes(values, query: query) : values.filter { $0.encodedString.localizedCaseInsensitiveContains(query) }
     }
     var body: some View {
         List {
-            LoadingRow(isPresented: loading || selecting, title: "正在加载")
             if menu.enabled && !preview {
                 // A small hint: the pin and default actions are otherwise invisible.
                 Text(menu.supportsDefault ? "长按或向左滑动某一项，可以置顶，或设为默认。" : "长按或向左滑动某一项，可以置顶。")
-                    .font(.footnote).foregroundStyle(.secondary)
+                    .font(AppFont.footnote).foregroundStyle(.secondary)
                     .listRowBackground(Color.clear).listRowSeparator(.hidden)
                     .accessibilityIdentifier("picker-menu-hint")
             }
+            if source == .outboundMaterials { Toggle("隐藏已领用完物料", isOn: $hideUsedMaterials) }
             if source == .users { Picker("人员分类", selection: $userMode) { Text("按姓名").tag(0); Text("按班组").tag(1) }.pickerStyle(.segmented) }
             if !source.searchModes.isEmpty {
                 // Always there for the lists the server searches, so the ways of searching are never hidden.
@@ -257,6 +261,12 @@ struct ReferencePicker: View {
             }
             if !loading && visible.isEmpty && error == nil { ContentUnavailableView("暂无匹配内容", systemImage: "magnifyingglass") }
         }
+        .overlay(alignment: .top) {
+            if loading || selecting {
+                ProgressView().padding(10).background(.regularMaterial, in: Capsule())
+                    .accessibilityLabel("正在加载").allowsHitTesting(false)
+            }
+        }
         .navigationTitle(source.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .reloadsToTop(on: "\(query)-\(searchMode.rawValue)-\(userMode)")
         .errorDialog($error, retry: { Task { await load() } })
@@ -285,7 +295,7 @@ struct ReferencePicker: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if multiple {
                 Button { finishPicking() } label: {
-                    Text(picked.isEmpty ? "完成" : "完成（已选 \(picked.count) 项）").font(.headline).frame(maxWidth: .infinity, minHeight: 28)
+                    Text(picked.isEmpty ? "完成" : "完成（已选 \(picked.count) 项）").font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28)
                         .contentTransition(.numericText()).interfaceMotion(picked.count, duration: 0.2)
                 }
                 .buttonStyle(.glassProminent).controlSize(.large)
@@ -305,7 +315,7 @@ struct ReferencePicker: View {
                         ReferenceBadges(value: value)
                     }
                     ForEach(Array(subtitleLines(value).enumerated()), id: \.offset) { _, line in
-                        WrappingContent { Text(line).font(.subheadline).foregroundStyle(source == .outboundMaterials && available(value) < 1 ? Color.red : Color.secondary) }
+                        WrappingContent { Text(line).font(AppFont.subheadline).foregroundStyle(source == .outboundMaterials && available(value) < 1 ? Color.red : Color.secondary) }
                     }
                 }
                 Spacer()
@@ -369,9 +379,17 @@ struct ReferencePicker: View {
         } catch { self.error = error.localizedDescription }
     }
     private func load(more: Bool = false) async {
-        if more { loadingMore = true } else { loading = true }
+        if more && (loading || loadingMore || last) { return }
+        let token = more ? loadGeneration : UUID()
+        if !more { loadGeneration = token; rawOffset = 0 }
+        if more { loadingMore = true } else { loading = true; loadingMore = false }
+        let scope = session.scopeRevision
         error = nil
-        defer { loading = false; loadingMore = false }
+        defer { if token == loadGeneration { loading = false; loadingMore = false } }
+        func check() throws {
+            try Task.checkCancellation()
+            guard token == loadGeneration, scope == session.scopeRevision else { throw CancellationError() }
+        }
         if preview { values = PreviewReferenceData.values(source); userGroups = [.object(["groupName": .string("设备维修组"), "users": .array(PreviewReferenceData.values(.users))])]; last = true; return }
         do {
             let response: JSONValue
@@ -381,10 +399,31 @@ struct ReferencePicker: View {
                 if !query.isEmpty {
                     filters.append(filter(searchMode.field(for: source), query, "like"))
                 }
-                response = try await session.page(path, offset: more ? values.count : 0, filters: filters)
-                let rows = response["content"].array
-                values = more ? values + rows : rows
-                last = response["last"].bool
+                var firstPage = !more
+                repeat {
+                    try check()
+                    let offset = firstPage ? 0 : rawOffset
+                    let page: JSONValue
+                    if source == .outboundMaterials {
+                        page = try await session.request(path, body: .object(["offset": .number(Double(offset)), "limit": .number(20), "sort": .string("outbound.applyDate"), "order": .string("desc"), "filters": .array(filters)]))
+                    } else {
+                        page = try await session.page(path, offset: offset, filters: filters)
+                    }
+                    try check()
+                    guard case .array(let rows) = page["content"] else { throw APIError(message: "物料分页格式异常") }
+                    let base = firstPage ? [] : values
+                    let combined = source == .outboundMaterials ? uniqueOutboundLines(base + rows) : base + rows
+                    let fresh = combined.count - base.count
+                    values = combined
+                    rawOffset = offset + rows.count
+                    last = page["last"].bool
+                    if rows.isEmpty || (source == .outboundMaterials && fresh == 0 && !rows.isEmpty) {
+                        last = true
+                        if !rows.isEmpty { throw APIError(message: "服务端返回重复物料分页，已保留读取结果，请重新查询") }
+                    }
+                    firstPage = false
+                } while source == .outboundMaterials && hideUsedMaterials && !last && visible.isEmpty
+
             } else {
                 switch source {
                 case .users:
@@ -397,9 +436,10 @@ struct ReferencePicker: View {
                 case .faultTypes: response = try await session.request("faultType/getFaultTypeTree", query: ["enabled": "true"])
                 default: response = .array([])
                 }
+                try check()
                 values = response.array.filter { source != .users || $0["enabled"] != .bool(false) }
             }
-        } catch { if !isCancellation(error) { self.error = error.localizedDescription } }
+        } catch { if token == loadGeneration && !isCancellation(error) { self.error = error.localizedDescription } }
     }
     private func loadUserGroupsIfNeeded() async {
         guard !preview, source == .users, userMode == 1, userGroups.isEmpty else { return }
@@ -419,7 +459,7 @@ struct RequiredLabel: View {
 struct RequiredFieldsNotice: View {
     var body: some View {
         HStack(spacing: 3) { Text("＊").foregroundStyle(.red); Text("为必填项") }
-            .font(.footnote).foregroundStyle(.secondary)
+            .font(AppFont.footnote).foregroundStyle(.secondary)
     }
 }
 
@@ -518,7 +558,6 @@ struct OriginalFaultForm: View {
     @State private var showConfirmation = false
     @State private var showValidation = false
     @State private var photoUploading = false
-    @State private var leaving = false
     @State private var showingDrafts = false
     @State private var draftID: UUID?
     @State private var draftCount = 0
@@ -557,9 +596,9 @@ struct OriginalFaultForm: View {
         do { try DraftStore.shared.save(draft, scope: session.draftScope); dismiss() }
         catch { model.error = "草稿没有保存成功：" + error.localizedDescription }
     }
-    /// Closing a new form that holds something asks whether to keep it as a draft.
+    /// Closing keeps entered content locally without an extra confirmation.
     private func close() {
-        if worthKeeping { leaving = true } else { dismiss() }
+        if worthKeeping { keepDraft() } else { dismiss() }
     }
     private func text(_ key: String) -> Binding<String> { Binding(get: { model.data.text(key) }, set: { model.data[key] = .string($0) }) }
     var body: some View {
@@ -583,7 +622,7 @@ struct OriginalFaultForm: View {
                     if let department = user["depts"].array.first { model.data["dept"] = department }
                 }
                 if !(model.data["dept"]?.object.isEmpty ?? true) && (model.data["user"]?.object.isEmpty ?? true) {
-                    Text("该部门未设置默认受理人，请手动选择维修受理人").font(.footnote).foregroundStyle(.secondary)
+                    Text("该部门未设置默认受理人，请手动选择维修受理人").font(AppFont.footnote).foregroundStyle(.secondary)
                 }
                 VStack(alignment: .leading, spacing: 8) { RequiredLabel(title: "报修人联系电话"); EntryField(placeholder: "请输入联系电话", text: text("userPhone"), limit: 32, keyboard: .phonePad) }.fullSeparator()
                 ReferenceField(title: "维修班组", source: .groups, value: field("userGroup"), required: true, defaultField: "fault.userGroup")
@@ -594,7 +633,7 @@ struct OriginalFaultForm: View {
             }
             Section("故障描述") { EntryField(placeholder: "请输入故障描述", text: text("faultDesc"), limit: 255, axis: .vertical, lines: 3...6) }
             Section("现场照片") { OriginalPhotosField(albums: field("albums"), directory: "asset_fault", preview: preview, uploading: $photoUploading) }
-            if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
+            if preview { Section { Text("原包字段预览，未连接服务器").font(AppFont.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(model.loading || model.saving)
         .initialLoadingContent(model.loading && !model.ready)
@@ -611,7 +650,6 @@ struct OriginalFaultForm: View {
         }
         .toast($toast)
         .interactiveDismissDisabled(worthKeeping)
-        .choiceDialog("保存为草稿？", message: "没填完也可以保存。草稿只在这台手机上，标题是最后编辑的时间，之后可在“草稿箱”里继续填写。", isPresented: $leaving, primary: "保存草稿", secondary: "不保存", onPrimary: { keepDraft() }, onSecondary: { dismiss() })
         .sheet(isPresented: $showingDrafts, onDismiss: { draftCount = DraftStore.shared.drafts(scope: session.draftScope, for: draftTarget).count }) {
             NavigationStack {
                 DraftBoxView(dismissOnPick: true, target: draftTarget) { picked in apply(picked) }
@@ -724,7 +762,6 @@ struct OriginalERPForm: View {
     @StateObject private var model = OriginalFormModel(kind: "ERP_OUTBOUND")
     @State private var selecting = false
     @State private var committed = false
-    @State private var confirming = false
     @State private var showValidation = false
     @State private var draftID: UUID?
     @State private var toast: String?
@@ -737,7 +774,7 @@ struct OriginalERPForm: View {
     private func quantity(_ index: Int) -> Binding<Double> {
         Binding(get: { (model.data["erpMaterialOutbounds"]?.array ?? [])[index]["entryQuantity"].number }, set: { number in
             var rows = model.data["erpMaterialOutbounds"]?.array ?? []; var line = rows[index].object
-            line["entryQuantity"] = .number(number); rows[index] = .object(line); model.data["erpMaterialOutbounds"] = .array(rows)
+            line["entryQuantity"] = .number(cappedMaterialQuantity(number, maximum: line["material"]?["onhandQty"].number ?? 0)); rows[index] = .object(line); model.data["erpMaterialOutbounds"] = .array(rows)
         })
     }
     var body: some View {
@@ -767,8 +804,8 @@ struct OriginalERPForm: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(line["material"]["materialDesc"].text)
-                            Text(line["material"]["materialCode"].text).font(.subheadline).foregroundStyle(.secondary)
-                            Text("申请数量：\(materialQuantity(line["entryQuantity"].text, material: line["material"]))").font(.subheadline).foregroundStyle(.secondary)
+                            Text(line["material"]["materialCode"].text).font(AppFont.subheadline).foregroundStyle(.secondary)
+                            Text("申请数量：\(materialQuantity(line["entryQuantity"].text, material: line["material"]))").font(AppFont.subheadline).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -777,7 +814,7 @@ struct OriginalERPForm: View {
             if model.assignees.contains(where: { ["ASSIGN", "SUPERVISOR"].contains($0.text("assignType")) }) {
                 Section("审批人") { AssigneesFields(elements: model.assignees, selections: $model.selections, defaultPrefix: existing == nil ? "assignee.erp" : nil) }
             }
-            if preview { Section { Text("原包字段预览，未连接服务器").font(.footnote).foregroundStyle(.secondary) } }
+            if preview { Section { Text("原包字段预览，未连接服务器").font(AppFont.footnote).foregroundStyle(.secondary) } }
         }
         .disabled(model.loading || model.saving)
         .initialLoadingContent(model.loading && !model.ready)
@@ -813,7 +850,15 @@ struct OriginalERPForm: View {
         .keyboardManaged()
         .errorDialog($model.error, title: model.ready ? "提示" : "加载失败", clearsOnClose: true, retry: model.ready ? nil : { Task { await model.load(session, existing: existing, referenceSn: referenceSn) } })
     }
-    private func prepare(_ value: Bool) { if let error = model.validationError() { model.error = error; showValidation = true; return }; committed = value; Task { await save() } }
+    private func prepare(_ value: Bool) {
+        model.data["erpMaterialOutbounds"] = .array((model.data["erpMaterialOutbounds"]?.array ?? []).map { value in
+            var row = value.object
+            row["entryQuantity"] = .number(cappedMaterialQuantity(value["entryQuantity"].number, maximum: value["material"]["onhandQty"].number))
+            return .object(row)
+        })
+        if let error = model.validationError() { model.error = error; showValidation = true; return }
+        committed = value; Task { await save() }
+    }
     /// "保存" keeps the form on this phone: nothing is sent to the server and nothing has to be filled in.
     private var erpDraftTarget: DraftStore.Target { existing == nil ? .newReport : .order(existing?.text("outboundId") ?? "") }
     private var erpDraftsAllowed: Bool { existing == nil || !(existing?.text("outboundId") ?? "").isEmpty }
@@ -884,6 +929,10 @@ func materialUnit(_ material: JSONValue) -> String {
     return "PCS"
 }
 
+func cappedMaterialQuantity(_ quantity: Double, maximum: Double) -> Double {
+    min(quantity, max(0, maximum))
+}
+
 func materialQuantity(_ quantity: String, material: JSONValue) -> String {
     quantity + " " + materialUnit(material)
 }
@@ -937,4 +986,17 @@ enum PreviewBusinessData {
 /// Identity of one outbound material line: the outbound order plus the material.
 func outboundLineIdentity(_ line: JSONValue) -> String {
     "\(line["id"]["outboundId"].text)-\(line["id"]["materialId"].text)"
+}
+
+/// Keep distinct materials from the same outbound order; merge only identical line keys.
+func uniqueOutboundLines(_ rows: [JSONValue]) -> [JSONValue] {
+    var result: [JSONValue] = []
+    var indices: [String: Int] = [:]
+    for row in rows {
+        let key = outboundLineIdentity(row)
+        if key == "-" { result.append(row); continue }
+        if let index = indices[key] { result[index] = row }
+        else { indices[key] = result.count; result.append(row) }
+    }
+    return result
 }

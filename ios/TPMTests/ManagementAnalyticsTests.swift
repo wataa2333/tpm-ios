@@ -16,6 +16,68 @@ private func managementPage(_ rows: [JSONValue], last: Bool, total: Int? = nil) 
     return .object(fields)
 }
 
+@Test func repairStatisticsUseDiscoveryDateInsteadOfCompletionDate() throws {
+    let window = ManagedWindow(days: 1)
+    var row = managementRow("date-rule", state: "FINISHED", end: window.from).object
+    row["repairEndTime"] = .string("2000-01-01")
+    let document = try #require(managedDocument(kind: .repair, row: .object(row), state: "FINISHED", window: window))
+    #expect(document.end == window.from)
+    row["faultTime"] = .string("2000-01-01")
+    row["repairEndTime"] = .string(window.from)
+    #expect(managedDocument(kind: .repair, row: .object(row), state: "FINISHED", window: window) == nil)
+}
+
+@Test func materialQuantityUsesRemainingStockAsUpperLimit() {
+    #expect(cappedMaterialQuantity(16, maximum: 6) == 6)
+    #expect(cappedMaterialQuantity(3, maximum: 6) == 3)
+    #expect(cappedMaterialQuantity(16, maximum: 8 - 2) == 6)
+    #expect(cappedMaterialQuantity(1, maximum: -2) == 0)
+}
+
+@Test @MainActor func managementModesKeepIndependentOrdersAndReadProgress() async {
+    let session = LiveSession(authentication: ["token": .string("TEST"), "factoryId": .string("TEST-FACTORY")])
+    let pending = ManagementAnalyticsModel(historical: false)
+    let history = ManagementAnalyticsModel(historical: true)
+    pending.start(session: session, days: nil, pageReader: { slice, _ in
+        managementPage(slice.state == "SIGNED" ? [managementRow("pending-1")] : [], last: true)
+    })
+    for _ in 0..<1000 { if !pending.running { break }; await Task.yield() }
+    #expect(pending.report.count == 1)
+    let original = pending.report.people.flatMap(\.documents)
+    let offsets = pending.slices.map(\.offset)
+    pending.pause()
+    history.start(session: session, days: 7, pageReader: { _, _ in managementPage([], last: true) })
+    for _ in 0..<1000 { if !history.running { break }; await Task.yield() }
+    history.pause(); history.clear()
+    pending.restorePrevious(session: session)
+    #expect(pending.report.people.flatMap(\.documents) == original)
+    #expect(pending.slices.map(\.offset) == offsets)
+    #expect(!pending.showingPrevious)
+    pending.clear()
+}
+
+@Test @MainActor func developerPreferenceRestorePreservesExplicitValuesAndRejectsInvalidReadSettings() throws {
+    let name = "developer-preference-test-" + UUID().uuidString
+    let defaults = try #require(UserDefaults(suiteName: name))
+    defer { defaults.removePersistentDomain(forName: name) }
+    defaults.set(false, forKey: ManagementSettings.enabledKey)
+    defaults.set(1000, forKey: ManagedReadSettings.pageKey)
+    DeveloperPreferences.restore([
+        ManagementSettings.enabledKey: true,
+        ManagedReadSettings.experimentalKey: true,
+        ManagedReadSettings.pageKey: 50,
+        ManagedReadSettings.concurrencyKey: 999,
+        QueryAccountModel.selectionKey: "saved-reader",
+        "unrelated": "ignore"
+    ], defaults: defaults)
+    #expect(defaults.bool(forKey: ManagementSettings.enabledKey) == false)
+    #expect(defaults.integer(forKey: ManagedReadSettings.pageKey) == 1000)
+    #expect(defaults.bool(forKey: ManagedReadSettings.experimentalKey))
+    #expect(defaults.object(forKey: ManagedReadSettings.concurrencyKey) == nil)
+    #expect(defaults.string(forKey: QueryAccountModel.selectionKey) == "saved-reader")
+    #expect(defaults.object(forKey: "unrelated") == nil)
+}
+
 @Test func managementKeepsSameNamesSeparateAndCountsBusinessDocumentsOnce() throws {
     let a = try #require(managedDocument(kind: .repair, row: managementRow("1"), state: "SIGNED", window: nil))
     let b = try #require(managedDocument(kind: .maintenance, row: managementRow("1", kind: .maintenance, state: "MAINTAINED", account: "account-b"), state: "MAINTAINED", window: nil))
@@ -228,7 +290,7 @@ private func managementPage(_ rows: [JSONValue], last: Bool, total: Int? = nil) 
 @Test func managementNormalizesArrayDatesForTrendAndKeepsUnknownInTotal() throws {
     let window = ManagedWindow(range: DateRange(from: Date(timeIntervalSince1970: 0), to: Date(timeIntervalSince1970: 86400)))
     var fields = managementRow("1", state: "RESOLVED", account: "", name: "").object
-    fields["repairEndTime"] = .array([.number(1970), .number(1), .number(1), .number(12), .number(0)])
+    fields["faultTime"] = .array([.number(1970), .number(1), .number(1), .number(12), .number(0)])
     let doc = try #require(managedDocument(kind: .repair, row: .object(fields), state: "RESOLVED", window: window))
     #expect(doc.end == "1970-01-01")
     let report = managedReport([doc])

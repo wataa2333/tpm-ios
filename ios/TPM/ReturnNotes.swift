@@ -62,7 +62,7 @@ struct ReturnNoteSection: View {
             else { LabeledContent("处理人", value: person.isEmpty ? "—" : person) }
             if !readableDate(repair["signTime"]).isEmpty && kind == "退单" { LabeledContent("签到时间", value: readableDate(repair["signTime"])) }
             VStack(alignment: .leading, spacing: 6) {
-                Text(kind + "原因").font(.subheadline).foregroundStyle(.secondary)
+                Text(kind + "原因").font(AppFont.subheadline).foregroundStyle(.secondary)
                 Text(reason.isEmpty ? "未填写" : reason).textSelection(.enabled)
             }
             .contextMenu { if !reason.isEmpty { Button("复制", systemImage: "doc.on.doc") { copyToPasteboard(reason) } } }
@@ -128,7 +128,7 @@ struct ReturnActorRow: View {
             if loading {
                 HStack { Text("退单人"); Spacer(); ProgressView(); Text("加载中...").foregroundStyle(.secondary) }
             } else if let failure {
-                Text("退单人读取失败：" + failure).font(.subheadline).foregroundStyle(.secondary)
+                Text("退单人读取失败：" + failure).font(AppFont.subheadline).foregroundStyle(.secondary)
                 Button("重试") { retry += 1 }
             } else {
                 LabeledContent("退单人", value: names.isEmpty ? "未找到最新已完成退单动作的实际执行人" : names)

@@ -164,8 +164,8 @@ struct DraftBoxView: View {
             if drafts.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "tray").font(.system(size: 28)).foregroundStyle(.secondary)
-                    Text("草稿箱是空的").font(.headline)
-                    Text("填写报修时点“取消”，可以把没填完的内容存成草稿").font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    Text("草稿箱是空的").font(AppFont.headline)
+                    Text("填写报修时点“取消”，可以把没填完的内容存成草稿").font(AppFont.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }.frame(maxWidth: .infinity).padding(.vertical, 28).listRowBackground(Color.clear)
             }
             ForEach(drafts) { draft in
@@ -174,8 +174,8 @@ struct DraftBoxView: View {
                     onPick(draft)
                 } label: {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(draft.title).font(.headline).foregroundStyle(Color.accentColor)
-                        Text(draft.subtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                        Text(draft.title).font(AppFont.headline).foregroundStyle(Color.primary)
+                        Text(draft.subtitle).font(AppFont.subheadline).foregroundStyle(.secondary).lineLimit(2)
                     }.frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect)
                 }
                 .buttonStyle(.plain)

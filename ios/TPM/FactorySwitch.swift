@@ -52,7 +52,7 @@ private struct FactoryNameLabel: View {
     var body: some View {
         HStack(spacing: 4) {
             Text(name).lineLimit(2).multilineTextAlignment(.trailing).fixedSize(horizontal: false, vertical: true)
-            Image(systemName: "chevron.up.chevron.down").font(.caption2)
-        }.font(.subheadline).frame(maxWidth: 200, alignment: .trailing)
+            Image(systemName: "chevron.up.chevron.down").font(AppFont.caption2)
+        }.font(AppFont.subheadline).frame(maxWidth: 200, alignment: .trailing)
     }
 }
