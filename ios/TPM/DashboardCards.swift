@@ -273,21 +273,21 @@ struct DashboardWorkspace: View {
                     } label: { DashboardCard(title: "ERP 出库", symbol: "shippingbox", tint: .orange, count: count("outbound"), seed: 2) }
                     NavigationLink {
                         if preview { StockListView() } else { LiveCatalogView(source: .materials) }
-                    } label: { DashboardCard(title: "ERP 库存", symbol: "square.stack.3d.up", tint: .teal, count: count("stock"), seed: 3) }
+                    } label: { DashboardCard(title: "ERP 库存", symbol: "square.stack.3d.up", tint: Color(red: 0.18, green: 0.58, blue: 0.29), count: count("stock"), seed: 3) }
                 }
                 DashboardHeading(title: "快速查询维修")
                 QuickQueryCard(title: "按机台号查询", symbol: "gearshape.2", tint: .purple, placeholder: "输入机台号", seed: 4) { route = QuickQuery(field: .machine, text: $0) }
-                QuickQueryCard(title: "按资产编码查询", symbol: "barcode", tint: .mint, placeholder: "输入编码的尾号或中间一段", seed: 5) { route = QuickQuery(field: .assetCode, text: $0) }
+                QuickQueryCard(title: "按资产编码查询", symbol: "barcode", tint: Color(red: 0.02, green: 0.64, blue: 0.80), placeholder: "输入编码的尾号或中间一段", seed: 5) { route = QuickQuery(field: .assetCode, text: $0) }
                 if !preview {
                     DashboardHeading(title: "精密度看板")
                     NavigationLink { PrecisionDashboardScreen() } label: {
-                        DashboardCard(title: "精密度检查看板", symbol: "scope", tint: .teal, subtitle: "017CNC覆盖率 · 等级与逐项数值", wide: true, seed: 7)
+                        DashboardCard(title: "精密度检查看板", symbol: "scope", tint: Color(red: 0.80, green: 0.56, blue: 0.06), subtitle: "017CNC覆盖率 · 等级与逐项数值", wide: true, seed: 7)
                     }
                 }
                 if managementEnabled && !preview {
                     DashboardHeading(title: "管理看板")
                     NavigationLink { ManagementScreen() } label: {
-                        DashboardCard(title: "人员与工单分析", symbol: "person.3.sequence", tint: .purple, subtitle: "维修待处理 · 处理统计与趋势", wide: true, seed: 6)
+                        DashboardCard(title: "人员与工单分析", symbol: "person.3.sequence", tint: Color(red: 0.87, green: 0.23, blue: 0.44), subtitle: "维修待处理 · 处理统计与趋势", wide: true, seed: 6)
                     }
                 }
                 if preview { DemoNotice() }
