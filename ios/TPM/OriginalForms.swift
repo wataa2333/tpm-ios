@@ -198,6 +198,7 @@ struct ReferencePicker: View {
     @State private var loadingMore = false
     @State private var rawOffset = 0
     @State private var loadGeneration = UUID()
+    @State private var pagingNotice: String?
     @State private var selecting = false
     @State private var last = true
     @State private var error: String?
@@ -256,20 +257,19 @@ struct ReferencePicker: View {
                 }
             } else { ForEach(Array(visible.enumerated()), id: \.offset) { _, value in optionRow(value) } }
             } header: { if menu.enabled, query.isEmpty, !menu.pins.isEmpty || !menu.recents.isEmpty { Text("全部") } }
-            if source.pagePath != nil {
+            if let message = pagingNotice ?? error {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(message).font(AppFont.footnote).foregroundStyle(.secondary)
+                    Button("重新加载") { Task { await load() } }.disabled(loading || loadingMore)
+                }.listRowBackground(Color.clear)
+            }
+            if source.pagePath != nil && !loading && pagingNotice == nil {
                 LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: values.count) { await load(more: true) }
             }
             if !loading && visible.isEmpty && error == nil { ContentUnavailableView("暂无匹配内容", systemImage: "magnifyingglass") }
         }
-        .overlay(alignment: .top) {
-            if loading || selecting {
-                ProgressView().padding(10).background(.regularMaterial, in: Capsule())
-                    .accessibilityLabel("正在加载").allowsHitTesting(false)
-            }
-        }
         .navigationTitle(source.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .reloadsToTop(on: "\(query)-\(searchMode.rawValue)-\(userMode)")
-        .errorDialog($error, retry: { Task { await load() } })
         .errorDialog($notice, title: "不能选择", clearsOnClose: true)
         .errorDialog(Binding(get: { menu.notice }, set: { menu.notice = $0 }), title: "不能置顶", clearsOnClose: true)
         .environmentObject(menu)
@@ -289,7 +289,12 @@ struct ReferencePicker: View {
         .onChange(of: searchMode) { if source.pagePath != nil { Task { await load() } } }
         // The groups are only needed once "按班组" is chosen.
         .task(id: userMode) { await loadUserGroupsIfNeeded() }
-        .toolbar { if multiple { ToolbarItem(placement: .confirmationAction) { Button("完成") { finishPicking() } } } }
+        .toolbar {
+            if loading || selecting {
+                ToolbarItem(placement: .cancellationAction) { ProgressView().accessibilityLabel("正在加载") }
+            }
+            if multiple { ToolbarItem(placement: .confirmationAction) { Button("完成") { finishPicking() } } }
+        }
         // The top "完成" is replaced by the search bar while searching, so multi-select also keeps a
         // bottom button that is always there. It says how many are ticked.
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -384,7 +389,7 @@ struct ReferencePicker: View {
         if !more { loadGeneration = token; rawOffset = 0 }
         if more { loadingMore = true } else { loading = true; loadingMore = false }
         let scope = session.scopeRevision
-        error = nil
+        error = nil; pagingNotice = nil
         defer { if token == loadGeneration { loading = false; loadingMore = false } }
         func check() throws {
             try Task.checkCancellation()
@@ -419,7 +424,7 @@ struct ReferencePicker: View {
                     last = page["last"].bool
                     if rows.isEmpty || (source == .outboundMaterials && fresh == 0 && !rows.isEmpty) {
                         last = true
-                        if !rows.isEmpty { throw APIError(message: "服务端返回重复物料分页，已保留读取结果，请重新查询") }
+                        if !rows.isEmpty { pagingNotice = "后续分页重复，已暂停加载；保留当前物料和选择，结果可能不完整。可缩小搜索范围。" }
                     }
                     firstPage = false
                 } while source == .outboundMaterials && hideUsedMaterials && !last && visible.isEmpty
