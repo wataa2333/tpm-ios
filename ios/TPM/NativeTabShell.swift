@@ -48,17 +48,10 @@ struct NewDocumentButton: ViewModifier {
                             navigation.presentingDocument = true
                             creating = kind
                         } label: {
-                            Image(systemName: "plus").font(.system(size: 24, weight: .semibold))
-                                .foregroundStyle(Color.accentColor)
-                                .frame(width: 56, height: 56)
-                                .background {
-                                    Circle().fill(Color(uiColor: .secondarySystemGroupedBackground))
-                                    Circle().fill(Color.accentColor.opacity(0.16))
-                                }
-                                .overlay { Circle().strokeBorder(Color.accentColor.opacity(0.3), lineWidth: 1) }
-                                .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+                            Image(systemName: "plus").font(AppFont.title2.weight(.semibold)).frame(width: 44, height: 44)
                         }
-                        .buttonStyle(.plain).contentShape(.circle)
+                        .buttonStyle(.glassProminent).buttonBorderShape(.circle)
+                        .tint(Color.accentColor.opacity(0.55))
                         .accessibilityLabel(kind == .erp ? "新建领料单" : "新建报修")
                         .padding(.trailing, 20).padding(.bottom, 8)
                         .transition(.opacity)
