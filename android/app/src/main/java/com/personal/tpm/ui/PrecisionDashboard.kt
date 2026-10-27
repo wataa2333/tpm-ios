@@ -11,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -36,7 +38,7 @@ fun PrecisionDashboard(onBack: () -> Unit, openAsset: (String) -> Unit) {
                     PrecisionPanel {
                         Text("017CNC加工中心", style = MaterialTheme.typography.titleLarge)
                         Text(owner.currentFactoryName)
-                        Text("查询：${queries.username.ifEmpty { owner.accountName }} · 登录：${owner.accountName}", style = MaterialTheme.typography.bodySmall)
+                        Text("查询：${queries.label(owner)} · 登录：${owner.accountName}", style = MaterialTheme.typography.bodySmall)
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(vm.readAt.takeIf { it.isNotEmpty() }?.let { "更新：$it" }.orEmpty(), style = MaterialTheme.typography.bodySmall)
                             TextButton(enabled = !vm.loading, onClick = vm::refresh) { Text(if (vm.loading) "更新中…" else "刷新数据") }
@@ -103,12 +105,17 @@ fun PrecisionDashboard(onBack: () -> Unit, openAsset: (String) -> Unit) {
                             LaunchedEffect(id, vm.loading) { vm.loadPeople(row) }
                             Card(onClick = { openAsset(id) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)) {
-                                Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    Text(asset["addressCode"].text.ifEmpty { asset["assetCode"].text }, style = MaterialTheme.typography.titleLarge)
-                                    Text(asset["assetName"].text, style = MaterialTheme.typography.bodyMedium)
-                                    Text(asset["assetCode"].text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text("精度判定：${row["analysisResult"].text.removePrefix("RESULT_")} · 检测日期：${row["analysisDate"].text}", style = MaterialTheme.typography.bodySmall)
-                                    Text(vm.people[id] ?: "检测／上传人：读取中…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text(asset["addressCode"].text.ifEmpty { asset["assetCode"].text }, fontWeight = FontWeight.Light, style = MaterialTheme.typography.titleLarge)
+                                        Text(asset["assetName"].text, fontWeight = FontWeight.Light, style = MaterialTheme.typography.bodyMedium)
+                                        Text(asset["assetCode"].text, fontWeight = FontWeight.Light, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("检测日期：${row["analysisDate"].text}", fontWeight = FontWeight.Light, style = MaterialTheme.typography.bodySmall)
+                                        Text(vm.people[id] ?: "工单检测人：读取中…", fontWeight = FontWeight.Light, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Text(row["analysisResult"].text.removePrefix("RESULT_"), fontSize = 64.sp, lineHeight = 72.sp, fontWeight = FontWeight.Light,
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f), maxLines = 1, softWrap = false,
+                                        modifier = Modifier.widthIn(min = 80.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                                 }
                             }
                         }

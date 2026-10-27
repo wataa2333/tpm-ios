@@ -76,6 +76,11 @@ fun ErpFormScreen(existingId: String?, referenceSn: String?, onClose: () -> Unit
         } catch (e: Exception) { failure = "草稿没有保存成功：" + (e.message ?: "") }
     }
     fun submit() {
+        form["erpMaterialOutbounds"].array.forEachIndexed { index, line ->
+            val stock=line["material"]["onhandQty"]
+            val requested=line["entryQuantity"].number
+            if(!stock.isNull && stock.number.isFinite() && stock.number>=0 && requested.isFinite() && requested>stock.number) form.setQuantity(index,stock.number)
+        }
         FormRules.validate(OrderKind.Erp, form.jv, form.nodes, form.selections)?.let { failure = it; return }
         if (form.saving) return
         form.saving = true
@@ -126,6 +131,10 @@ fun ErpFormScreen(existingId: String?, referenceSn: String?, onClose: () -> Unit
                 GroupDivider()
                 val material = line["material"]
                 var text by remember(index, line["material"]["id"].text) { mutableStateOf(quantityText(line["entryQuantity"].number)) }
+                LaunchedEffect(line["entryQuantity"].number) {
+                    val stock=material["onhandQty"]
+                    if(!stock.isNull && (text.toDoubleOrNull() ?: 0.0)>stock.number && line["entryQuantity"].number<=stock.number) text=quantityText(line["entryQuantity"].number)
+                }
                 Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     Row(Modifier.padding(start = 26.dp, end = 12.dp), verticalAlignment = Alignment.Top) {
                         Column(Modifier.weight(1f)) {
@@ -134,7 +143,7 @@ fun ErpFormScreen(existingId: String?, referenceSn: String?, onClose: () -> Unit
                         }
                         IconButton(onClick = { form.removeLine(index) }) { Icon(Icons.Filled.Delete, contentDescription = "删除明细", tint = MaterialTheme.colorScheme.error) }
                     }
-                    InputRow("申请数量", text, { text = it; form.setQuantity(index, it.toDoubleOrNull() ?: 0.0) }, required = true, suffix = materialUnit(material))
+                    InputRow("申请数量", text, { text = it; form.setQuantity(index, it.toDoubleOrNull() ?: 0.0) }, required = true, suffix = materialUnit(material), maximum = if(material["onhandQty"].isNull) null else material["onhandQty"].number.coerceAtLeast(0.0))
                 }
             }
         }

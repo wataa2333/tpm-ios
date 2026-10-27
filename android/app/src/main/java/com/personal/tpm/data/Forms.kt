@@ -115,6 +115,15 @@ suspend fun resolveReference(session: Session, source: RefSource, value: Jv): Jv
 /** Form items the original client registers; `repair/handleRepair` takes these plus the repair id and the ERP lines, not the whole record. */
 val repairSubmissionKeys = listOf("faultType", "spend", "startTime", "endTime", "repairUsers", "content", "albums")
 
+fun clampRepairQuantities(data: JSONObject): JSONObject = JSONObject(data.toString()).also { result ->
+    val rows = Jv(data.opt("erpRepairMaterials")).array
+    if (rows.isNotEmpty()) result.put("erpRepairMaterials", JSONArray(rows.map { row ->
+        val left = row["materialOutbound"]["actualQuantity"].number - row["materialOutbound"]["usedQuantity"].number
+        val requested = row["useNum"].number
+        JSONObject(row.raw.toString()).also { if (left.isFinite() && left >= 0 && requested.isFinite() && requested > left) it.put("useNum", left) }
+    }))
+}
+
 fun repairPayload(data: JSONObject, repairId: Any?): JSONObject {
     val result = JSONObject()
     for (key in repairSubmissionKeys) if (data.has(key)) result.put(key, data.get(key))

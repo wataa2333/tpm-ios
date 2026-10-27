@@ -359,3 +359,10 @@ struct RequestContractTests {
         #expect(stageFailureMessage("提交流程节点", error) == "请选择【维修】确认的审批人")
     }
 }
+
+@Test func dataQueryPolicyAllowsCatalogReadsButNeverApprovalWrites() throws {
+    let body: JSONValue = .object(["offset": .number(0), "limit": .number(20), "filters": .array([])])
+    try QueryReadPolicy.validate(path: "erpOutbound/pageErpOutbound", body: body)
+    try QueryReadPolicy.validate(path: "erpOutbound/pageErpMaterial", body: body)
+    #expect(throws: APIError.self) { try QueryReadPolicy.validate(path: "process/commitTask", body: .object([:])) }
+}

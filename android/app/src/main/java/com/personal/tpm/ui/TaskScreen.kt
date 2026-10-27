@@ -16,8 +16,6 @@ import com.personal.tpm.ui.pageVerticalScroll as verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -122,6 +120,8 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
     var selections by remember { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
     var loading by remember { mutableStateOf(true) }
     var assignmentsLoading by remember { mutableStateOf(false) }
+    var assignmentsReady by remember { mutableStateOf(false) }
+    var autoSubmitAttempted by remember(id) { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var failure by remember { mutableStateOf<String?>(null) }
@@ -139,7 +139,8 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
 
     suspend fun loadAssignments(forCondition: String, t: Jv) {
         val mine = ++assignmentTicket
-        if (forCondition != "agree" || t["id"].text.isEmpty()) { nodes = emptyList(); selections = emptyMap(); return }
+        assignmentsReady = false
+        if (forCondition != "agree" || t["id"].text.isEmpty()) { nodes = emptyList(); selections = emptyMap(); assignmentsLoading = false; assignmentsReady = true; return }
         assignmentsLoading = true
         try {
             val values = session.request(
@@ -155,7 +156,7 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
                 if (names.isEmpty() && isChosenApprover(node)) prefs.defaultChoice(session.draftScope, "assignee.task.${kind.prefix}.$key")?.value?.get("userName")?.text?.takeIf { it.isNotEmpty() }?.let { names = listOf(it) }
                 chosen[key] = names
             }
-            nodes = values; selections = chosen
+            nodes = values; selections = chosen; assignmentsReady = true
         } finally { if (mine == assignmentTicket) assignmentsLoading = false }
     }
 
@@ -172,7 +173,7 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
             }
             state = taskState
             conditions = form["flowConditions"].array
-            condition = (if (startReturn) conditions.firstOrNull(::isReturnCondition) else null)?.get("value")?.text ?: conditions.firstOrNull()?.get("value")?.text.orEmpty()
+            condition = (if (startReturn) conditions.firstOrNull(::isReturnCondition) else null)?.get("value")?.text ?: (conditions.firstOrNull { it["value"].text == "agree" } ?: conditions.firstOrNull())?.get("value")?.text.orEmpty()
             group = order["userGroup"]
             if (kind == OrderKind.Erp && t["category"].text in listOf("EXECUTING", "CONFIRM")) {
                 lines = session.request("erpOutbound/getErpMaterialOutboundsByOutboundId", mapOf("outboundId" to t["businessKey"].text)).array
@@ -230,7 +231,22 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
         }
     }
 
-    val ready = !loading && !assignmentsLoading && !submitting && state["canSubmit"].bool && condition.isNotEmpty()
+    val ready = !loading && assignmentsReady && !assignmentsLoading && !submitting && state["canSubmit"].bool && condition.isNotEmpty()
+    LaunchedEffect(ready) {
+        if (!ready || autoSubmitAttempted || loadError != null) return@LaunchedEffect
+        autoSubmitAttempted = true
+        if (startReturn || returning || rejecting || missingAssigneeMessage(nodes, selections) != null) return@LaunchedEffect
+        if (needsFaultData && condition in listOf("agree", "assign", "appoint")) {
+            if (condition in listOf("assign", "appoint")) {
+                if (assignUser["userName"].text.isEmpty()) return@LaunchedEffect
+            } else if (group["groupId"].text.isEmpty() || estimated.isEmpty()) return@LaunchedEffect
+        }
+        if (needsErpLines && lines.indices.any { i ->
+            val quantity = actual[i]?.toDoubleOrNull() ?: 0.0
+            quantity < 1 || quantity > lines[i]["entryQuantity"].number
+        }) return@LaunchedEffect
+        submit()
+    }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -240,12 +256,12 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
                     // Handing the task to someone else: transfer, delegate, or finish a delegated one.
                     if (state["canDelegate"].bool || state["canResolveDelegate"].bool) Box {
                         IconButton(onClick = { moreMenu = true }, enabled = !submitting && !loading) { Icon(Icons.Filled.MoreVert, contentDescription = "更多") }
-                        DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
+                        AppOptionSheet(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                             if (state["canDelegate"].bool) {
-                                DropdownMenuItem(text = { Text("转办") }, onClick = { moreMenu = false; handoff = "transfer" })
-                                DropdownMenuItem(text = { Text("委派") }, onClick = { moreMenu = false; handoff = "delegate" })
+                                AppOptionItem(text = { Text("转办") }, onClick = { moreMenu = false; handoff = "transfer" })
+                                AppOptionItem(text = { Text("委派") }, onClick = { moreMenu = false; handoff = "delegate" })
                             }
-                            if (state["canResolveDelegate"].bool) DropdownMenuItem(text = { Text("委派完成") }, onClick = { moreMenu = false; handoff = "resolve" })
+                            if (state["canResolveDelegate"].bool) AppOptionItem(text = { Text("委派完成") }, onClick = { moreMenu = false; handoff = "resolve" })
                         }
                     }
                 },

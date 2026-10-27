@@ -36,16 +36,14 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
     // Measure the actual window: an Activity density override can leave the resource orientation stale.
     val landscape=useTrendSplitLayout(maxWidth.value,maxHeight.value)
     val sidebarWidth=(maxWidth*.34f).coerceIn(240.dp,320.dp)
-    var acceptedLandscape by rememberSaveable(span?.key){mutableStateOf(landscape || days<=7)}
     var manualLandscape by rememberSaveable { mutableStateOf(false) }
     val activity=LocalContext.current.findActivity()
-    val forceLandscape=(days>7 && acceptedLandscape) || manualLandscape
+    val forceLandscape=days>7 || manualLandscape
     val previousOrientation=rememberSaveable { activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
     DisposableEffect(activity,forceLandscape) {
         if(forceLandscape) activity?.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         onDispose { if(forceLandscape) activity?.requestedOrientation=previousOrientation }
     }
-    AnimatedMessageDialog(visible=days>7 && !acceptedLandscape,onDismissRequest=onBack,title={Text("横屏查看统计图")},text={Text("所选范围为${days}天，将切换横屏：左侧选择日期与人员，右侧查看统计图和统计表。退出图表后恢复原方向设置。")},confirmButton={TextButton(onClick={acceptedLandscape=true}){Text("横屏查看")}},dismissButton={TextButton(onClick=onBack){Text("返回")}})
     val complete=vm.started && vm.snapshot.complete && !vm.loading
     var monthly by remember(span?.key){mutableStateOf(days>90)}
     val series=remember(vm.snapshot.documents,span,complete,monthly){if(span==null) emptyList() else repairTrends(vm.snapshot.documents,span,complete,monthly=monthly,includeAll=true)}
@@ -81,7 +79,7 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
                 ChoiceChip(!monthly,{monthly=false},"按天")
                 ChoiceChip(monthly,{monthly=true},"按月")
             }
-            Text("按维修结束日期统计待确认、待复线及已完结的维修单。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("按故障发现日期统计待确认、待复线及已完结的维修单。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(!complete) Text(if(vm.started) "数据未读完整，图表和表格仅为已加载数量。" else "选择日期后查询，再查看完整图表。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
             } }
         }
@@ -115,7 +113,7 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
         }
     }
     Scaffold(contentWindowInsets=WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),topBar={AppTopBar("${days}天处理趋势",onBack=onBack,loading=vm.loading,actions={
-        if(!landscape) TextButton(onClick={manualLandscape=true;acceptedLandscape=true}){Text("横屏")}
+        if(!landscape) TextButton(onClick={manualLandscape=true}){Text("横屏")}
     })}){padding->
         if(landscape) Row(Modifier.padding(padding).fillMaxSize()){
             LazyColumn(Modifier.width(sidebarWidth).fillMaxHeight(),contentPadding=PaddingValues(start=12.dp,end=12.dp,top=12.dp,bottom=12.dp+navigationBottom),verticalArrangement=Arrangement.spacedBy(10.dp)){
@@ -126,7 +124,7 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
             Box(Modifier.weight(1f).fillMaxHeight()){pane()}
         } else Box(Modifier.padding(padding)){pane()}
     }
-    RepairQueryDialog(vm)
+
     if(picker) TrendPeopleSheet(series,selected,colors,::toggle,{selected=series.map{it.key}.toSet()},{selected=emptySet()}){picker=false}
     }
 }

@@ -83,7 +83,7 @@ fun PrecisionDeviceScreen(assetId: String, onBack: () -> Unit) {
                     Text(asset["addressCode"].text.ifEmpty { asset["assetCode"].text.ifEmpty { "设备检测记录" } }, style = MaterialTheme.typography.titleLarge)
                     Text(asset["assetName"].text, style = MaterialTheme.typography.bodyMedium)
                     Text(asset["assetCode"].text, style = MaterialTheme.typography.bodySmall)
-                    Text("查询：${queries.username.ifEmpty { owner.accountName }} · ${owner.currentFactoryName}", style = MaterialTheme.typography.bodySmall)
+                    Text("查询：${queries.label(owner)} · ${owner.currentFactoryName}", style = MaterialTheme.typography.bodySmall)
                     if (pageError.isNotEmpty()) Text(pageError, color = MaterialTheme.colorScheme.error)
                     TextButton(onClick = { retry++ }, enabled = !loadingPage) { Text("重新读取") }
                     if (!loadingPage && workOrders.isEmpty() && pageError.isEmpty()) Text("当前查询账号未返回此设备的检查工单，无法从汇总等级还原逐项数据。")

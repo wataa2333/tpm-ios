@@ -117,13 +117,15 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
         } catch (e: Exception) { failure = "提示" to ("草稿没有保存成功：" + (e.message ?: "")) }
     }
     fun submit() {
-        repairValidationError(jv)?.let { failure = "请检查表单" to it; return }
+        val capped = com.personal.tpm.data.clampRepairQuantities(data)
+        data = capped
+        repairValidationError(Jv(capped))?.let { failure = "请检查表单" to it; return }
         if (saving) return
         if (jv["repairId"].isNull) { failure = "保存未完成" to "保存维修结果失败：没有取得维修记录编号，请关闭后重新打开此任务"; return }
         saving = true
         scope.launch {
             try {
-                try { session.request("repair/handleRepair", body = repairPayload(data, jv["repairId"].raw)) }
+                try { session.request("repair/handleRepair", body = repairPayload(capped, jv["repairId"].raw)) }
                 catch (e: CancellationException) { throw e } catch (e: Exception) { throw IllegalStateException(stageFailure("保存维修结果", e)) }
                 draftId?.let { store.remove(it, scopeKey); draftId = null }
                 onSubmitted()
@@ -170,6 +172,10 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
                 val material = row["material"]
                 val line = row["materialOutbound"]
                 var use by remember(index, row["materialOutbound"]["id"].toString()) { mutableStateOf(quantityText(row["useNum"].number)) }
+                val maximum = (line["actualQuantity"].number - line["usedQuantity"].number).coerceAtLeast(0.0)
+                LaunchedEffect(row["useNum"].number, maximum) {
+                    if ((use.toDoubleOrNull() ?: 0.0) > maximum && row["useNum"].number <= maximum) use = quantityText(row["useNum"].number)
+                }
                 Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
                     Row(Modifier.padding(start = 26.dp, end = 12.dp), verticalAlignment = Alignment.Top) {
                         Column(Modifier.weight(1f)) {
@@ -183,7 +189,7 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
                         }
                         IconButton(onClick = { setRows(rows().filterIndexed { i, _ -> i != index }.map { it.raw }) }) { Icon(Icons.Filled.Delete, contentDescription = "删除明细", tint = MaterialTheme.colorScheme.error) }
                     }
-                    InputRow("使用数量", use, { use = it; setRows(rows().mapIndexed { i, r -> if (i == index) JSONObject(r.raw.toString()).put("useNum", it.toDoubleOrNull() ?: 0.0) else r.raw }) }, required = true, suffix = materialUnit(material))
+                    InputRow("使用数量", use, { use = it; setRows(rows().mapIndexed { i, r -> if (i == index) JSONObject(r.raw.toString()).put("useNum", it.toDoubleOrNull() ?: 0.0) else r.raw }) }, required = true, suffix = materialUnit(material), maximum = maximum)
                 }
             }
         }

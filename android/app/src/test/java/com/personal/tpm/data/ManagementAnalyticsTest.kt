@@ -39,7 +39,7 @@ class ManagementAnalyticsTest {
         assertNull(managedDocument(ManagedKind.Fault, row(ManagedKind.Fault,"1","FINISHED",end=""), "FINISHED", span))
         assertNull(managedDocument(ManagedKind.Fault, row(ManagedKind.Fault,"1","FINISHED",end="2026-10-19 10:00"), "FINISHED", span))
         val filters = workloadFilters(ManagedKind.Fault,"FINISHED",span)
-        assertEquals("repairEndTime", filters[1].getString("field"))
+        assertEquals("faultTime", filters[1].getString("field"))
         assertEquals("dateBetween", filters[1].getString("operator"))
     }
     @Test fun readsAllPagesWithOffsetsAndKeepsUnknownTotalsValid() = runTest {

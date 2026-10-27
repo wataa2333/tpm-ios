@@ -42,9 +42,11 @@ fun LazyListScope.repairPendingSummary(vm: RepairPendingViewModel, openPeople: (
         var details by remember { mutableStateOf(false) }
         GroupCard { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Text(if (vm.processed) "已到待确认 · 人员统计" else "维修待处理",style=MaterialTheme.typography.titleSmall)
+            Text("接口查询" + (if(vm.checking) " · 正在获取数量" else " · 实际查询耗时 " + String.format(java.util.Locale.ROOT,"%.1f",vm.elapsedMillis/1000.0) + " 秒"),style=MaterialTheme.typography.bodySmall)
+            LocalSession.current.queryAccounts?.fallbackNotice?.let { Text(it,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall) }
             if (vm.processed) {
                 RepairDateControls(vm)
-                Text("按维修结束日期筛选；统计待确认、待复线及已完结。",style=MaterialTheme.typography.bodySmall)
+                Text("按故障发现日期筛选；统计待确认、待复线及已完结。",style=MaterialTheme.typography.bodySmall)
             }
             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 Button(enabled=!vm.loading && (!vm.processed || vm.selectedSpan!=null),onClick=vm::prepare) { Text(if(vm.started) "重新查询" else "查询") }
@@ -84,7 +86,7 @@ fun LazyListScope.repairPendingSummary(vm: RepairPendingViewModel, openPeople: (
                 if(vm.message.startsWith("读取失败")) Text(vm.message,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
             }
         } }
-        RepairQueryDialog(vm)
+
     }
     if(!vm.started) return
     item {
@@ -139,7 +141,7 @@ fun LazyListScope.repairPendingSummary(vm: RepairPendingViewModel, openPeople: (
         }
     }
     if(people.isEmpty()) item { Text(if(vm.loading && !vm.processed) "正在逐单核对，暂未形成汇总" else "本次暂无已汇总记录",style=MaterialTheme.typography.bodySmall) }
-    if(vm.processed) item { Text("门槛为待确认，包含VERIFIED、RESOLVED和FINISHED；日期仍按维修结束时间repairEndTime，不是进入待确认的时间。结果为当前可见单据的状态快照，不是完整绩效。",style=MaterialTheme.typography.bodySmall) }
+    if(vm.processed) item { Text("按故障发现时间faultTime统计待确认、待复线及已完结；图表日期也采用故障发现日期。结果为当前可见单据的状态快照，不是完整绩效。",style=MaterialTheme.typography.bodySmall) }
 }
 
 private fun repairStateLabel(state:String)=when(state){"SIGNED"->"待签到";"REPAIRED"->"待完成";"VERIFIED"->"待确认";"RESOLVED"->"待复线";"FINISHED"->"已完结";else->state}
@@ -152,13 +154,14 @@ fun RepairPersonOrders(vm:RepairPendingViewModel,onBack:()->Unit,openOrder:(Stri
     Scaffold(contentWindowInsets=WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),topBar={AppTopBar("人员维修工单",subtitle=name,onBack=onBack,loading=vm.loading)}) { padding ->
         LazyColumn(Modifier.padding(padding).fillMaxSize(),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=16.dp,bottom=16.dp+navigationBottom),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             if(vm.showingPrevious) item { Text("上次数据 · 非最新 · ${vm.queriedAt}",color=MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.bodySmall) }
+            if(vm.message.startsWith("打开工单失败")) item { Text(vm.message,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall) }
             item {
                 Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf(ManagedPhase.Sign,ManagedPhase.Finish).forEach { phase->ChoiceChip(phase in vm.phases,{vm.togglePhase(phase)},phase.title) }}
-                Text("本次已核对匹配${documents.size}单"+if(!vm.snapshot.complete || vm.loading || vm.executorFailures>0 || vm.uncheckedExecutors>0) " · 数据尚不完整" else "",style=MaterialTheme.typography.bodySmall)
+                Text("本次已核对匹配"+"${documents.size}单"+if(!vm.snapshot.complete || vm.loading || vm.executorFailures>0 || vm.uncheckedExecutors>0) " · 数据尚不完整" else "",style=MaterialTheme.typography.bodySmall)
                 }
             }
-            items(documents,key={it.key}) { document->GroupCard {Column(Modifier.fillMaxWidth().clickable{openOrder(document.id)}.padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+            items(documents,key={it.key}) { document->GroupCard {Column(Modifier.fillMaxWidth().clickable{vm.openDocument(document,openOrder)}.padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                 Text(document.title,style=MaterialTheme.typography.titleSmall)
                 Text(listOf(document.number,document.asset,document.phase.title).filter{it.isNotBlank()}.joinToString(" · "),style=MaterialTheme.typography.bodySmall)
                 vm.snapshot.executorChecks[document.key]?.takeIf{it!="已核对"}?.let{Text(it,style=MaterialTheme.typography.bodySmall)}

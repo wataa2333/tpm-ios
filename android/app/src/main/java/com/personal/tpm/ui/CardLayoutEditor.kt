@@ -85,8 +85,8 @@ fun CardLayoutEditor(onBack: () -> Unit) {
         Column(Modifier.padding(padding).fillMaxSize().elastic().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Box {
                 TextButton(onClick = { typesOpen = true }) { Text("${type.title} ▾") }
-                DropdownMenu(typesOpen, { typesOpen = false }) {
-                    CardType.entries.forEach { item -> DropdownMenuItem(text = { Text(item.title) }, onClick = { type = item; typesOpen = false }) }
+                AppOptionSheet(typesOpen, { typesOpen = false }, title = "卡片类型") {
+                    CardType.entries.forEach { item -> AppOptionItem(text = { Text(item.title) }, selected = type == item, onClick = { type = item; typesOpen = false }) }
                 }
             }
             Text("最多四行：标题一行，下方三行。横向虚线为行边界；同行字段紧接排列，用“ · ”分隔。拖动调整行和先后，超出内容保留在详情。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

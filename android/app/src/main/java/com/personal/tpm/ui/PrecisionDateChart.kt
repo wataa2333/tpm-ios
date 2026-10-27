@@ -1,6 +1,9 @@
 package com.personal.tpm.ui
 
 import android.graphics.Paint
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.res.ResourcesCompat
+import com.personal.tpm.R
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
@@ -29,6 +32,8 @@ import kotlin.math.roundToInt
 
 @Composable
 internal fun PrecisionDateChart(rows: List<Jv>, days: Int, setDays: (Int) -> Unit) {
+    val context = LocalContext.current
+    val chartTypeface = remember(context) { requireNotNull(ResourcesCompat.getFont(context, R.font.google_sans_regular)) }
     val today = LocalDate.now(ZoneId.of("Asia/Shanghai"))
     val dates = remember(today, days) { (days - 1 downTo 0).map { today.minusDays(it.toLong()) } }
     val counts = remember(rows) { rows.groupingBy { it["analysisDate"].text.take(10) }.eachCount() }
@@ -86,7 +91,7 @@ internal fun PrecisionDateChart(rows: List<Jv>, days: Int, setDays: (Int) -> Uni
         }) {
             val left = 42.dp.toPx(); val right = size.width - 14.dp.toPx()
             val top = 18.dp.toPx(); val bottom = size.height - 32.dp.toPx()
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ink.toArgb(); textSize = 11.sp.toPx() }
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ink.toArgb(); textSize = 11.sp.toPx(); typeface = chartTypeface }
             fun point(i: Int) = Offset(left + (right - left) * (i - start) / (window - 1), bottom - (bottom - top) * values[i] / scale)
             for (n in 0..4) {
                 val y = bottom - (bottom - top) * n / 4

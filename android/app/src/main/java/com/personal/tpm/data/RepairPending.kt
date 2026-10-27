@@ -59,7 +59,7 @@ suspend fun loadRepairPending(
             val actualState = row["faultState"].text
             if (span != null && row["faultId"].text.isNotBlank() && actualState.isNotBlank()) {
                 val key = "Fault:${row["faultId"].text}"
-                val date = runCatching { java.time.LocalDate.parse(row["repairEndTime"].dateText.take(10)) }.getOrNull()
+                val date = runCatching { java.time.LocalDate.parse(row[ManagedKind.Fault.endField].dateText.take(10)) }.getOrNull()
                 // A later observation supersedes the previous one, including leaving the chosen scope.
                 if (actualState !in acceptedRepairStates || (date != null && (date < span.days.first || date > span.days.second))) {
                     docs.remove(key)
@@ -69,7 +69,7 @@ suspend fun loadRepairPending(
             val document = managedDocument(ManagedKind.Fault, row, if (span != null) actualState else cursor.state, span)
             if (document == null) {
                 if (span != null && row["faultId"].text.isNotBlank()) docs.remove("Fault:${row["faultId"].text}")
-                warnings += "存在缺少编号、状态不符或处理结束日期不符的记录"; continue
+                warnings += "存在缺少编号、状态不符或故障发现日期不符的记录"; continue
             }
             val kept = if (span == null) document else document.copy(title = "", number = "", asset = "", end = document.end.take(10))
             if (span != null) {

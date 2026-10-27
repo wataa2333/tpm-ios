@@ -45,23 +45,24 @@ import kotlin.math.roundToInt
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun DevScreen(onBack: () -> Unit) {
-    val context = LocalContext.current
-    var unlocked by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+fun DeveloperPasswordDialog(onDismiss: () -> Unit, onVerified: () -> Unit) {
     var password by remember { mutableStateOf("") }
     var wrong by remember { mutableStateOf(false) }
-    if (!unlocked) {
         androidx.compose.material3.AlertDialog(
-            onDismissRequest = onBack, title = { Text("开发者验证") },
+            onDismissRequest = onDismiss, title = { Text("开发者验证") },
             text = { androidx.compose.material3.OutlinedTextField(value = password, onValueChange = { password = it.take(16); wrong = false },
                 label = { Text(if (wrong) "密码不正确" else "请输入密码") }, isError = wrong,
                 visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword), singleLine = true) },
-            confirmButton = { androidx.compose.material3.TextButton(onClick = { if (password == "1331") { unlocked = true; password = "" } else wrong = true }) { Text("验证") } },
-            dismissButton = { androidx.compose.material3.TextButton(onClick = onBack) { Text("取消") } },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { if (password == "1331") { password = ""; onVerified() } else wrong = true }) { Text("验证") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("取消") } },
         )
-        return
-    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun DevScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(title = "开发者", onBack = onBack) },

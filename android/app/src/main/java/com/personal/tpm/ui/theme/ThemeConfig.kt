@@ -259,15 +259,16 @@ object ThemeConfig {
         large = RoundedCornerShape(20.dp), extraLarge = RoundedCornerShape(28.dp),
     )
 
-    /**
-     * The app's own font (Noto Sans SC, the font Android itself uses for Chinese), bundled in res/font: the look does not change
-     * with whatever font a phone maker or the owner has put on the system. Characters it lacks fall back to the system font.
-     */
+    /** Bundled Google Sans for Latin text; unsupported glyphs use the system fallback. */
     val fontFamily = FontFamily(
-        Font(R.font.noto_sans_sc_regular, FontWeight.Normal),
-        Font(R.font.noto_sans_sc_bold, FontWeight.Bold),
+        Font(R.font.google_sans_flex_light, FontWeight.Light),
+        Font(R.font.google_sans_regular, FontWeight.Normal),
+        Font(R.font.google_sans_medium, FontWeight.Medium),
+        Font(R.font.google_sans_semibold, FontWeight.SemiBold),
+        Font(R.font.google_sans_bold, FontWeight.Bold),
     )
-    private fun TextStyle.withFont() = copy(fontFamily = fontFamily)
+    // Qualify the object property: the extension receiver also has a nullable fontFamily.
+    private fun TextStyle.withFont() = copy(fontFamily = ThemeConfig.fontFamily)
     val typography: Typography = Typography().let {
         it.copy(
             displayLarge = it.displayLarge.withFont(), displayMedium = it.displayMedium.withFont(), displaySmall = it.displaySmall.withFont(),

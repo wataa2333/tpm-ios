@@ -7,6 +7,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -23,8 +27,8 @@ import com.personal.tpm.license.LicenseState
 
 private const val TABS = "tabs"
 private const val LIST = "list/{state}?q={q}&f={f}"
-private const val FAULT = "fault/{id}"
-private const val ERP = "erp/{id}"
+private const val FAULT = "fault/{id}?independent={independent}"
+private const val ERP = "erp/{id}?independent={independent}"
 private const val FLOW = "flow/{id}"
 private const val POOL = "pool/{kind}"
 private const val PAGED = "paged/{type}"
@@ -45,6 +49,18 @@ private fun newFaultRoute(id: String = "", draft: String = "") = "form/fault?id=
 fun AppNav(license: LicenseState.Allowed?) {
     val nav = rememberNavController()
     val session = LocalSession.current
+    var showDeveloperPassword by remember { mutableStateOf(false) }
+    var developerVerified by remember { mutableStateOf(false) }
+    if(showDeveloperPassword) DeveloperPasswordDialog(
+        onDismiss={showDeveloperPassword=false},
+        onVerified={
+            showDeveloperPassword=false
+            if(nav.currentBackStackEntry?.destination?.route==TABS) {
+                developerVerified=true
+                nav.navigate(DEV) { launchSingleTop=true }
+            }
+        },
+    )
     fun reportAsset(asset: com.personal.tpm.data.Jv) {
         nav.navigate(newFaultRoute())
         val reference=com.personal.tpm.data.Jv.obj("assetId" to asset["assetId"].text,"assetCode" to asset["assetCode"].text,"assetName" to asset["assetName"].text)
@@ -75,7 +91,7 @@ fun AppNav(license: LicenseState.Allowed?) {
                     openDev = {
                         val entry = nav.currentBackStackEntry
                         if (entry?.destination?.route == TABS && entry.lifecycle.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
-                            nav.navigate(DEV) { launchSingleTop = true }
+                            showDeveloperPassword=true
                         }
                     },
                     openCards = { nav.navigate("card-settings") },
@@ -103,28 +119,28 @@ fun AppNav(license: LicenseState.Allowed?) {
                     // A quick-query page is titled by what it searches now, following each confirmed search and the chosen field.
                     title = if (vm.searchMode) vm.field.label + " " + vm.query else if (vm.state.isEmpty()) "所有工单" else faultStateName(vm.state),
                     onBack = { nav.popBackStack() },
-                    onOpen = { id -> nav.navigate("fault/" + Uri.encode(id)) },
+                    onOpen = { id -> nav.navigate("fault/" + Uri.encode(id) + "?independent=" + vm.searchMode) },
                     onNew = if (vm.searchMode) null else ({ nav.navigate(newFaultRoute()) }),
                     reportAsset = ::reportAsset,
                 )
             }
         }
-        composable(FAULT, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
+        composable(FAULT, arguments = listOf(navArgument("id") { type = NavType.StringType }, navArgument("independent") { type = NavType.BoolType; defaultValue = false })) { entry ->
             run {
                 val id = entry.arguments?.getString("id").orEmpty()
                 FaultDetailScreen(
-                    id = id, onBack = { nav.popBackStack() }, onOpenFlow = { nav.navigate("flow/" + Uri.encode(it)) },
+                    id = id, independent = entry.arguments?.getBoolean("independent") == true, onBack = { nav.popBackStack() }, onOpenFlow = { nav.navigate("flow/" + Uri.encode(it)) },
                     onOpenTask = { returning -> nav.navigate("task/Fault/" + Uri.encode(id) + "?ret=" + returning) },
                     onEdit = { nav.navigate(newFaultRoute(id)) }, onOpenRepair = { nav.navigate("repair/" + Uri.encode(id)) },
                     onReportAsset = ::reportAsset,
                 )
             }
         }
-        composable(ERP, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
+        composable(ERP, arguments = listOf(navArgument("id") { type = NavType.StringType }, navArgument("independent") { type = NavType.BoolType; defaultValue = false })) { entry ->
             run {
                 val id = entry.arguments?.getString("id").orEmpty()
                 ErpDetailScreen(
-                    id = id, onBack = { nav.popBackStack() }, onOpenFlow = { nav.navigate("flow/" + Uri.encode(it)) },
+                    id = id, independent = entry.arguments?.getBoolean("independent") == true, onBack = { nav.popBackStack() }, onOpenFlow = { nav.navigate("flow/" + Uri.encode(it)) },
                     onOpenTask = { returning -> nav.navigate("task/Erp/" + Uri.encode(id) + "?ret=" + returning) },
                     onEdit = { nav.navigate("form/erp?id=" + Uri.encode(id)) },
                 )
@@ -168,7 +184,7 @@ fun AppNav(license: LicenseState.Allowed?) {
         }
         composable("card-settings") { CardSettingsScreen { nav.popBackStack() } }
         composable("management") {
-            if (AppPreferences.management) ManagementScreen(onBack = { nav.popBackStack() }, openOrder = { id -> nav.navigate("fault/" + Uri.encode(id)) })
+            if (AppPreferences.management) ManagementScreen(onBack = { nav.popBackStack() }, openOrder = { id -> nav.navigate("fault/" + Uri.encode(id) + "?independent=true") })
             else androidx.compose.runtime.LaunchedEffect(Unit) { nav.popBackStack() }
         }
         composable("query-account-settings") { QueryAccountSettingsScreen { nav.popBackStack() } }
@@ -176,7 +192,13 @@ fun AppNav(license: LicenseState.Allowed?) {
         composable("precision-asset/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
             PrecisionDeviceScreen(entry.arguments?.getString("id").orEmpty()) { nav.popBackStack() }
         }
-        composable(DEV) { entry -> DevScreen(onBack = {
+        composable(DEV) { entry ->
+            if(!developerVerified) {
+                androidx.compose.runtime.LaunchedEffect(Unit) { nav.popBackStack() }
+                return@composable
+            }
+            androidx.compose.runtime.DisposableEffect(Unit) { onDispose { developerVerified=false } }
+            DevScreen(onBack = {
             if (nav.currentBackStackEntry == entry && entry.lifecycle.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) nav.popBackStack()
         }) }
         composable(DRAFTS) {
@@ -199,14 +221,14 @@ fun AppNav(license: LicenseState.Allowed?) {
             val list = WorkList.byKey(entry.arguments?.getString("type").orEmpty()) ?: WorkList.Assets
             val vm = viewModel<PagedViewModel>(
                 key = "paged-" + list.key,
-                factory = viewModelFactory { initializer { PagedViewModel(session, list.page, list.base(), list.searches()) } },
+                factory = viewModelFactory { initializer { PagedViewModel(session, list.page, list.base(), list.searches(), independent = true) } },
             )
             PagedScreen(
                 vm, list.title, "没有找到相关内容",
                 cardType = when (list) { WorkList.Assets -> CardType.Asset; WorkList.Outbound -> CardType.Erp; WorkList.Stock -> CardType.Stock },
                 modelOf = { row, index -> when (list) { WorkList.Assets -> assetCardModel(row, index); WorkList.Outbound -> erpCardModel(row); WorkList.Stock -> stockCardModel(row, index) } },
                 onBack = { nav.popBackStack() },
-                open = if (list == WorkList.Outbound) ({ model, row -> OrderPreview.put("Erp", model.openId, row); nav.navigate("erp/" + Uri.encode(model.openId)) }) else null,
+                open = if (list == WorkList.Outbound) ({ model, row -> OrderPreview.put("Erp", model.openId, row); nav.navigate("erp/" + Uri.encode(model.openId) + "?independent=true") }) else null,
                 onNew = if (list == WorkList.Outbound) ({ nav.navigate("form/erp?id=") }) else null,
                 batchKind = if (list == WorkList.Outbound) OrderKind.Erp else null,
                 reportAsset = if(list == WorkList.Assets) ::reportAsset else null,

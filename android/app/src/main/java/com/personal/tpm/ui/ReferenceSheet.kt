@@ -27,14 +27,13 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Snackbar
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -159,6 +158,7 @@ fun ReferenceSheet(
     var menuFor by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var picked by remember { mutableStateOf(selected) }
+    var hideUsedUp by remember { mutableStateOf(true) }
     val opened = remember { mutableStateListOf<String>() }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -172,7 +172,14 @@ fun ReferenceSheet(
                     if (source == RefSource.Materials) add(Jv.obj("field" to "onhandQty", "operator" to "gt", "value" to 0, "logic" to "and"))
                     if (committed.isNotEmpty()) add(filter(searchMode.field(source), committed, "like"))
                 }
-                val answer = session.page(path, if (more) values.size else 0, filters)
+                // Sort on the server so the date order holds across pages, including searches.
+                val answer = if (source == RefSource.OutboundMaterials) {
+                    session.request(path, body = Jv.obj(
+                        "offset" to if (more) values.size else 0, "limit" to 20,
+                        "sort" to "outbound.applyDate", "order" to "desc",
+                        "filters" to org.json.JSONArray(filters),
+                    ))
+                } else session.page(path, if (more) values.size else 0, filters)
                 values = if (more) values + answer["content"].array else answer["content"].array
                 last = answer["last"].bool
             } else values = loadWhole(session, source, committed)
@@ -221,6 +228,7 @@ fun ReferenceSheet(
     val treeSource = source == RefSource.Departments || source == RefSource.FaultTypes || source == RefSource.Divisions
     val treeValues = if (source == RefSource.Divisions) divisionTree(values) else values
     val shown = when {
+        source == RefSource.OutboundMaterials -> values.filter { !hideUsedUp || available(it) > 0 }
         paged || source == RefSource.WorkflowUsers || !searching || treeSource -> values
         else -> values.filter { (it.label + it["userName"].text + it["groupName"].text + it["projectCode"].text).contains(query.trim(), ignoreCase = true) }
     }
@@ -245,15 +253,11 @@ fun ReferenceSheet(
     fun PickerRow(entry: PickerEntry, depth: Int = 0) {
         val key = entry.key
         val lines = subtitleLines(entry.value)
-        var touch by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-        var heightPx by remember { mutableStateOf(0) }
-        val density = androidx.compose.ui.platform.LocalDensity.current
         // Each choice is a block of its own on the white sheet (a tinted one when it is ticked), so the rows never run together.
         Box(Modifier.fillMaxWidth().padding(start = (12 + depth * 14).dp, end = 12.dp, top = 3.dp, bottom = 3.dp)) {
             Row(
-                Modifier.fillMaxWidth().onSizeChanged { heightPx = it.height }.clip(RoundedCornerShape(12.dp))
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                     .background(if (key in picked) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainer)
-                    .trackTouch { touch = it }
                     .combinedClickable(onClick = { choose(entry.value) }, onLongClick = { if (source.hasMenu) menuFor = key })
                     .padding(start = 14.dp, end = 12.dp, top = 9.dp, bottom = 9.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
@@ -266,13 +270,13 @@ fun ReferenceSheet(
                 if (defaultKey == key) Text("默认", style = MaterialTheme.typography.labelMedium, color = Color(0xFFF57C00))
                 if (key in picked) Icon(Icons.Filled.Check, contentDescription = "已选", Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
             }
-            // The menu opens where the finger is: its corner is at the point that was pressed.
-            DropdownMenu(
+            // Long-press actions use the shared bottom option sheet.
+            AppOptionSheet(
                 expanded = menuFor == key, onDismissRequest = { menuFor = null },
-                offset = androidx.compose.ui.unit.DpOffset(with(density) { touch.x.toDp() }, with(density) { (touch.y - heightPx).toDp() }),
+
             ) {
                 val pinned = lists.pins.any { it.key == key }
-                DropdownMenuItem(
+                AppOptionItem(
                     text = { Text(if (pinned) "取消置顶" else "置顶") }, leadingIcon = { Icon(Icons.Filled.PushPin, contentDescription = null) },
                     onClick = {
                         menuFor = null
@@ -281,7 +285,7 @@ fun ReferenceSheet(
                         else { lists = next; prefs.save(scopeKey, source, next) }
                     },
                 )
-                if (defaultField != null) DropdownMenuItem(
+                if (defaultField != null) AppOptionItem(
                     text = { Text(if (defaultKey == key) "取消默认" else "设为默认") }, leadingIcon = { Icon(Icons.Filled.Star, contentDescription = null) },
                     onClick = {
                         menuFor = null
@@ -328,6 +332,13 @@ fun ReferenceSheet(
             if (hasBranches && !searching) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(onClick = { flatten(treeValues, source, emptySet(), true).filter { it.opens }.forEach { if (it.path !in opened) opened.add(it.path) } }) { Text("全部展开") }
                 TextButton(onClick = { opened.clear() }) { Text("全部收起") }
+            }
+            if (source == RefSource.OutboundMaterials) Row(
+                Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("隐藏已领用完物料", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                Switch(checked = hideUsedUp, onCheckedChange = { hideUsedUp = it })
             }
             LazyColumn(Modifier.weight(1f).elastic(top = false)) {
                 if (source.hasMenu && !searching && lists.pins.isNotEmpty()) {

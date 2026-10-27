@@ -42,8 +42,6 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -241,9 +239,9 @@ private fun SearchRow(vm: OrderListViewModel, input: String, onInput: (String) -
         )
         Box {
             BlockChip("按" + vm.field.label + "搜索", { fieldMenu = true }, trailing = { Icon(Icons.Filled.ExpandMore, contentDescription = null, Modifier.size(18.dp)) })
-            DropdownMenu(expanded = fieldMenu, onDismissRequest = { fieldMenu = false }) {
+            AppOptionSheet(expanded = fieldMenu, onDismissRequest = { fieldMenu = false }, title = "搜索方式") {
                 FaultSearchField.entries.forEach { option ->
-                    DropdownMenuItem(text = { Text(option.label) }, onClick = { fieldMenu = false; vm.changeField(option) })
+                    AppOptionItem(text = { Text(option.label) }, selected = option == vm.field, onClick = { fieldMenu = false; vm.changeField(option) })
                 }
             }
         }

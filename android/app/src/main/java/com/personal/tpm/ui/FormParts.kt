@@ -43,6 +43,7 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.animation.animateContentSize
@@ -355,7 +356,7 @@ fun FormPage(
     LaunchedEffect(Unit) { UserNames.ensure(session) }
     // Going back is left to the navigation host: the gesture slides the page out to the right with the finger and brings the page under it in,
     // like every other page of the app. The form takes the back key itself only when it has to ask or to refuse: while it is saving or uploading
-    // (nothing happens), and when it holds something worth keeping (the question "保存为草稿？" comes first).
+    // (nothing happens), and when entered content is saved locally before closing.
     androidx.activity.compose.BackHandler(enabled = !backEnabled) { }
     androidx.activity.compose.BackHandler(enabled = backEnabled && interceptBack) { onBackGesture() }
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
@@ -380,27 +381,6 @@ fun FormPage(
 }
 }
 
-/** "保存为草稿？": the close of a form that holds something. The three ways out are full-width buttons of one height, one under the other. */
-@Composable
-fun KeepDraftDialog(onKeep: () -> Unit, onDiscard: () -> Unit, onStay: () -> Unit) {
-    androidx.compose.ui.window.Dialog(onDismissRequest = onStay) {
-        TransparentSystemBars()
-        Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-            androidx.compose.foundation.layout.Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("保存为草稿？", style = MaterialTheme.typography.titleLarge)
-                Text(
-                    "没填完也可以保存。草稿只在这台手机上，标题是最后编辑的时间，之后可在“草稿箱”里继续填写。",
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                androidx.compose.foundation.layout.Spacer(Modifier.height(4.dp))
-                Button(onClick = onKeep, Modifier.fillMaxWidth().height(46.dp)) { Text("保存草稿") }
-                SoftButton(onClick = onDiscard, Modifier.fillMaxWidth().height(46.dp)) { Text("不保存") }
-                SoftButton(onClick = onStay, Modifier.fillMaxWidth().height(46.dp)) { Text("继续编辑") }
-            }
-        }
-    }
-}
-
 /** The drafts of this account and factory, newest first; a tap hands one over, the bin removes it. */
 @Composable
 fun DraftList(scopeKey: String, target: com.personal.tpm.data.DraftTarget, onPick: (com.personal.tpm.data.FormDraft) -> Unit) {
@@ -409,7 +389,7 @@ fun DraftList(scopeKey: String, target: com.personal.tpm.data.DraftTarget, onPic
     androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth()) {
         if (list.isEmpty()) androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth().padding(vertical = 28.dp, horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("草稿箱是空的", style = MaterialTheme.typography.titleMedium)
-            Text("表单里点“保存”，或关闭时选“保存草稿”，没填完的内容就会存在这里。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text("表单里点“保存”，或关闭时自动保留草稿，没填完的内容就会存在这里。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
         list.forEach { draft ->
             androidx.compose.material3.ListItem(
@@ -449,15 +429,26 @@ fun CompactTheme(content: @Composable () -> Unit) {
 @Composable
 fun InputRow(
     label: String, value: String, onChange: (String) -> Unit, required: Boolean = false, suffix: String = "", keyboardType: KeyboardType = KeyboardType.Decimal,
-    limit: Int = 64, placeholder: String = "请输入",
+    limit: Int = 64, placeholder: String = "请输入", maximum: Double? = null,
 ) {
     val style = MaterialTheme.typography.bodyMedium
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    var wasFocused by remember { mutableStateOf(false) }
+    fun confirmQuantity() {
+        val number = value.toDoubleOrNull()
+        if (maximum != null && maximum.isFinite() && maximum >= 0 && number != null && number.isFinite() && number > maximum)
+            onChange(com.personal.tpm.data.quantityText(maximum))
+    }
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(requiredLabel(label, required), style = style, maxLines = 1, softWrap = false)
         androidx.compose.foundation.text.BasicTextField(
-            value = value, onValueChange = { onChange(it.take(limit)) }, singleLine = true, modifier = Modifier.weight(1f),
+            value = value, onValueChange = { onChange(it.take(limit)) }, singleLine = true, modifier = Modifier.weight(1f).onFocusChanged {
+                if (wasFocused && !it.isFocused) confirmQuantity()
+                wasFocused = it.isFocused
+            },
             textStyle = style.copy(color = MaterialTheme.colorScheme.onSurface, textAlign = androidx.compose.ui.text.style.TextAlign.End),
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { confirmQuantity(); focus.clearFocus() }),
             cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
             decorationBox = { inner ->
                 androidx.compose.foundation.layout.Box(contentAlignment = Alignment.CenterEnd) {

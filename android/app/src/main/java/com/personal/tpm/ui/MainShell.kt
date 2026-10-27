@@ -330,7 +330,7 @@ private fun FactorySheet(session: Session, onDismiss: () -> Unit, onPick: (Strin
         Column(Modifier.padding(horizontal = 20.dp)) {
             Text("切换厂区", style = MaterialTheme.typography.titleLarge)
             Text("当前：" + session.currentFactoryName, Modifier.padding(top = 2.dp, bottom = 14.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Column(Modifier.elastic(top = false).verticalScroll(rememberScrollState()).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.elastic(top = false, fadeEdges = false).verticalScroll(rememberScrollState()).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 session.factories.forEach { factory ->
                     val id = factory["factoryId"].text
                     val current = id == session.currentFactoryId
@@ -361,7 +361,6 @@ private fun MineTab(session: Session, license: LicenseState.Allowed?, nested: Mo
     val accounts by vault.accounts.collectAsState()
     var error by remember { mutableStateOf<Pair<String, String>?>(null) }
     var signingInAs by remember { mutableStateOf<String?>(null) }
-    var removing by remember { mutableStateOf<SavedAccount?>(null) }
     var pickingAccent by remember { mutableStateOf(false) }
     var adjustingArea by remember { mutableStateOf(false) }
     var protect by remember { mutableStateOf(BiometricGate.isEnabled(context)) }
@@ -465,7 +464,7 @@ private fun MineTab(session: Session, license: LicenseState.Allowed?, nested: Mo
                         trailingContent = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 if (isCurrent) Icon(Icons.Filled.Check, contentDescription = "当前账号", tint = MaterialTheme.colorScheme.primary)
-                                IconButton(onClick = { removing = account }) { Icon(Icons.Filled.Delete, contentDescription = "移除已记住的账号") }
+                                IconButton(onClick = { vault.remove(account.username) }) { Icon(Icons.Filled.Delete, contentDescription = "移除已记住的账号") }
                             }
                         },
                     )
@@ -579,15 +578,6 @@ private fun MineTab(session: Session, license: LicenseState.Allowed?, nested: Mo
 
     if (pickingAccent) AccentSheet(onDismiss = { pickingAccent = false })
     if (adjustingArea) DisplayAreaSheet(onDismiss = { adjustingArea = false })
-    removing?.let { account ->
-        AlertDialog(
-            onDismissRequest = { removing = null },
-            title = { Text("移除这个账号？") },
-            text = { Text("只会忘掉本机保存的 ${account.displayName.ifEmpty { account.username }} 的密码，账号本身不受影响。") },
-            confirmButton = { TextButton(onClick = { vault.remove(account.username); removing = null }) { Text("移除", color = MaterialTheme.colorScheme.error) } },
-            dismissButton = { TextButton(onClick = { removing = null }) { Text("取消") } },
-        )
-    }
     error?.let { (title, message) -> ErrorDialog(title, message) { error = null } }
 }
 

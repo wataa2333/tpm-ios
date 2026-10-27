@@ -10,17 +10,18 @@ enum QueryReadPolicy {
     static let getPaths: Set<String> = [
         "security/getMobileLoginUserInfo", "fault/getAssetFaultDetailById", "repair/getRepairsByFaultId",
         "workflow/getWorkflowHistoryNodesByProcessInstanceId", "workflow/getAssigneeElementsByProcessInstanceId",
-        "security/getUserByUserName"
+        "asset/getAssetDetailById", "security/getUserByUserName", "erpOutbound/getErpOutboundById", "erpOutbound/getErpMaterialOutboundsByOutboundId"
     ]
     static func validate(path: String, body: JSONValue?) throws {
-        if ["fault/pageAssetFault", "precise/pagePrecise", "asset/pageAsset"].contains(path), let body,
+        if ["fault/pageAssetFault", "precise/pagePrecise", "asset/pageAsset", "erpOutbound/pageErpOutbound", "erpOutbound/pageErpMaterial", "maintain/pageMaintain", "inspect/pageInspect", "fault/pageSimpleAssetFault", "inventory/pageInventoryRecord"].contains(path), let body,
            Set(body.object.keys).isSubset(of: ["offset", "limit", "sort", "order", "filters"]),
            case .array = body["filters"], body["limit"].number > 0, body["offset"].number >= 0 { return }
+        if path == "asset/getAssetResumeByAsset", body == nil || body == .null { return }
         if path == "precise/getPreciseAnalysis", let body, case .object = body,
            Set(body.object.keys).isSubset(of: ["inspectStates", "faultStates", "maintainStates", "analysisResults", "type", "layerCode", "categoryIds", "useStates", "assetStates"]) { return }
         if ["precise/getPreciseOrdersByPreciseId", "precise/getPreciseRecordsByPreciseId"].contains(path), body == nil { return }
         guard body == nil && getPaths.contains(path) else {
-            throw APIError(message: "查询账号仅能读取维修及精密度看板数据；单据操作必须使用当前登录账号")
+            throw APIError(message: "查询账号仅能读取看板和数据查询；单据操作必须使用当前登录账号")
         }
     }
 }

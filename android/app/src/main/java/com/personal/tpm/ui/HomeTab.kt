@@ -127,13 +127,6 @@ private fun symbolOf(state: FaultState): ImageVector = when (state) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeTab(vm: HomeViewModel, gridState: LazyGridState, pullState: PullToRefreshState, nested: Modifier, openList: (String) -> Unit, openPool: (PoolKind) -> Unit) {
-    var confirming by androidx.compose.runtime.remember { mutableStateOf<String?>(null) }
-    if (confirming != null) androidx.compose.material3.AlertDialog(
-        onDismissRequest = { confirming = null }, title = { Text("加载提醒") },
-        text = { Text("将加载系统大量工单，等待时间可能较长，是否继续？") },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = { val target = confirming; confirming = null; if (target != null) openList(target) }) { Text("继续加载") } },
-        dismissButton = { androidx.compose.material3.TextButton(onClick = { confirming = null }) { Text("取消") } },
-    )
     // The states the home shows, as on iOS (the "报修" draft state has its own place in the list's strip).
     val cards = listOf(FaultState.Reported, FaultState.Received, FaultState.Signed, FaultState.Repaired, FaultState.Verified, FaultState.Finished)
     PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.reload(pull = true) }, state = pullState, indicator = {}, modifier = Modifier.fillMaxSize()) {
@@ -147,9 +140,9 @@ fun HomeTab(vm: HomeViewModel, gridState: LazyGridState, pullState: PullToRefres
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("维修工单") }
-                item(span = { GridItemSpan(maxLineSpan) }) { AllOrdersCard { confirming = "" } }
+                item(span = { GridItemSpan(maxLineSpan) }) { AllOrdersCard { openList("") } }
                 items(cards, key = { it.code }) { st ->
-                    StateCard(st.title, symbolOf(st), stateColor(st.code), if (st.hasCount) vm.counts[st.code] else null) { if (st == FaultState.Finished) confirming = st.code else openList(st.code) }
+                    StateCard(st.title, symbolOf(st), stateColor(st.code), if (st.hasCount) vm.counts[st.code] else null) { openList(st.code) }
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("保养工单") }
                 item(key = "pool-maintain", span = { GridItemSpan(maxLineSpan) }) { WideCard("保养工单池", "等待接单的保养工单", Icons.Filled.OilBarrel, Color(0xFF26A69A), vm.counts[PoolKind.Maintenance.path]) { openPool(PoolKind.Maintenance) } }

@@ -118,7 +118,7 @@ class ElasticState(
  * sideways and lets it spring back.
  */
 @Composable
-fun Modifier.elastic(top: Boolean = true, sides: Boolean = true, onEnd: (() -> Unit)? = null): Modifier {
+fun Modifier.elastic(top: Boolean = true, sides: Boolean = true, fadeEdges: Boolean = true, onEnd: (() -> Unit)? = null): Modifier {
     val maxPx = with(LocalDensity.current) { 160.dp.toPx() }
     val scope = rememberCoroutineScope()
     val latestEnd by androidx.compose.runtime.rememberUpdatedState(onEnd)
@@ -126,7 +126,7 @@ fun Modifier.elastic(top: Boolean = true, sides: Boolean = true, onEnd: (() -> U
     val sideways = remember(maxPx) { ElasticState(maxPx * 0.5f, scope, horizontal = true, start = true) }
     return this
         .clipToBounds()
-        .scrollEdges(LocalScrollSurface.current ?: androidx.compose.material3.MaterialTheme.colorScheme.background)
+        .then(if (fadeEdges) Modifier.scrollEdges(LocalScrollSurface.current ?: androidx.compose.material3.MaterialTheme.colorScheme.background) else Modifier)
         .nestedScroll(vertical.connection)
         .then(if (sides) Modifier.sidePull(sideways) else Modifier)
         .graphicsLayer { translationY = vertical.offset; translationX = sideways.offset }

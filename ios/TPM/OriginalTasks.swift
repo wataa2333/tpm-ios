@@ -226,6 +226,7 @@ struct WorkflowTaskView: View {
     @State private var failure: String?
     @State private var handoff: String?
     @State private var ready = false
+    @State private var autoSubmitAttempted = false
     @State private var assignmentsReady = false
     @State private var assignmentsLoading = false
     @State private var assignmentRequest = UUID()
@@ -299,8 +300,9 @@ struct WorkflowTaskView: View {
                             submitTitle: task["category"].text == "SIGNED" && condition == "agree" ? "签到" : "提交",
                             submit: { requestSubmit() })
         }
-        .task { if !ready { await load() } }
+        .task { if !ready { await load() }; await submitDefaultIfComplete() }
         .onChange(of: condition) { _, _ in
+            guard ready, !loading, !submitting else { return }
             assignmentsReady = false
             Task { await loadAssignments() }
         }
@@ -338,7 +340,7 @@ struct WorkflowTaskView: View {
             state = try await session.request("workflow/getWorkflowTaskState", query: ["processInstanceId": task["processInstanceId"].text])
             let form = try await session.request("workflow/getFormPropertiesConditionsByTaskId", query: ["taskId": task["id"].text])
             conditions = form["flowConditions"].array
-            condition = (previewReturn ? conditions.first(where: { isReturnCondition($0) }) : conditions.first)?["value"].text ?? ""
+            condition = (previewReturn ? conditions.first(where: { isReturnCondition($0) }) : (conditions.first(where: { $0["value"].text == "agree" }) ?? conditions.first))?["value"].text ?? ""
             if needsFaultData || (kind == .fault && task["category"].text == "SIGNED") {
                 let fault = try await session.request("fault/getAssetFaultDetailById", query: ["faultId": task["businessKey"].text])
                 taskData = ["asset": fault["asset"], "repairWay": .string("SELF"), "faultType": fault["faultType"], "groupId": fault["userGroup"]["groupId"], "userGroup": fault["userGroup"], "estimatedCompleteTime": .string(serverDate(Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: Date())!))]
@@ -377,6 +379,21 @@ struct WorkflowTaskView: View {
     private func loadAssignments() async { do { try await fetchAssignments() } catch { self.error = stageFailureMessage("加载下一节点审批人", error) } }
     private var missingAssignee: String? {
         condition == "agree" ? missingAssigneeMessage(nodes: assignments.assignees, selections: assignments.selections) : nil
+    }
+    private func submitDefaultIfComplete() async {
+        guard !preview, !previewReturn, !autoSubmitAttempted, ready, !loading,
+              assignmentsReady, !assignmentsLoading, state["canSubmit"].bool, !condition.isEmpty else { return }
+        autoSubmitAttempted = true
+        guard !isReturning, !isRejecting, missingAssignee == nil else { return }
+        if needsFaultData && ["agree", "assign", "appoint"].contains(condition) {
+            if ["assign", "appoint"].contains(condition) {
+                guard !taskData.text("assignUser.userName").isEmpty else { return }
+            } else {
+                guard !taskData.text("groupId").isEmpty, !taskData.text("estimatedCompleteTime").isEmpty else { return }
+            }
+        }
+        if needsERPData && materials.contains(where: { $0["actualQuantity"].number < 1 || $0["actualQuantity"].number > $0["entryQuantity"].number }) { return }
+        await submit()
     }
     private func requestSubmit() {
         if let message = missingAssignee { failure = message; return }

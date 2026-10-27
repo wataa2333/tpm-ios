@@ -49,8 +49,11 @@ import kotlinx.coroutines.launch
 
 /** An ERP outbound order, read-only for now: the order, its materials with the applied and issued quantities, the process. */
 @Composable
-fun ErpDetailScreen(id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit, onOpenTask: (returning: Boolean) -> Unit, onEdit: (() -> Unit)? = null, peeking: Boolean = false) {
+fun ErpDetailScreen(id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit, onOpenTask: (returning: Boolean) -> Unit, onEdit: (() -> Unit)? = null, peeking: Boolean = false, independent: Boolean = false) {
     val session = LocalSession.current
+    suspend fun read(path: String, query: Map<String, String>): Jv =
+        if (independent) session.readRequest(path, query) else session.request(path, query)
+    var operatorDetail by remember(id) { mutableStateOf<Jv?>(null) }
     val scope = rememberCoroutineScope()
     var detail by remember { mutableStateOf(OrderPreview.get("Erp", id)) }
     var lines by remember { mutableStateOf<List<Jv>>(emptyList()) }
@@ -58,32 +61,39 @@ fun ErpDetailScreen(id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit
     var error by remember { mutableStateOf<String?>(null) }
 
     fun load() {
-        loading = true; error = null
+        loading = true; error = null; operatorDetail = null
         scope.launch {
             try {
                 val (order, materials) = coroutineScope {
-                    val o = async { session.request("erpOutbound/getErpOutboundById", mapOf("outboundId" to id)) }
-                    val m = async { session.request("erpOutbound/getErpMaterialOutboundsByOutboundId", mapOf("outboundId" to id)).array }
+                    val o = async { read("erpOutbound/getErpOutboundById", mapOf("outboundId" to id)) }
+                    val m = async { read("erpOutbound/getErpMaterialOutboundsByOutboundId", mapOf("outboundId" to id)).array }
                     o.await() to m.await()
                 }
                 detail = order; lines = materials
+                if (!independent) operatorDetail = order
+                else {
+                    val actual = try { session.request("erpOutbound/getErpOutboundById", mapOf("outboundId" to id)) }
+                        catch (e: CancellationException) { throw e } catch (_: Exception) { null }
+                    if (actual != null && actual["outboundState"].text == order["outboundState"].text && actual["processInstanceId"].text == order["processInstanceId"].text) operatorDetail = actual
+                }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { error = e.message ?: "加载失败" }
             finally { loading = false }
         }
     }
+    val queryAccounts = LocalQueryAccounts.current
     val changed by session.changed.collectAsState()
-    LaunchedEffect(id, changed) { load() }
+    LaunchedEffect(id, changed, if (independent) queryAccounts.revision else 0) { load() }
 
     Box(Modifier.fillMaxSize()) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = { if (!peeking) detail?.let { TaskActionBar(com.personal.tpm.data.OrderKind.Erp, it, onOpen=onOpenTask) } },
+        bottomBar = { if (!peeking) operatorDetail?.let { TaskActionBar(com.personal.tpm.data.OrderKind.Erp, it, onOpen=onOpenTask) } },
         topBar = {
             AppTopBar(
                 title = "出库详情", subtitle = detail?.get("outNumber")?.text?.ifEmpty { null }, onBack = onBack, loading = loading,
                 actions = {
-                    if (!peeking && onEdit != null && detail?.get("processInstanceId")?.text.orEmpty().isEmpty() && detail?.get("createBy")?.text == session.accountName) {
+                    if (!peeking && operatorDetail != null && onEdit != null && detail?.get("processInstanceId")?.text.orEmpty().isEmpty() && detail?.get("createBy")?.text == session.accountName) {
                         IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "编辑") }
                     }
                     RefreshButton(spinning = loading) { load() }

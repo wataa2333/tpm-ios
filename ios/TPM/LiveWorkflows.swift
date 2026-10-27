@@ -68,6 +68,7 @@ struct LiveWorkflowList: View {
     @EnvironmentObject private var queries: QueryAccountModel
     @EnvironmentObject private var navigation: BottomNavigationModel
     let kind: WorkflowKind
+    private let independent: Bool
     @State private var state: String
     @State private var rows: [JSONValue] = []
     @State private var query = ""
@@ -91,8 +92,9 @@ struct LiveWorkflowList: View {
     private let customTitle: String?
     private let initialQuery: String
     /// `initialQuery` and `initialField` open the list already searching, as the quick-query cards do.
-    init(kind: WorkflowKind, initialState: String = "RECEIVED", initialQuery: String = "", initialField: FaultSearchField = .name, title: String? = nil) {
+    init(kind: WorkflowKind, initialState: String = "RECEIVED", initialQuery: String = "", initialField: FaultSearchField = .name, title: String? = nil, independent: Bool = false) {
         self.kind = kind
+        self.independent = independent
         self.customTitle = title
         self.initialQuery = initialQuery
         _state = State(initialValue: initialState)
@@ -111,7 +113,7 @@ struct LiveWorkflowList: View {
         return query == initialQuery ? (customTitle ?? kind.title) : kind.title
     }
     private var activeQuery: String { searchMode ? committed : query }
-    private var usesQueryAccount: Bool { kind == .fault && (searchMode || !activeQuery.isEmpty) }
+    private var usesQueryAccount: Bool { independent || searchMode }
     private var readContext: String { usesQueryAccount ? queries.revision.uuidString : "operator" }
     private func commitQuery() {
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -466,7 +468,7 @@ struct LiveWorkflowDetail: View {
         loading = true; error = nil; operationNotice = nil; actions = DetailActionSnapshot(); operatorDetail = .null
         defer { if detailLoadID == run { loading = false } }
         do {
-            let source = usesQueryAccount && kind == .fault ? try await queries.source(for: session) : session
+            let source = usesQueryAccount ? try await queries.source(for: session) : session
             let loadedDetail = try await source.request(kind.detailPath, query: [kind.idKey: id])
             try Task.checkCancellation()
             guard !usesQueryAccount || queryRevision == queries.revision else { return }
@@ -475,6 +477,7 @@ struct LiveWorkflowDetail: View {
             detail = loadedDetail
             explanationRevision = UUID()
             if source !== session {
+                if kind == .erp { materials = try await source.request("erpOutbound/getErpMaterialOutboundsByOutboundId", query: ["outboundId": id]).array }
                 if kind == .fault { Task { await loadExplanations(record: loadedDetail, run: run, scope: scope) } }
                 do {
                     let access = try await operatorOrderAccess(session: session, kind: kind, id: id, viewed: loadedDetail)
@@ -549,6 +552,7 @@ struct AttachmentRow: View {
 }
 struct LiveCatalogView: View {
     @EnvironmentObject private var session: LiveSession
+    @EnvironmentObject private var queries: QueryAccountModel
     let source: ReferenceSource
     @State private var query = ""
     @State private var byCode = false
@@ -568,7 +572,7 @@ struct LiveCatalogView: View {
             Section {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, record in
                 NavigationLink {
-                    if source == .assets { AssetRecordDetail(record: record) }
+                    if source == .assets { AssetRecordDetail(independent: true, record: record) }
                     else { List { Section(record["materialDesc"].text) { MaterialFacts(material: record); LabeledContent("库存数量", value: materialQuantity(record["onhandQty"].text, material: record)) } }.textSelection(.enabled).navigationTitle("库存详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome().modifier(DetailTabVisibility()) }
                 } label: { VStack(alignment: .leading, spacing: RowMetrics.spacing) {
                     WrappingContent { Text(record.object.label).font(AppFont.headline) }
@@ -591,6 +595,7 @@ struct LiveCatalogView: View {
         .modifier(ListTabVisibility())
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: byCode ? "搜索编号" : "搜索名称")
+        .onChange(of: queries.revision) { rows = []; total = nil; gate.request() }
         .onChange(of: byCode) { Task { await load() } }
         .reloadsToTop(on: gate.id("\(byCode)-\(query)"))
         .interfaceMotion(loading || gate.busy, duration: 0.45)
@@ -605,7 +610,8 @@ struct LiveCatalogView: View {
         let snapshot = "\(byCode)-\(query)"
         do {
             let field = byCode ? (source == .assets ? "assetCode" : "materialCode") : source.searchField
-            let result = try await session.page(source.pagePath!, offset: more ? rows.count : 0, filters: query.isEmpty ? [] : [filter(field, query, "like")])
+            let api = try await queries.source(for: session)
+            let result = try await api.page(source.pagePath!, offset: more ? rows.count : 0, filters: query.isEmpty ? [] : [filter(field, query, "like")])
             try Task.checkCancellation()
             guard snapshot == "\(byCode)-\(query)" else { return }
             rows = more ? rows + result["content"].array : result["content"].array; last = result["last"].bool; total = serverPageCount(result)

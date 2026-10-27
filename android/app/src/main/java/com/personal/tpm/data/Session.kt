@@ -7,13 +7,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.ensureActive
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
-class ApiException(message: String, val status: Int? = null, val request: String? = null) : Exception(message)
+class ApiException(message: String, val status: Int? = null, val request: String? = null, cause: Throwable? = null) : Exception(message,cause)
 
 /** One server filter, as the original client sends it. */
 fun filter(field: String, value: String, operator: String = "eq"): JSONObject =
@@ -25,8 +26,29 @@ fun filter(field: String, value: String, operator: String = "eq"): JSONObject =
  * arrive after the account or factory changed thrown away. The server speaks plain HTTP (see network_security_config).
  */
 class Session(context: Context, private val queryOnly: Boolean = false) {
+    private var fallbackOwner: Session? = null
+    private var fallbackScope = -1
+    private var fallbackActive = false
+    private var onFallback: (() -> Unit)? = null
+    internal fun configureReadFallback(owner: Session, onUse: () -> Unit) {
+        check(queryOnly && !owner.queryOnly)
+        fallbackOwner = owner; fallbackScope = owner.scope.value; onFallback = onUse
+    }
+    private fun checkedFallback(): Session = fallbackOwner?.takeIf {
+        it.signedIn && it.scope.value == fallbackScope && it.currentFactoryId == currentFactoryId
+    } ?: throw CancellationException("query owner changed")
+    private suspend fun <T> withReadFallback(action: suspend (Session) -> T): T {
+        if (queryOnly && fallbackActive) return action(checkedFallback())
+        try { return action(this) } catch (e: ApiException) {
+            if (!queryOnly || fallbackOwner == null || !queryFailureAllowsFallback(e)) throw e
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            val owner = checkedFallback()
+            if (!fallbackActive) { fallbackActive = true; onFallback?.invoke() }
+            return action(owner)
+        }
+    }
     private val summaryContext = context.applicationContext
-    val repairSummaryScope: String get() = "$draftScope|${queryAccounts?.username.orEmpty().ifEmpty { accountKey }}|repair-summary-v2"
+    val repairSummaryScope: String get() = "$draftScope|${queryAccounts?.username.orEmpty().ifEmpty { accountKey }}|repair-summary-faultTime-v3"
     private fun repairSummaryStore(processed: Boolean): SecureFile {
         val digest = java.security.MessageDigest.getInstance("SHA-256").digest(repairSummaryScope.toByteArray()).joinToString("") { "%02x".format(it) }
         return SecureFile(summaryContext, "repair-summary-$digest-$processed.bin", "tpm_repair_summary_v1")
@@ -89,6 +111,7 @@ class Session(context: Context, private val queryOnly: Boolean = false) {
     }
 
     fun signOut() {
+        fallbackOwner = null; fallbackActive = false; onFallback = null
         _auth.value = Jv.NULL
         if (!queryOnly) store.write(null)
         _scope.value += 1
@@ -98,7 +121,7 @@ class Session(context: Context, private val queryOnly: Boolean = false) {
         fun escape(text: String) = URLEncoder.encode(text, "UTF-8")
         val result = send("userLogin", "POST", null, "username=${escape(username)}&password=${escape(password)}", form = true, signOutOnUnauthorized = false, authorized = false)
         val value = result as? JSONObject
-        if (value == null || Jv(value)["token"].text.isEmpty()) throw ApiException("服务器没有返回有效登录会话")
+        if (value == null || Jv(value)["token"].text.isEmpty()) throw ApiException("服务器没有返回有效登录会话", status = 401)
         update(value)
         _scope.value += 1
         if (!queryOnly) restoreLastFactory()
@@ -141,7 +164,7 @@ class Session(context: Context, private val queryOnly: Boolean = false) {
     suspend fun request(path: String, query: Map<String, String> = emptyMap(), body: Any? = null): Jv {
         if (queryOnly && !precisionReadAllowed(path, query, body)) throw ApiException("独立查询会话仅允许精密度只读接口")
         val queryText = if (query.isEmpty()) "" else "?" + query.toSortedMap().entries.joinToString("&") { URLEncoder.encode(it.key, "UTF-8") + "=" + URLEncoder.encode(it.value, "UTF-8") }
-        val answer = send("rest/$path$queryText", if (body != null) "POST" else "GET", path, body?.toString())
+        val answer = withReadFallback { source -> source.send("rest/$path$queryText", if (body != null) "POST" else "GET", path, body?.toString(), signOutOnUnauthorized = !source.queryOnly || source.fallbackOwner == null) }
         return Jv(answer)
     }
 
@@ -176,9 +199,10 @@ class Session(context: Context, private val queryOnly: Boolean = false) {
             if (authorized) connection.setRequestProperty("Authorization", "Bearer $token")
             if (rawBody != null) { connection.doOutput = true; connection.outputStream.use { it.write(rawBody) } }
             else if (body != null) { connection.doOutput = true; connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) } }
-            val status = try { connection.responseCode } catch (e: java.io.IOException) { throw ApiException("网络错误：" + (e.message ?: "连接失败"), request = label) }
+            val status = try { connection.responseCode } catch (e: java.io.IOException) { throw ApiException("网络错误：" + (e.message ?: "连接失败"), request = label, cause = e) }
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
+            val bytes = stream?.use { it.readBytes() } ?: byteArrayOf()
+            val text = bytes.toString(Charsets.UTF_8)
             // The page that asked may be gone by now (the account or the factory changed): its answer is thrown away.
             if (scopeAtStart != _scope.value) throw CancellationException("scope changed")
             if (status !in 200..299) {

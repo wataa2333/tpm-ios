@@ -7,12 +7,12 @@ import java.time.LocalDate
 
 /** Field/state names are from the original client's page queries and dictionaries. */
 enum class ManagedKind(val title: String, val page: String, val idField: String, val nameField: String, val stateField: String, val workingState: String, val personField: String, val endField: String) {
-    Fault("维修", "fault/pageAssetFault", "faultId", "faultName", "faultState", "REPAIRED", "repairUser", "repairEndTime"),
+    Fault("维修", "fault/pageAssetFault", "faultId", "faultName", "faultState", "REPAIRED", "repairUser", "faultTime"),
     Maintain("保养", "maintain/pageMaintain", "maintainId", "maintainName", "maintainState", "MAINTAINED", "maintainUser", "endTime"),
     Precise("精密度检查", "precise/pagePrecise", "preciseId", "preciseName", "preciseState", "PRECISED", "user", "endTime")
 }
 enum class ManagedPhase(val title: String) { Sign("待签到"), Finish("待完成"), Processed("已提交处理") }
-data class ManagedDocument(val kind: ManagedKind, val id: String, val title: String, val number: String, val phase: ManagedPhase, val personKey: String?, val personName: String, val asset: String, val end: String) {
+data class ManagedDocument(val kind: ManagedKind, val id: String, val title: String, val number: String, val phase: ManagedPhase, val personKey: String?, val personName: String, val asset: String, val end: String, val state: String = "") {
     val key get() = "${kind.name}:$id"
 }
 data class WorkloadSlice(val kind: ManagedKind, val state: String, val documents: List<ManagedDocument>, val complete: Boolean, val message: String = "", val expected: Int? = null)

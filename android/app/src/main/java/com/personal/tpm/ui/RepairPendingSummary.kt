@@ -8,11 +8,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 class RepairPendingViewModel(private val session: Session, val processed: Boolean = false) : ViewModel() {
+    var elapsedMillis by mutableStateOf(0L); private set
     private fun emptySnapshot() = if (processed) RepairPendingSnapshot(pages = acceptedRepairStates.map { RepairPendingPage(it) }) else RepairPendingSnapshot()
     var snapshot by mutableStateOf(emptySnapshot()); private set
     var days by mutableStateOf<Int?>(null); private set
@@ -21,9 +23,7 @@ class RepairPendingViewModel(private val session: Session, val processed: Boolea
     val selectedSpan get() = if(thisMonth) currentMonthSpan() else customSpan ?: days?.let { DateSpan(LocalDate.now().minusDays(it.toLong()-1),LocalDate.now()) }
     var ascending by mutableStateOf(false); private set
     var personKey by mutableStateOf<String?>(null); private set
-    var confirmation by mutableStateOf<RepairReadEstimate?>(null); private set
     var estimate by mutableStateOf<RepairReadEstimate?>(null); private set
-    private var preparedSpan: DateSpan? = null
     private var querySpan: DateSpan? = null
     private var readConcurrency = 3
     val trendSpan get() = querySpan
@@ -36,22 +36,32 @@ class RepairPendingViewModel(private val session: Session, val processed: Boolea
     var previous by mutableStateOf(Jv.NULL); private set
     var showingPrevious by mutableStateOf(false); private set
     val legacyPrevious get() = showingPrevious && !previous["snapshot"].isObject
+    private var workloadSnapshot:RepairPendingSnapshot?=null
+    private var workloadPeople:List<PersonWorkload> = emptyList()
     val displayPeople: List<PersonWorkload> get() {
         val people=if(legacyPrevious) previous["people"].array.map { PersonWorkload(it["key"].text.ifEmpty { null },it["name"].text,it["sign"].number.toInt(),it["finish"].number.toInt(),it["processed"].number.toInt()) }
-            else personnelWorkloads(if(processed) snapshot.documents else snapshot.documents.filter { it.key in snapshot.executorChecks })
+            else {
+                if(workloadSnapshot !== snapshot) {
+                    workloadPeople=personnelWorkloads(if(processed) snapshot.documents else snapshot.documents.filter { it.key in snapshot.executorChecks })
+                    workloadSnapshot=snapshot
+                }
+                workloadPeople
+            }
         val comparator=compareBy<PersonWorkload> { if(processed) it.processed else it.pending }
         return people.sortedWith((if(ascending) comparator else comparator.reversed()).thenBy { it.name }.thenBy { it.key.orEmpty() })
     }
     private var boundSummaryScope = session.repairSummaryScope
     private fun restorePrevious() {
         if(started) return
-        previous=session.readRepairSummary(processed)
-        if(previous["time"].text.isBlank()) return
+        val saved=session.readRepairSummary(processed)
+        if(saved["time"].text.isBlank() || saved["queryMode"].text=="excel") return
+        previous=saved
         val cached=repairSnapshotFromCache(previous["snapshot"],processed)
         if(previous["snapshot"].isObject && cached==null) return
         val span=runCatching { DateSpan(LocalDate.parse(previous["start"].text),LocalDate.parse(previous["end"].text)) }.getOrNull()
         if(processed && cached!=null && span==null) return
         if(cached!=null) snapshot=cached
+        elapsedMillis=previous["elapsedMillis"].number.toLong()
         querySpan=span; customSpan=span; days=null; thisMonth=false
         queriedAt=previous["time"].text; showingPrevious=true; started=true
     }
@@ -59,7 +69,8 @@ class RepairPendingViewModel(private val session: Session, val processed: Boolea
         if(!started || showingPrevious || boundSummaryScope!=session.repairSummaryScope) return
         val documents=if(processed) snapshot.documents else snapshot.documents.filter { it.key in snapshot.executorChecks }
         val people=personnelWorkloads(documents)
-        val value=Jv.obj("time" to queriedAt,"complete" to (snapshot.complete && uncheckedExecutors==0 && executorFailures==0 && (processed || documents.none { it.personKey==null })),
+        val value=Jv.obj("time" to queriedAt,"queryMode" to "api", "elapsedMillis" to elapsedMillis,
+            "complete" to (snapshot.complete && uncheckedExecutors==0 && executorFailures==0 && (processed || documents.none { it.personKey==null })),
             "range" to (querySpan?.let { "${it.days.first} 至 ${it.days.second}" } ?: "待处理状态快照"),
             "start" to querySpan?.days?.first?.toString(),"end" to querySpan?.days?.second?.toString(),
             "snapshot" to repairSnapshotCache(snapshot),
@@ -87,9 +98,9 @@ class RepairPendingViewModel(private val session: Session, val processed: Boolea
     }
     fun pause() { saveSummary(); generation++; job?.cancel(); loading=false; resolving=false; checking=false; message="已暂停，保留已读取数据，可继续" }
     fun reset() {
-        pause(); started=false; snapshot=emptySnapshot(); personKey=null; confirmation=null; estimate=null
+        pause(); started=false; snapshot=emptySnapshot(); personKey=null; estimate=null
         showingPrevious=false
-        querySpan=null; preparedSpan=null; message=""; queriedAt=""; phases=setOf(ManagedPhase.Sign,ManagedPhase.Finish)
+        querySpan=null; message=""; queriedAt=""; phases=setOf(ManagedPhase.Sign,ManagedPhase.Finish)
     }
     fun selectDays(value: Int) { if (days != value || customSpan!=null || thisMonth) { reset(); days=value; customSpan=null; thisMonth=false } }
     fun selectThisMonth() { if(!thisMonth) { reset(); days=null; customSpan=null; thisMonth=true } }
@@ -97,19 +108,29 @@ class RepairPendingViewModel(private val session: Session, val processed: Boolea
     fun sort(ascending: Boolean) { this.ascending=ascending }
     fun showPerson(key: String?) { personKey=key }
     fun togglePhase(phase: ManagedPhase) { phases=if (phase in phases) phases-phase else phases+phase }
-    fun dismissConfirmation() { confirmation=null; preparedSpan=null }
     fun leaveDashboard() { reset(); restorePrevious() }
     private fun launchRead(block: suspend (() -> Unit) -> Unit) {
+        val isEstimate=checking
         val mine=++generation
         val scope=session.scope.value; val account=session.accountKey; val factory=session.currentFactoryId
         val queryRevision = session.queryRevision
         loading=true; message=""
         job=viewModelScope.launch {
+            val before = elapsedMillis
+            val begin = android.os.SystemClock.elapsedRealtime()
+            val timer = if(isEstimate) null else launch { while (true) {
+                elapsedMillis=before + android.os.SystemClock.elapsedRealtime() - begin
+                delay(100)
+            } }
             fun check() { if (mine!=generation || scope!=session.scope.value || account!=session.accountKey || factory!=session.currentFactoryId || queryRevision!=session.queryRevision || !session.signedIn) throw CancellationException() }
             try { check(); block(::check); check() }
             catch (e: CancellationException) { throw e }
             catch (e: Exception) { if (mine==generation) message="读取失败：${e.message ?: "未知错误"}；当前结果不完整，可继续重试" }
-            finally { if (mine==generation) { loading=false; checking=false; resolving=false; saveSummary() } }
+            finally { timer?.cancel(); if (mine==generation) {
+                val elapsed=before + android.os.SystemClock.elapsedRealtime() - begin
+                if(!isEstimate) elapsedMillis=elapsed
+                loading=false; checking=false; resolving=false; saveSummary()
+            } }
         }
     }
     fun prepare() {
@@ -120,13 +141,12 @@ class RepairPendingViewModel(private val session: Session, val processed: Boolea
             val preview=estimateRepairRead(emptySnapshot().pages.map { it.state },check) { state ->
                 session.readPage(ManagedKind.Fault.page,0,workloadFilters(ManagedKind.Fault,state,span),1)
             }
-            check(); preparedSpan=span; confirmation=preview
+            check(); beginRead(preview,span)
         }
     }
-    fun confirm() {
-        val preview=confirmation ?: return
-        val span=preparedSpan
+    private fun beginRead(preview: RepairReadEstimate, span: DateSpan?) {
         reset(); estimate=preview; querySpan=span; started=true
+        elapsedMillis=0
         readConcurrency=AppPreferences.effectiveRepairConcurrency
         snapshot=snapshot.copy(pages=snapshot.pages.map { it.copy(expected=preview.counts[it.state]) }, pageSize=AppPreferences.effectiveRepairPageSize)
         queriedAt=LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
@@ -149,5 +169,6 @@ class RepairPendingViewModel(private val session: Session, val processed: Boolea
             }
         }
     }
+    fun openDocument(document: ManagedDocument, open: (String) -> Unit) { open(document.id) }
     override fun onCleared() { saveSummary(); super.onCleared() }
 }

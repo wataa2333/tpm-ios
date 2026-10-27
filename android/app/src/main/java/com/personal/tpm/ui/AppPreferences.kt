@@ -18,6 +18,7 @@ object AppPreferences {
     val effectiveRepairConcurrency get() = if (repairReadExperiment) repairConcurrency else 8
     fun load(context: Context) {
         prefs = context.getSharedPreferences("ui_options", Context.MODE_PRIVATE)
+        prefs!!.edit().remove("repairExcelMode").apply()
         management = prefs!!.getBoolean("management", false)
         repairReadExperiment = prefs!!.getBoolean("repairReadExperiment", false)
         repairPageSize = prefs!!.getInt("repairPageSize", 500).takeIf { it in repairPageSizes } ?: 500

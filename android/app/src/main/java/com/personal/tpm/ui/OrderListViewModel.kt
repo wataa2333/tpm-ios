@@ -60,7 +60,7 @@ class OrderListViewModel(
 
     init { reload(withCounts = true) }
     init { viewModelScope.launch { session.changed.drop(1).collect { reload(withCounts = true) } } }
-    init { viewModelScope.launch { session.queryAccounts?.changes?.drop(1)?.collect { rows = emptyList(); counts = emptyMap(); batch.end(); reload(withCounts = true) } } }
+    init { if (searchMode) viewModelScope.launch { session.queryAccounts?.changes?.drop(1)?.collect { rows = emptyList(); counts = emptyMap(); batch.end(); reload(withCounts = true) } } }
 
     private fun key() = "$state|$query|${field.key}|${span?.key}|${session.queryRevision}"
 
@@ -77,7 +77,7 @@ class OrderListViewModel(
         loading = true; refreshing = pull; error = null
         viewModelScope.launch {
             try {
-                val page = session.faultPage(state, query, field, span, 0, independent = searchMode || query.isNotEmpty() || span != null)
+                val page = session.faultPage(state, query, field, span, 0, independent = searchMode)
                 if (mine != ticket || snapshot != key()) return@launch
                 rows = page.rows; last = page.last; total = page.total
                 page.total?.let { total -> counts = counts + (state to total) }
@@ -95,7 +95,7 @@ class OrderListViewModel(
         loadingMore = true
         viewModelScope.launch {
             try {
-                val page = session.faultPage(state, query, field, span, rows.size, independent = searchMode || query.isNotEmpty() || span != null)
+                val page = session.faultPage(state, query, field, span, rows.size, independent = searchMode)
                 if (mine != ticket || snapshot != key()) return@launch
                 rows = rows + page.rows; last = page.last; total = page.total ?: total
             } catch (e: CancellationException) { throw e }
@@ -114,7 +114,7 @@ class OrderListViewModel(
                 coroutineScope {
                     FaultState.entries.filter { it.hasCount && it.code != state }.map { st ->
                         async {
-                            try { st.code to serverPageCount(if (searchMode || query.isNotEmpty() || span != null) session.readPage("fault/pageAssetFault", filters = filters + filter("faultState", st.code), limit = 1) else session.page("fault/pageAssetFault", filters = filters + filter("faultState", st.code), limit = 1)) }
+                            try { st.code to serverPageCount(session.page("fault/pageAssetFault", filters = filters + filter("faultState", st.code), limit = 1)) }
                             catch (e: CancellationException) { throw e }
                             catch (e: Exception) { st.code to null }
                         }

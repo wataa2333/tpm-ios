@@ -1,6 +1,15 @@
 package com.personal.tpm.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.layout.layout
+import kotlin.math.roundToInt
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -27,8 +36,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -210,16 +217,36 @@ fun NewButton(visible: Boolean, label: String, onClick: () -> Unit) {
  */
 @Composable
 fun BatchBarHost(active: Boolean, content: @Composable () -> Unit) {
-    // The space for the phone's navigation bar / gesture line belongs to the host and is always there, outside the part that grows and shrinks.
-    // When it was inside, the room the bar takes went from its full height to nothing and the page under it was re-fitted to the navigation bar at the
-    // very end, which showed as the bar (and the page edge) dropping and jumping.
-    androidx.compose.foundation.layout.Box(Modifier.background(MaterialTheme.colorScheme.background).navigationBarsPadding()) {
+    val transition = updateTransition(active, label = "batchBar")
+    val progress by transition.animateFloat(
+        transitionSpec = { tween(if (targetState) Motion.Slow else Motion.Normal, easing = if (targetState) Motion.Arrive else Motion.Leave) },
+        label = "batchBarProgress",
+    ) { if (it) 1f else 0f }
+    val present = active || transition.currentState || transition.isRunning
+    // The system bar stays transparent. This app surface, not the window's system-bar
+    // color, owns everything behind it while selection is entering, visible or leaving.
+    // Draw before padding so the surface includes the navigation inset; buttons do not.
+    Box(Modifier.fillMaxWidth()
+        .background(if (present) MaterialTheme.colorScheme.background else Color.Transparent)
+        .navigationBarsPadding()) {
         androidx.compose.runtime.CompositionLocalProvider(LocalBarInsetsHandled provides true) {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = active,
-                enter = androidx.compose.animation.expandVertically(tween(Motion.Slow, easing = Motion.Arrive), expandFrom = Alignment.Bottom) + androidx.compose.animation.fadeIn(tween(Motion.Slow, easing = Motion.Arrive)),
-                exit = androidx.compose.animation.shrinkVertically(tween(Motion.Normal, easing = Motion.Leave), shrinkTowards = Alignment.Bottom) + androidx.compose.animation.fadeOut(tween(Motion.Fast, easing = Motion.Leave)),
-            ) { content() }
+            // Keep the content alive through the complete exit, including quick reversals.
+            if (present) {
+                Box(Modifier.drawWithContent {
+                    // Preserve the top fade, but do not let exiting buttons slide into
+                    // the gesture area, which belongs to the opaque host surface.
+                    val contentScope = this
+                    clipRect(top = -22.dp.toPx(), bottom = size.height) { contentScope.drawContent() }
+                }.layout { measurable, constraints ->
+                    val child = measurable.measure(constraints.copy(minHeight = 0))
+                    layout(child.width, (child.height * progress).roundToInt()) {
+                        child.placeRelative(0, 0)
+                    }
+                }.graphicsLayer {
+                    alpha = progress
+                    compositingStrategy = CompositingStrategy.ModulateAlpha
+                }) { content() }
+            }
         }
     }
 }
@@ -254,9 +281,9 @@ fun BatchBar(batch: BatchSelection, candidates: () -> List<BatchItem>) {
                 }
                 Box {
                     SoftButton(onClick = { menu = true }) { Text("全选") }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(text = { Text("全选已加载的单据") }, onClick = { menu = false; batch.selectAll(candidates()) })
-                        DropdownMenuItem(text = { Text("清空已选") }, onClick = { menu = false; batch.clear() })
+                    AppOptionSheet(expanded = menu, onDismissRequest = { menu = false }) {
+                        AppOptionItem(text = { Text("全选已加载的单据") }, onClick = { menu = false; batch.selectAll(candidates()) })
+                        AppOptionItem(text = { Text("清空已选") }, onClick = { menu = false; batch.clear() })
                     }
                 }
             }

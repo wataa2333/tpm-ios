@@ -241,6 +241,7 @@ struct DashboardHome: View {
 struct DashboardWorkspace: View {
     var preview = false
     @EnvironmentObject private var session: LiveSession
+    @EnvironmentObject private var queries: QueryAccountModel
     @EnvironmentObject private var navigation: BottomNavigationModel
     @EnvironmentObject private var store: DemoStore
     /// Server totals per card: "assets", "outbound" or "stock".
@@ -269,7 +270,7 @@ struct DashboardWorkspace: View {
                 DashboardHeading(title: "ERP")
                 LazyVGrid(columns: columns, spacing: 12) {
                     NavigationLink {
-                        if preview { OutboundListView() } else { LiveWorkflowList(kind: .erp) }
+                        if preview { OutboundListView() } else { LiveWorkflowList(kind: .erp, independent: true) }
                     } label: { DashboardCard(title: "ERP 出库", symbol: "shippingbox", tint: .orange, count: count("outbound"), seed: 2) }
                     NavigationLink {
                         if preview { StockListView() } else { LiveCatalogView(source: .materials) }
@@ -310,6 +311,7 @@ struct DashboardWorkspace: View {
             ProgressView().padding(.top, 6).opacity(loadingCounts || gate.busy ? 1 : 0).allowsHitTesting(false)
                 .interfaceMotion(loadingCounts || gate.busy)
         }
+        .onChange(of: queries.revision) { counts = [:]; gate.request() }
         .navigationTitle("看板").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
         .modifier(ListTabVisibility())
         // Loads by itself only the first time, when nothing is shown yet. After that it is manual only:
@@ -322,7 +324,7 @@ struct DashboardWorkspace: View {
     /// One request per card asking for a single row: only `totalElements` is used.
     private func loadCounts() async {
         guard !preview else { return }
-        let api = session
+        guard let api = try? await queries.source(for: session) else { return }
         let queries: [(String, String, [JSONValue])] = [
             ("assets", "asset/pageAsset", []),
             ("outbound", WorkflowKind.erp.page, []),

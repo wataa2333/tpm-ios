@@ -24,7 +24,8 @@ internal fun QueryAccountSettings() {
     var message by remember { mutableStateOf("") }
     GroupCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("查询账号：${queries.username.ifEmpty { "当前登录账号" }}")
+            Text("查询账号：${queries.label(owner)}")
+            queries.fallbackNotice?.let { Text(it) }
             Text("用于查询和看板的数据读取；工单操作仍使用当前登录账号。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(name, { name = it }, label = { Text("查询账号") }, singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth())

@@ -62,10 +62,13 @@ import kotlinx.coroutines.launch
 fun FaultDetailScreen(
     id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit, onOpenTask: (returning: Boolean) -> Unit,
     onEdit: (() -> Unit)? = null, onOpenRepair: () -> Unit = {}, peeking: Boolean = false,
-    onReportAsset: ((Jv) -> Unit)? = null,
+    onReportAsset: ((Jv) -> Unit)? = null, independent: Boolean = false,
 ) {
     val session = LocalSession.current
     val queryAccounts = LocalQueryAccounts.current
+    suspend fun read(path: String, query: Map<String, String> = emptyMap()): Jv =
+        if (independent) session.readRequest(path, query) else session.request(path, query)
+
     val scope = rememberCoroutineScope()
     // The row the order was opened from is on screen at once; the full record replaces it when it arrives.
     var detail by remember { mutableStateOf(OrderPreview.get("Fault", id)) }
@@ -89,10 +92,10 @@ fun FaultDetailScreen(
         try {
             val process = order["processInstanceId"].text
             if (process.isNotEmpty()) {
-                val history = session.readRequest("workflow/getWorkflowHistoryNodesByProcessInstanceId", mapOf("processInstanceId" to process)).array
+                val history = read("workflow/getWorkflowHistoryNodesByProcessInstanceId", mapOf("processInstanceId" to process)).array
                 val actors = com.personal.tpm.data.latestReturnActors(history)
                 returnPerson = actors.map { user ->
-                    try { session.readRequest("security/getUserByUserName", mapOf("userName" to user))["realName"].text.ifEmpty { user } }
+                    try { read("security/getUserByUserName", mapOf("userName" to user))["realName"].text.ifEmpty { user } }
                     catch (e: CancellationException) { throw e } catch (_: Exception) { user }
                 }.joinToString("、")
             }
@@ -105,7 +108,7 @@ fun FaultDetailScreen(
         if (generation != loadGeneration) return
         repairLoading = true; repairError = null
         try {
-            val current = latestRepair(session.readRequest("repair/getRepairsByFaultId", mapOf("faultId" to id)))
+            val current = latestRepair(read("repair/getRepairsByFaultId", mapOf("faultId" to id)))
             if (generation == loadGeneration) repair = current
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) { if (generation == loadGeneration) repairError = e.message ?: "维修任务读取失败" }
@@ -118,13 +121,13 @@ fun FaultDetailScreen(
         repair = null; repairError = null; repairLoading = false
         scope.launch {
             try {
-                val order = session.readRequest("fault/getAssetFaultDetailById", mapOf("faultId" to id))
+                val order = read("fault/getAssetFaultDetailById", mapOf("faultId" to id))
                 if (generation != loadGeneration) return@launch
                 detail = order
                 loading = false
                 if (!peeking) {
                     try {
-                        val actual = if (queryAccounts.username.isEmpty()) order else session.request("fault/getAssetFaultDetailById", mapOf("faultId" to id))
+                        val actual = if (!independent || queryAccounts.username.isEmpty()) order else session.request("fault/getAssetFaultDetailById", mapOf("faultId" to id))
                         if (generation != loadGeneration) return@launch
                         if (actual["faultState"].text == order["faultState"].text && actual["processInstanceId"].text == order["processInstanceId"].text) operationDetail = actual
                         else operationNotice = "单据状态已变化，请刷新后操作。"
@@ -139,7 +142,7 @@ fun FaultDetailScreen(
     }
     // A task of this order was taken forward somewhere (the task screen): read it again.
     val changed by session.changed.collectAsState()
-    LaunchedEffect(id, changed, queryAccounts.revision) { load() }
+    LaunchedEffect(id, changed, if (independent) queryAccounts.revision else 0) { load() }
 
     Box(Modifier.fillMaxSize()) {
     Scaffold(

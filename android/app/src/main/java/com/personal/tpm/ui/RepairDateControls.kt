@@ -29,7 +29,7 @@ fun RepairDateControls(vm:RepairPendingViewModel) {
         fun day(ms:Long)=Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate()
         Surface(shape=MaterialTheme.shapes.extraLarge,color=MaterialTheme.colorScheme.surfaceContainerHigh) {
         Column {
-            DateRangePicker(state,Modifier.weight(1f,fill=false).heightIn(max=440.dp),title={Text("选择维修结束日期",Modifier.padding(16.dp))})
+            DateRangePicker(state,Modifier.weight(1f,fill=false).heightIn(max=440.dp),title={Text("选择故障发现日期",Modifier.padding(16.dp))})
             Row(Modifier.fillMaxWidth().padding(8.dp),horizontalArrangement=Arrangement.End) {
                 TextButton(onClick={choosing=false}){Text("取消")}
                 TextButton(enabled=state.selectedStartDateMillis!=null,onClick={

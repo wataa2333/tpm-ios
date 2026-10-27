@@ -67,7 +67,7 @@ class PrecisionDashboardModel(private val owner: Session, private val queries: Q
                 val text = permits.withPermit { precisionPeople(queries.source(owner), id) }
                 if (mine == generation) people[id] = text
             } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { if (mine == generation) people[id] = "检测／上传人：暂未读取到" }
+            catch (_: Exception) { if (mine == generation) people[id] = "工单检测人：暂未读取到" }
         }
     }
 }

@@ -131,9 +131,9 @@ struct WorkOrderCard<Destination: View>: View {
     }
     private var expandButton: some View {
         Button { withAnimation(reduceMotion ? nil : .smooth(duration: 0.5)) { expanded.toggle() } } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .center, spacing: 6) {
                 Text(expanded ? "收起详情" : "展开详情").font(AppFont.subheadline.weight(.medium))
-                Image(systemName: "chevron.down").font(.system(size: 12, weight: .semibold)).rotationEffect(.degrees(expanded ? 180 : 0))
+                Image(systemName: "chevron.down").font(.system(size: 12, weight: .semibold)).frame(width: 14, height: 20).rotationEffect(.degrees(expanded ? 180 : 0))
             }
             .foregroundStyle(.white).padding(.horizontal, 12)
             .frame(minHeight: 44).background(Color.accentColor, in: .capsule)

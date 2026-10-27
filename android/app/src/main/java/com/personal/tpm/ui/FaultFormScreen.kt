@@ -43,7 +43,6 @@ fun FaultFormScreen(existingId: String?, startDraftId: String?, onClose: () -> U
     val scopeKey = session.draftScope
     var request by remember { mutableStateOf<PickRequest?>(null) }
     var photoBusy by remember { mutableStateOf(false) }
-    var leaving by remember { mutableStateOf(false) }
     var showDrafts by remember { mutableStateOf(false) }
     var draftId by remember { mutableStateOf<String?>(null) }
     var loadedData by remember { mutableStateOf("") }
@@ -93,8 +92,8 @@ fun FaultFormScreen(existingId: String?, startDraftId: String?, onClose: () -> U
             onClose()
         } catch (e: Exception) { failure = "草稿没有保存成功：" + (e.message ?: "") }
     }
-    /** Leaving: straight away, or (a form holding something) after asking about a draft. True when it left. */
-    fun close(): Boolean { if (worthKeeping) { leaving = true; return false }; onClose(); return true }
+    /** Close directly, preserving entered content as a local draft. */
+    fun close(): Boolean { if (worthKeeping) { keepDraft(); return false }; onClose(); return true }
     fun submit(committed: Boolean) {
         FormRules.validate(OrderKind.Fault, form.jv, form.nodes, form.selections)?.let { failure = it; return }
         if (form.saving) return
@@ -159,7 +158,6 @@ fun FaultFormScreen(existingId: String?, startDraftId: String?, onClose: () -> U
 
     PickHost(request) { request = null }
     if (showDrafts) DraftSheet(scopeKey, orderTarget, onPick = { showDrafts = false; applyDraft(it, false) }, onDismiss = { showDrafts = false; draftCount = store.drafts(scopeKey, orderTarget).size })
-    if (leaving) KeepDraftDialog(onKeep = { leaving = false; keepDraft() }, onDiscard = { leaving = false; onClose() }, onStay = { leaving = false })
     failure?.let { ErrorDialog("提示", it) { failure = null } }
     form.error?.takeIf { form.ready }?.let { ErrorDialog("提示", it) { form.error = null } }
 }

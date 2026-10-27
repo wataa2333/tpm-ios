@@ -37,7 +37,7 @@ class RepairPendingTest {
         val span = DateSpan(java.time.LocalDate.of(2026,10,15),java.time.LocalDate.of(2026,10,21))
         val initial = RepairPendingSnapshot(pages=listOf(RepairPendingPage("RESOLVED",expected=5),RepairPendingPage("FINISHED")))
         val result=loadRepairPending(initial,span=span) { state,_,_ ->
-            Jv(Jv.obj("content" to JSONArray(listOf(row(1,state,if(state=="RESOLVED") "old" else "latest").put("repairEndTime","2026-10-20 12:00"))),
+            Jv(Jv.obj("content" to JSONArray(listOf(row(1,state,if(state=="RESOLVED") "old" else "latest").put("faultTime","2026-10-20 12:00"))),
                 "totalElements" to if(state=="RESOLVED") 1 else 3,"last" to true))
         }
         assertTrue(result.complete)
@@ -53,7 +53,7 @@ class RepairPendingTest {
                 val later=state=="FINISHED"
                 val actual=if(later && outsideState) "VERIFIED" else state
                 val end=if(later && !outsideState) "2026-10-01 12:00" else "2026-10-20 12:00"
-                Jv(Jv.obj("content" to JSONArray(listOf(row(1,actual).put("repairEndTime",end))),"last" to true))
+                Jv(Jv.obj("content" to JSONArray(listOf(row(1,actual).put("faultTime",end))),"last" to true))
             }
             assertTrue(result.complete)
             assertTrue(result.documents.isEmpty())
@@ -148,9 +148,9 @@ class RepairPendingTest {
         val initial = RepairPendingSnapshot(pages = listOf("VERIFIED","RESOLVED","FINISHED").map { RepairPendingPage(it) })
         val result = loadRepairPending(initial, span = span) { state,_,_ ->
             val rows = when (state) {
-                "VERIFIED" -> listOf(row(1,state).put("repairEndTime","2026-10-20 12:00"))
-                "RESOLVED" -> listOf(row(1,state).put("repairEndTime","2026-10-20 12:00"))
-                else -> listOf(row(2,state).put("repairEndTime","2026-10-01 12:00"),row(3,state))
+                "VERIFIED" -> listOf(row(1,state).put("faultTime","2026-10-20 12:00"))
+                "RESOLVED" -> listOf(row(1,state).put("faultTime","2026-10-20 12:00"))
+                else -> listOf(row(2,state).put("faultTime","2026-10-01 12:00"),row(3,state))
             }
             Jv(Jv.obj("content" to JSONArray(rows),"last" to true))
         }

@@ -36,6 +36,8 @@ struct SignInPreview: View {
 
 struct AssetRecordDetail: View {
     @EnvironmentObject private var session: LiveSession
+    @EnvironmentObject private var queries: QueryAccountModel
+    var independent = false
     let record: JSONValue
     var preview = false
     var initialTab = "详情"
@@ -109,6 +111,7 @@ struct AssetRecordDetail: View {
         .refreshButton(busy: loading || gate.busy) { gate.request() }
         .interfaceMotion(loading || gate.busy, duration: 0.45)
         .errorDialog($error, retry: { Task { await load() } })
+        .onChange(of: queries.revision) { if independent { detail = .null; rows = []; gate.request() } }
         .reloadsToTop(on: gate.id("\(tab)"))
     }
     private func load() async {
@@ -119,11 +122,12 @@ struct AssetRecordDetail: View {
             return
         }
         do {
-            if detail == .null { detail = try await session.request("asset/getAssetDetailById", query: ["assetId": record["assetId"].text]) }
+            let api = independent ? try await queries.source(for: session) : session
+            if detail == .null { detail = try await api.request("asset/getAssetDetailById", query: ["assetId": record["assetId"].text]) }
             let paths = [3: "maintain/pageMaintain", 4: "precise/pagePrecise", 5: "inspect/pageInspect", 6: "fault/pageSimpleAssetFault", 7: "inventory/pageInventoryRecord"]
-            if tab == 1 { rows = try await session.request("asset/getAssetResumeByAsset", query: ["assetId": record["assetId"].text], body: .null).array }
+            if tab == 1 { rows = try await api.request("asset/getAssetResumeByAsset", query: ["assetId": record["assetId"].text], body: .null).array }
             else if let path = paths[tab] {
-                let result = try await session.request(path, body: .object(["offset": .number(0), "limit": .number(20), "sort": .string(tab == 6 ? "faultTime" : "createTime"), "order": .string("desc"), "filters": .array([filter("asset.assetId", record["assetId"].text)])]))
+                let result = try await api.request(path, body: .object(["offset": .number(0), "limit": .number(20), "sort": .string(tab == 6 ? "faultTime" : "createTime"), "order": .string("desc"), "filters": .array([filter("asset.assetId", record["assetId"].text)])]))
                 try Task.checkCancellation(); rows = result["content"].array
             }
         } catch is CancellationError { } catch { self.error = error.localizedDescription }

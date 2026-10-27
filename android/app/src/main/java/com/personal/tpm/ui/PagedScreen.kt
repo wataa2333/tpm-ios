@@ -17,8 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -66,7 +64,7 @@ class SearchChoice(val label: String, val key: String)
  * stock. [baseFilters] are always sent; the search box adds one more on the field of the chosen [searches] entry.
  */
 class PagedViewModel(
-    private val session: Session, private val page: String, private val baseFilters: List<JSONObject>, val searches: List<SearchChoice>,
+    private val session: Session, private val page: String, private val baseFilters: List<JSONObject>, val searches: List<SearchChoice>, private val independent: Boolean = false,
 ) : ViewModel() {
     var query by mutableStateOf(""); private set
     var choice by mutableStateOf(0); private set
@@ -84,7 +82,7 @@ class PagedViewModel(
 
     init { reload() }
     init { viewModelScope.launch { session.changed.drop(1).collect { reload() } } }
-    init { viewModelScope.launch { session.queryAccounts?.changes?.drop(1)?.collect { rows = emptyList(); total = null; expanded.clear(); batch.end(); reload() } } }
+    init { if (independent) viewModelScope.launch { session.queryAccounts?.changes?.drop(1)?.collect { rows = emptyList(); total = null; expanded.clear(); batch.end(); reload() } } }
 
     fun search(text: String) { val trimmed = text.trim(); if (trimmed != query) { query = trimmed; reload() } }
     fun choose(index: Int) { if (index != choice) { choice = index; if (query.isNotEmpty()) reload() } }
@@ -97,7 +95,7 @@ class PagedViewModel(
         loading = true; refreshing = pull; error = null
         viewModelScope.launch {
             try {
-                val answer = session.readPage(page, 0, filters())
+                val answer = if (independent) session.readPage(page, 0, filters()) else session.page(page, 0, filters())
                 if (mine != ticket || snapshot != "$choice|$query") return@launch
                 rows = answer["content"].array; last = answer["last"].bool; total = serverPageCount(answer)
             } catch (e: CancellationException) { throw e }
@@ -113,7 +111,7 @@ class PagedViewModel(
         loadingMore = true
         viewModelScope.launch {
             try {
-                val answer = session.readPage(page, rows.size, filters())
+                val answer = if (independent) session.readPage(page, rows.size, filters()) else session.page(page, rows.size, filters())
                 if (mine != ticket || snapshot != "$choice|$query") return@launch
                 rows = rows + answer["content"].array; last = answer["last"].bool; total = serverPageCount(answer) ?: total
             } catch (e: CancellationException) { throw e }
@@ -180,8 +178,8 @@ fun PagedScreen(
                             SearchField(input, { input = it }, "搜索" + vm.searches[vm.choice].label, onSearch = { vm.search(input); focus.clearFocus() })
                             if (vm.searches.size > 1) Box {
                                 BlockChip("按" + vm.searches[vm.choice].label + "搜索", { menu = true }, trailing = { Icon(Icons.Filled.ExpandMore, contentDescription = null, Modifier.size(18.dp)) })
-                                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                    vm.searches.forEachIndexed { index, option -> DropdownMenuItem(text = { Text(option.label) }, onClick = { menu = false; vm.choose(index) }) }
+                                AppOptionSheet(expanded = menu, onDismissRequest = { menu = false }, title = "搜索方式") {
+                                    vm.searches.forEachIndexed { index, option -> AppOptionItem(text = { Text(option.label) }, selected = index == vm.choice, onClick = { menu = false; vm.choose(index) }) }
                                 }
                             }
                         }

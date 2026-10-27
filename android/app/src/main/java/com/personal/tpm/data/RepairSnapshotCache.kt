@@ -8,7 +8,7 @@ fun repairSnapshotCache(snapshot: RepairPendingSnapshot): JSONObject = Jv.obj(
     "pageSize" to snapshot.pageSize,
     "pages" to JSONArray(snapshot.pages.map { page -> Jv.obj("state" to page.state,"offset" to page.offset,"expected" to page.expected,"ended" to page.ended,"warnings" to JSONArray(page.warnings.toList())) }),
     "checks" to JSONObject(snapshot.executorChecks),
-    "documents" to JSONArray(snapshot.documents.map { doc -> Jv.obj("kind" to doc.kind.name,"id" to doc.id,"title" to doc.title,"number" to doc.number,"phase" to doc.phase.name,"personKey" to doc.personKey,"personName" to doc.personName,"asset" to doc.asset,"end" to doc.end) }),
+    "documents" to JSONArray(snapshot.documents.map { doc -> Jv.obj("kind" to doc.kind.name,"id" to doc.id,"title" to doc.title,"number" to doc.number,"phase" to doc.phase.name,"personKey" to doc.personKey,"personName" to doc.personName,"asset" to doc.asset,"end" to doc.end,"state" to doc.state) }),
 )
 
 fun repairSnapshotFromCache(value: Jv, processed: Boolean): RepairPendingSnapshot? = runCatching {
@@ -22,9 +22,9 @@ fun repairSnapshotFromCache(value: Jv, processed: Boolean): RepairPendingSnapsho
     val documents=value["documents"].array.map { doc ->
         val kind=ManagedKind.valueOf(doc["kind"].text)
         val phase=ManagedPhase.valueOf(doc["phase"].text)
-        require(kind==ManagedKind.Fault && doc["id"].text.isNotBlank())
+        require(kind==ManagedKind.Fault && doc["id"].text.isNotBlank() && !doc["id"].text.startsWith("excel:"))
         require(if(processed) phase==ManagedPhase.Processed else phase in setOf(ManagedPhase.Sign,ManagedPhase.Finish))
-        ManagedDocument(kind,doc["id"].text,doc["title"].text,doc["number"].text,phase,doc["personKey"].text.ifEmpty { null },doc["personName"].text,doc["asset"].text,doc["end"].text)
+        ManagedDocument(kind,doc["id"].text,doc["title"].text,doc["number"].text,phase,doc["personKey"].text.ifEmpty { null },doc["personName"].text,doc["asset"].text,doc["end"].text,doc["state"].text)
     }
     val checks=value["checks"].keys.associateWith { value["checks"][it].text }
     val pageSize=value["pageSize"].number.toInt()

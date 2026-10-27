@@ -5,6 +5,11 @@ import org.junit.Test
 import java.time.LocalDate
 
 class RepairSnapshotCacheTest {
+    @Test fun legacyExcelDocumentsCannotResumeAsApiPages() {
+        val doc=ManagedDocument(ManagedKind.Fault,"excel:FA1","","FA1",ManagedPhase.Processed,null,"","","2026-10-01")
+        val old=RepairPendingSnapshot(acceptedRepairStates.map { RepairPendingPage(it) },listOf(doc))
+        assertNull(repairSnapshotFromCache(Jv(repairSnapshotCache(old)),true))
+    }
     @Test fun pendingRoundTripKeepsDistinctAccountsAndPartialProgress() {
         val doc=ManagedDocument(ManagedKind.Fault,"123","任务","FA123",ManagedPhase.Sign,"user:a","同名","机台","2026-10-22")
         val snapshot=RepairPendingSnapshot(listOf(RepairPendingPage("SIGNED",1,3),RepairPendingPage("REPAIRED",0,null)),listOf(doc),mapOf(doc.key to "已核对"),500)

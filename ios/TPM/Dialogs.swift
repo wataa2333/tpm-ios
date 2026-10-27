@@ -77,7 +77,7 @@ extension View {
     /// Dismissing the keyboard by dragging the content, and a "收起键盘" button above the keyboard
     /// for fields that have no return key (numbers, phone numbers).
     func keyboardManaged() -> some View {
-        scrollDismissesKeyboard(.interactively).modifier(KeyboardDismissRow())
+        scrollDismissesKeyboard(.interactively)
     }
 }
 
@@ -222,38 +222,4 @@ extension View {
 }
 
 
-/// The "收起键盘" button, as a thin row of its own between the page's bottom bar and the keyboard (and only while the keyboard is up). It is a
-/// bottom inset, so the page's own bar is pushed up by it and nothing lies under it; the keyboard-toolbar placement floated the button over
-/// the page's bottom bar instead. It serves every field, with or without a return key (numbers, a multi-line note).
-private struct KeyboardDismissRow: ViewModifier {
-    @State private var keyboardUp = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    func body(content: Content) -> some View {
-        content
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if keyboardUp {
-                    HStack {
-                        Spacer()
-                        Button { endEditing() } label: {
-                            Label("收起键盘", systemImage: "keyboard.chevron.compact.down").font(AppFont.subheadline.weight(.medium)).lineLimit(1)
-                        }
-                        .buttonStyle(.glass).controlSize(.regular)
-                        .accessibilityIdentifier("keyboard-dismiss")
-                    }
-                    .padding(.horizontal, 20).padding(.vertical, 6)
-                    .transition(.opacity)
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
-                updateKeyboard(notification)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
-                updateKeyboard(notification)
-            }
-    }
-    private func updateKeyboard(_ notification: Notification) {
-        let change = KeyboardMotionChange(notification)
-        guard keyboardUp != change.visible else { return }
-        withAnimation(change.animation(reduceMotion: reduceMotion)) { keyboardUp = change.visible }
-    }
-}
+// Keyboard dismissal is installed globally on UITextField/UITextView by KeyboardDismissAccessory.

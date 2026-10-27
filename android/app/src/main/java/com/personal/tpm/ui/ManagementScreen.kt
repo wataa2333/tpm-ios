@@ -48,9 +48,9 @@ fun PersonnelManagementScreen(onBack: () -> Unit, openOrder: (String) -> Unit) {
                 DisclosureToggle(explanation, if (explanation) "收起统计说明" else "统计说明") { explanation = !explanation }
                 Reveal(explanation) { GroupCard { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     ExplanationPart("统计哪些单？","按查询账号、当前厂区的读取权限统计维修单。待处理包括待签到与待完成；处理统计以待确认为门槛，包括待确认、待复线和已完结。工单操作仍使用当前登录账号。")
-                    ExplanationPart("日期怎么算？","按选择的维修结束日期筛选，不是进入待确认的时间。统计图可按天或按月汇总。")
-                    ExplanationPart("人怎么确定？","待处理逐单核对详情；不把受理人、报修人或辅助人员当执行人。同名账号分开，身份不明单列。处理统计使用列表执行人，不额外读取历史详情。")
-                    ExplanationPart("读取到哪了？","先预估数量，经确认后读取，可暂停继续。未读完或遇到异常会明确说明；图表不会把未知数量当作0。")
+                    ExplanationPart("日期怎么算？","按故障发现日期筛选，与网页一致；统计图也按故障发现日期汇总，可按天或按月查看。")
+                    ExplanationPart("人怎么确定？","待处理逐单核对执行人，处理统计使用列表执行人；无法确认执行人的记录单列。")
+                    ExplanationPart("读取到哪了？","点击查询后自动获取数量并读取，可暂停继续。未读完或遇到异常会明确说明；图表不会把未知数量当作0。")
                     Text("数据是分次读取的快照，不代表完整绩效。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 } } }
             }
