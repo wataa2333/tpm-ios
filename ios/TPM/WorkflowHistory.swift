@@ -199,7 +199,7 @@ struct HistoryChip: View {
     let text: String
     let color: Color
     var body: some View {
-        Text(text).font(AppFont.caption).foregroundStyle(color)
+        Text(text).animatedTextValue(text).font(AppFont.caption).foregroundStyle(color)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(color.opacity(0.6), lineWidth: 1))
     }
@@ -239,14 +239,14 @@ struct HistoryNodeRow: View {
         VStack(alignment: .leading, spacing: RowMetrics.spacing) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Circle().fill(activityTypeColor(type)).frame(width: 10, height: 10)
-                Text("\(historyTimePrefix(node))：\(time.isEmpty ? "等待处理" : time)").font(AppFont.subheadline.weight(.semibold))
-                if !time.isEmpty { Text("（\(relativeTimeText(time))）").font(AppFont.footnote).foregroundStyle(.secondary) }
+                Text("\(historyTimePrefix(node))：\(time.isEmpty ? "等待处理" : time)").animatedTextValue("\(historyTimePrefix(node))：\(time.isEmpty ? "等待处理" : time)").font(AppFont.subheadline.weight(.semibold))
+                if !time.isEmpty { Text("（\(relativeTimeText(time))）").animatedTextValue("（\(relativeTimeText(time))）").font(AppFont.footnote).foregroundStyle(.secondary) }
             }
             let assignees = historyAssigneeNames(node)
             ChipFlow {
                 HStack(spacing: 4) {
                     Image(systemName: "person.fill").font(AppFont.caption).foregroundStyle(.secondary)
-                    if assignees.isEmpty { Text("无").foregroundStyle(.secondary) } else { Text(names(assignees)) }
+                    if assignees.isEmpty { Text("无").foregroundStyle(.secondary) } else { Text(names(assignees)).animatedTextValue(names(assignees)) }
                 }.font(AppFont.subheadline)
                 if showsConditionTag(node) { HistoryChip(text: node["condition"].text, color: conditionColor(node["condition"].text)) }
                 HistoryChip(text: node["activityName"].text.isEmpty ? activityTypeText(type) : node["activityName"].text, color: activityTypeColor(type))
@@ -254,21 +254,21 @@ struct HistoryNodeRow: View {
             if isCountersignHistory(node) {
                 HStack(spacing: 8) {
                     HistoryChip(text: "会签", color: node["countersignPending"].number > 0 ? .orange : .green)
-                    if !node["countersignStatusText"].text.isEmpty { Text(node["countersignStatusText"].text).font(AppFont.footnote).foregroundStyle(.secondary) }
+                    if !node["countersignStatusText"].text.isEmpty { Text(node["countersignStatusText"].text).animatedTextValue(node["countersignStatusText"].text).font(AppFont.footnote).foregroundStyle(.secondary) }
                 }
                 ForEach([("会签人员", countersignNames(node, "all")), ("已处理", countersignNames(node, "completed")), ("待处理", countersignNames(node, "pending"))], id: \.0) { label, list in
-                    if !list.isEmpty { Text("\(label)：\(names(list))").font(AppFont.footnote).foregroundStyle(.secondary) }
+                    if !list.isEmpty { Text("\(label)：\(names(list))").animatedTextValue("\(label)：\(names(list))").font(AppFont.footnote).foregroundStyle(.secondary) }
                 }
             }
             let comments = node["comments"].array
             ForEach(Array(comments.enumerated()), id: \.offset) { _, comment in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     HistoryChip(text: commentTypeText(comment), color: comment["type"].text == "transfer" ? .orange : comment["type"].text == "delegate" ? .purple : comment["type"].text == "delegateResolve" ? .teal : .accentColor)
-                    Text(comment["fullMessage"].text.isEmpty ? comment["message"].text : comment["fullMessage"].text).font(AppFont.subheadline).textSelection(.enabled)
+                    Text(comment["fullMessage"].text.isEmpty ? comment["message"].text : comment["fullMessage"].text).animatedTextValue(comment["fullMessage"].text.isEmpty ? comment["message"].text : comment["fullMessage"].text).font(AppFont.subheadline).textSelection(.enabled)
                 }
             }
             if comments.isEmpty && type == "userTask" && node["endTime"] != .null { Text("意见说明：无").font(AppFont.subheadline).foregroundStyle(.secondary) }
-            if node["durationInMillis"].number > 0 { Text("耗时：" + historyDuration(node["durationInMillis"].number)).font(AppFont.footnote).foregroundStyle(.secondary) }
+            if node["durationInMillis"].number > 0 { Text("耗时：" + historyDuration(node["durationInMillis"].number)).animatedTextValue("耗时：" + historyDuration(node["durationInMillis"].number)).font(AppFont.footnote).foregroundStyle(.secondary) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .uniformRow()

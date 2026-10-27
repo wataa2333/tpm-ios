@@ -45,8 +45,8 @@ val LocalDrafts = compositionLocalOf<com.personal.tpm.data.DraftStore> { error("
 fun ErrorDialog(title: String, message: String, onClose: () -> Unit) {
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text(title) },
-        text = { Text(message) },
+        title = { AnimatedLabel(title) },
+        text = { AnimatedLabel(message) },
         confirmButton = { TextButton(onClick = onClose) { Text("好") } },
 
     )
@@ -70,8 +70,8 @@ fun GroupCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
 @Composable
 fun FactRow(label: String, value: String, modifier: Modifier = Modifier, inset: Dp = 16.dp) {
     Row(modifier.fillMaxWidth().padding(horizontal = inset, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
-        Text(label, Modifier.width(96.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value.ifEmpty { "—" }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        AnimatedLabel(label, Modifier.width(96.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        AnimatedLabel(value.ifEmpty { "—" }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -93,7 +93,7 @@ fun GroupDivider() = HorizontalDivider(Modifier.padding(horizontal = 16.dp), col
 fun SearchField(value: String, onValueChange: (String) -> Unit, placeholder: String, onSearch: () -> Unit, modifier: Modifier = Modifier) {
     androidx.compose.material3.TextField(
         value = value, onValueChange = onValueChange, singleLine = true, modifier = modifier.fillMaxWidth(),
-        placeholder = { Text(placeholder) },
+        placeholder = { AnimatedLabel(placeholder) },
         leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Search, contentDescription = null) },
         trailingIcon = {
             if (value.isNotEmpty()) androidx.compose.material3.IconButton(onClick = { onValueChange("") }) {
@@ -145,7 +145,7 @@ fun BlockChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier,
         // The same ink as the capsules next to it (the second level of the text tones), also for the icon.
         val ink = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides ink) {
-            androidx.compose.material3.Text(label, style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 1, softWrap = false)
+            AnimatedLabel(label, style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 1, softWrap = false)
             trailing?.invoke()
         }
     }
@@ -162,7 +162,7 @@ fun BlockSegmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit
             androidx.compose.foundation.layout.Box(
                 Modifier.weight(1f).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(fill).clickable { onSelect(index) }.padding(vertical = 10.dp),
                 androidx.compose.ui.Alignment.Center,
-            ) { androidx.compose.material3.Text(name, style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 1) }
+            ) { AnimatedLabel(name, style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 1) }
         }
     }
 }
@@ -217,7 +217,7 @@ fun AppFooter(showVersion: Boolean = true, modifier: Modifier = Modifier) {
         }.getOrDefault("")
     }
     Column(modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        if (showVersion && version.isNotEmpty()) Text(version, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-        Text("开发者联系方式：$DEVELOPER_CONTACT", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+        if (showVersion && version.isNotEmpty()) AnimatedLabel(version, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+        AnimatedLabel("开发者联系方式：$DEVELOPER_CONTACT", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
     }
 }

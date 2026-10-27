@@ -152,7 +152,7 @@ fun PagedScreen(
     }
     LaunchedEffect(batch.notice) { batch.notice?.let { snackbar.showSnackbar(it); batch.notice = null } }
     androidx.activity.compose.BackHandler(enabled = batch.active) { batch.end() }
-    Scaffold(
+    Scaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = { if (batchKind != null) BatchBarHost(batch.active) { BatchBar(batch) { vm.rows.map { batchItem(batchKind, it) } } } },
@@ -179,15 +179,15 @@ fun PagedScreen(
                             if (vm.searches.size > 1) Box {
                                 BlockChip("按" + vm.searches[vm.choice].label + "搜索", { menu = true }, trailing = { Icon(Icons.Filled.ExpandMore, contentDescription = null, Modifier.size(18.dp)) })
                                 AppOptionSheet(expanded = menu, onDismissRequest = { menu = false }, title = "搜索方式") {
-                                    vm.searches.forEachIndexed { index, option -> AppOptionItem(text = { Text(option.label) }, selected = index == vm.choice, onClick = { menu = false; vm.choose(index) }) }
+                                    vm.searches.forEachIndexed { index, option -> AppOptionItem(text = { AnimatedLabel(option.label) }, selected = index == vm.choice, onClick = { menu = false; vm.choose(index) }) }
                                 }
                             }
                         }
                         PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.reload(pull = true) }, state = pull, indicator = {}, modifier = Modifier.weight(1f).fillMaxWidth()) {
                             val dim by animateFloatAsState(if (vm.loading && vm.rows.isNotEmpty()) 0.45f else 1f, tween(Motion.Fast, easing = Motion.Change), label = "dim")
-                            Box(Modifier.fillMaxSize().pullDown(pull, vm.refreshing).nestedScroll(hide.connection)) {
+                            Box(Modifier.fillMaxSize().nestedScroll(hide.connection)) {
                                 LazyColumn(
-                                    state = listState, modifier = Modifier.fillMaxSize().elastic(top = false, onEnd = { vm.loadMore() }).then(if (dim < 1f) Modifier.graphicsLayer { alpha = dim } else Modifier),
+                                    state = listState, modifier = Modifier.fillMaxSize().then(if (dim < 1f) Modifier.graphicsLayer { alpha = dim } else Modifier),
                                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = if (onNew != null) 88.dp else 24.dp),
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
@@ -213,7 +213,7 @@ fun PagedScreen(
                                             !vm.loading && vm.rows.isEmpty() && vm.error == null -> EmptyState(emptyText)
                                             // More rows are read only when the list is pulled up past its end (the loading animation of the top bar runs then).
                                             vm.rows.isNotEmpty() && !vm.last -> { Text("加载更多内容", Modifier.fillMaxWidth().padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center) }
-                                            vm.rows.isNotEmpty() -> Text(vm.total?.let { "共 $it 条" } ?: "已显示全部 ${vm.rows.size} 条", Modifier.fillMaxWidth().padding(8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                                            vm.rows.isNotEmpty() -> AnimatedLabel(vm.total?.let { "共 $it 条" } ?: "已显示全部 ${vm.rows.size} 条", Modifier.fillMaxWidth().padding(8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                                         }
                                     }
                                 }
@@ -230,7 +230,7 @@ fun PagedScreen(
     BatchOverlays(batch)
     if (noticeShown) androidx.compose.material3.AlertDialog(
         onDismissRequest = { noticeShown = false },
-        title = { Text("提示") }, text = { Text(openNotice.orEmpty()) },
+        title = { Text("提示") }, text = { AnimatedLabel(openNotice.orEmpty()) },
         confirmButton = { androidx.compose.material3.TextButton(onClick = { noticeShown = false }) { Text("确认") } },
     )
 }

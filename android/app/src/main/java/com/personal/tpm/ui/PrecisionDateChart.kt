@@ -51,7 +51,7 @@ internal fun PrecisionDateChart(rows: List<Jv>, days: Int, setDays: (Int) -> Uni
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(7, 30, 90).forEach { n -> ChoiceChip(days == n, { setDays(n) }, "近${n}天") }
         }
-        Text("${dates.first().format(fmt)} — ${dates.last().format(fmt)} · 共${values.sum()}台", style = MaterialTheme.typography.bodySmall)
+        AnimatedLabel("${dates.first().format(fmt)} — ${dates.last().format(fmt)} · 共${values.sum()}台", style = MaterialTheme.typography.bodySmall)
         Canvas(Modifier.fillMaxWidth().height(210.dp).semantics {
             contentDescription = "检测日期曲线图，${dates[selected]}：${values[selected]}台。支持双指缩放和横向拖动"
         }.pointerInput(days) {
@@ -125,8 +125,8 @@ internal fun PrecisionDateChart(rows: List<Jv>, days: Int, setDays: (Int) -> Uni
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("检测日期：${dates[selected].format(fmt)}", style = MaterialTheme.typography.bodyMedium)
-            Text("${values[selected]}台", style = MaterialTheme.typography.bodyMedium)
+            AnimatedLabel("检测日期：${dates[selected].format(fmt)}", style = MaterialTheme.typography.bodyMedium)
+            AnimatedLabel("${values[selected]}台", style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

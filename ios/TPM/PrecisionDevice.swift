@@ -57,7 +57,7 @@ struct PrecisionPeopleLabel: View {
     @State private var text = "工单检测人：读取中…"
     private var context: String { session.scopeRevision.uuidString + queries.revision.uuidString }
     var body: some View {
-        Text(text).font(AppFont.precisionText(.caption, size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        Text(text).animatedTextValue(text).font(AppFont.precisionText(.caption, size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             .task(id: context + (refreshID?.description ?? "")) {
                 let key = context
                 text = "工单检测人：读取中…"
@@ -101,34 +101,34 @@ struct PrecisionDeviceScreen: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
                 PrecisionPanel {
-                    Text(asset["addressCode"].text.isEmpty ? asset["assetCode"].text : asset["addressCode"].text).font(AppFont.title2.bold())
-                    Text(asset["assetName"].text); Text(asset["assetCode"].text).font(AppFont.caption).foregroundStyle(.secondary)
-                    Text("查询：" + queries.label(operator: session)).font(AppFont.caption)
+                    Text(asset["addressCode"].text.isEmpty ? asset["assetCode"].text : asset["addressCode"].text).animatedTextValue(asset["addressCode"].text.isEmpty ? asset["assetCode"].text : asset["addressCode"].text).font(AppFont.title2.bold())
+                    Text(asset["assetName"].text).animatedTextValue(asset["assetName"].text); Text(asset["assetCode"].text).animatedTextValue(asset["assetCode"].text).font(AppFont.caption).foregroundStyle(.secondary)
+                    Text("查询：" + queries.label(operator: session)).animatedTextValue("查询：" + queries.label(operator: session)).font(AppFont.caption)
                     Button("重新读取") { retry += 1 }.disabled(pageLoading || executionLoading || recordLoading)
                     if pageLoading || executionLoading || recordLoading { ProgressView("正在读取检测记录") }
-                    if let error { Text(error).font(AppFont.subheadline).foregroundStyle(.red) }
+                    if let error { Text(error).animatedTextValue(error).font(AppFont.subheadline).foregroundStyle(.red) }
                 }
                 if !orders.isEmpty {
                     PrecisionPanel {
                         Text("检测工单").font(AppFont.headline)
                         Picker("选择工单", selection: $selectedOrder) {
                             ForEach(Array(orders.enumerated()), id: \.offset) { _, order in
-                                Text(readableDate(order["planStartDate"]) + " · " + order["sn"].text).tag(order["preciseId"].text)
+                                Text(readableDate(order["planStartDate"]) + " · " + order["sn"].text).animatedTextValue(readableDate(order["planStartDate"]) + " · " + order["sn"].text).tag(order["preciseId"].text)
                             }
                         }
                         HStack {
                             Button("上一页") { page -= 1 }.disabled(page == 0 || pageLoading)
-                            Spacer(); Text("第\(page + 1)页 · 共\(total ?? 0)单").font(AppFont.caption); Spacer()
+                            Spacer(); Text("第\(page + 1)页 · 共\(total ?? 0)单").animatedTextValue("第\(page + 1)页 · 共\(total ?? 0)单").font(AppFont.caption); Spacer()
                             Button("下一页") { page += 1 }.disabled(pageLoading || (page + 1) * 20 >= (total ?? 0))
                         }
                         if !executions.isEmpty {
                             Picker("检测执行记录", selection: $selectedExecution) {
                                 ForEach(Array(executions.enumerated()), id: \.offset) { _, row in
-                                    Text(readableDate(row["endTime"]) + " · " + row["user"].object.label).tag(row["orderId"].text)
+                                    Text(readableDate(row["endTime"]) + " · " + row["user"].object.label).animatedTextValue(readableDate(row["endTime"]) + " · " + row["user"].object.label).tag(row["orderId"].text)
                                 }
                             }
-                            Text("检测人：" + (execution["user"].object.label.isEmpty ? "未记录" : execution["user"].object.label))
-                            Text("上传人：" + (uploader.isEmpty ? "读取中…" : uploader)).font(AppFont.subheadline)
+                            Text("检测人：" + (execution["user"].object.label.isEmpty ? "未记录" : execution["user"].object.label)).animatedTextValue("检测人：" + (execution["user"].object.label.isEmpty ? "未记录" : execution["user"].object.label))
+                            Text("上传人：" + (uploader.isEmpty ? "读取中…" : uploader)).animatedTextValue("上传人：" + (uploader.isEmpty ? "读取中…" : uploader)).font(AppFont.subheadline)
                         } else if !executionLoading { Text("该工单暂无检测执行记录").font(AppFont.subheadline) }
                     }
                 } else if !pageLoading && error == nil {
@@ -137,10 +137,10 @@ struct PrecisionDeviceScreen: View {
                 ForEach(Array(records.enumerated()), id: \.offset) { _, record in
                     PrecisionPanel {
                         let title = record["itemName"].text.isEmpty ? record["preciseItem"]["itemName"].text : record["itemName"].text
-                        Text(title).font(AppFont.headline).fixedSize(horizontal: false, vertical: true)
-                        Text("精度判定：" + (record["preciseResult"].text.isEmpty ? "未记录" : record["preciseResult"].text))
-                        Text("记录值：" + (record["description"].text.isEmpty ? "未记录" : record["description"].text)).textSelection(.enabled)
-                        if record["executeResult"].text != "EXECUTED" { Text("执行状态：" + record["executeResult"].text).font(AppFont.caption).foregroundStyle(.secondary) }
+                        Text(title).animatedTextValue(title).font(AppFont.headline).fixedSize(horizontal: false, vertical: true)
+                        Text("精度判定：" + (record["preciseResult"].text.isEmpty ? "未记录" : record["preciseResult"].text)).animatedTextValue("精度判定：" + (record["preciseResult"].text.isEmpty ? "未记录" : record["preciseResult"].text))
+                        Text("记录值：" + (record["description"].text.isEmpty ? "未记录" : record["description"].text)).animatedTextValue("记录值：" + (record["description"].text.isEmpty ? "未记录" : record["description"].text)).textSelection(.enabled)
+                        if record["executeResult"].text != "EXECUTED" { Text("执行状态：" + record["executeResult"].text).animatedTextValue("执行状态：" + record["executeResult"].text).font(AppFont.caption).foregroundStyle(.secondary) }
                     }
                 }
             }.padding(16)

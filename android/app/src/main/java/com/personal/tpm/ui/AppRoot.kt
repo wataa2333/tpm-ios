@@ -48,11 +48,10 @@ fun AppRoot(license: LicenseViewModel, session: Session, vault: AccountVault, pr
     val context = androidx.compose.ui.platform.LocalContext.current
     val queries = androidx.compose.runtime.remember { com.personal.tpm.data.QueryAccounts(context).also { session.queryAccounts = it } }
     androidx.compose.runtime.LaunchedEffect(scope) { queries.invalidate() }
-    // The platform's own end-of-scroll effect is off: the app's rubber band (Elastic.kt) is the one effect, the same on every Android version.
+    // Scrolling containers own their platform overscroll effect; do not disable or duplicate it here.
     CompositionLocalProvider(
         LocalSession provides session, LocalVault provides vault, LocalPickerPrefs provides prefs, LocalDrafts provides drafts,
         LocalQueryAccounts provides queries,
-        androidx.compose.foundation.LocalOverscrollConfiguration provides null,
     ) {
         // The keyboard pushes the whole page up, so a text box that is being typed in is never under it.
         // The area of the screen the owner chose (see 我的 > 显示区域): the app lies inside it, the rest is plain background.

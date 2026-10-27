@@ -42,7 +42,7 @@ fun LicenseScreen(license: LicenseViewModel, reason: String) {
     StatusBarIcons(dark = true)
     PageWidth {
     Column(
-        Modifier.fillMaxSize().safeDrawingPadding().elastic().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+        Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -50,7 +50,7 @@ fun LicenseScreen(license: LicenseViewModel, reason: String) {
         Spacer(Modifier.height(16.dp))
         Text("输入本月密钥", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(8.dp))
-        Text(reason, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        AnimatedLabel(reason, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(24.dp))
         androidx.compose.material3.TextField(colors = blockFieldColors(), shape = MaterialTheme.shapes.medium, 
             value = text,
@@ -59,7 +59,7 @@ fun LicenseScreen(license: LicenseViewModel, reason: String) {
             label = { Text("6 位密钥（不区分大小写）") },
             singleLine = true,
             isError = message != null,
-            supportingText = { Text(message ?: "字母和数字，例如 A3B7K9") },
+            supportingText = { AnimatedLabel(message ?: "字母和数字，例如 A3B7K9") },
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { submit() }),
             modifier = Modifier.fillMaxWidth(),

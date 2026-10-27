@@ -17,7 +17,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
-import androidx.compose.material.icons.filled.PrecisionManufacturing
+import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.FactCheck
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SettingsSuggest
@@ -110,17 +112,17 @@ fun WorkspaceTab(vm: WorkspaceViewModel, gridState: LazyGridState, pullState: Pu
     PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.reload(pull = true) }, state = pullState, indicator = {}, modifier = Modifier.fillMaxSize()) {
         PageWidth {
             LazyVerticalGrid(
-                state = gridState, columns = GridCells.Adaptive(minSize = 150.dp), modifier = nested.fillMaxSize().pullDown(pullState, vm.refreshing).elastic(top = false),
+                state = gridState, columns = GridCells.Adaptive(minSize = 150.dp), modifier = nested.fillMaxSize().scrollEdges(MaterialTheme.colorScheme.background, before = { gridState.canScrollBackward }, after = { gridState.canScrollForward }),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 88.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                vm.error?.let { message -> item(span = { GridItemSpan(maxLineSpan) }) { Text(message, color = MaterialTheme.colorScheme.error) } }
+                vm.error?.let { message -> item(span = { GridItemSpan(maxLineSpan) }) { AnimatedLabel(message, color = MaterialTheme.colorScheme.error) } }
                 item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("看板") }
                 if (AppPreferences.management) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Card(onClick=openDashboard,modifier=Modifier.fillMaxWidth(),shape=MaterialTheme.shapes.large,colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surfaceContainerLowest)) {
                             Row(Modifier.fillMaxWidth().padding(16.dp),horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically) {
-                                Badge(Icons.Filled.SettingsSuggest,MaterialTheme.colorScheme.primary)
+                                Badge(Icons.Filled.Assessment, Color(0xFFD83B70))
                                 Column(Modifier.weight(1f)) { Text("人员与工单分析",style=MaterialTheme.typography.titleMedium); Text("查看维修待处理与人员趋势",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight,contentDescription="进入",tint=MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -130,14 +132,14 @@ fun WorkspaceTab(vm: WorkspaceViewModel, gridState: LazyGridState, pullState: Pu
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Card(onClick = openPrecision, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)) {
                         Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Badge(Icons.Filled.PrecisionManufacturing, MaterialTheme.colorScheme.primary)
+                            Badge(Icons.Filled.Straighten, Color(0xFFB8860B))
                             Column(Modifier.weight(1f)) { Text("精密度检查看板", style = MaterialTheme.typography.titleMedium); Text("017CNC · 进度与品牌等级", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "进入", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("资产") }
-                item(span = { GridItemSpan(maxLineSpan) }) { WideCard("资产台账", "全部资产", Icons.Filled.PrecisionManufacturing, Color(0xFF1E88E5), vm.counts[WorkList.Assets.key]) { openList(WorkList.Assets) } }
+                item(span = { GridItemSpan(maxLineSpan) }) { WideCard("资产台账", "全部资产", Icons.Filled.FactCheck, Color(0xFF1E88E5), vm.counts[WorkList.Assets.key]) { openList(WorkList.Assets) } }
                 item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("ERP") }
                 item { StateCard("ERP 出库", Icons.Filled.LocalShipping, Color(0xFFFB8C00), vm.counts[WorkList.Outbound.key]) { openList(WorkList.Outbound) } }
                 item { StateCard("ERP 库存", Icons.Filled.Inventory2, Color(0xFF00897B), vm.counts[WorkList.Stock.key]) { openList(WorkList.Stock) } }
@@ -162,11 +164,11 @@ private fun QuickQueryCard(title: String, icon: ImageVector, tint: Color, placeh
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Badge(icon, tint)
-                Text(title, style = MaterialTheme.typography.titleMedium)
+                AnimatedLabel(title, style = MaterialTheme.typography.titleMedium)
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.material3.TextField(colors = blockFieldColors(onCard = true), shape = MaterialTheme.shapes.medium, 
-                    value = text, onValueChange = { text = it }, singleLine = true, placeholder = { Text(placeholder) }, modifier = Modifier.weight(1f),
+                    value = text, onValueChange = { text = it }, singleLine = true, placeholder = { AnimatedLabel(placeholder) }, modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { go() }),
                 )
                 FilledIconButton(onClick = { go() }, enabled = text.isNotBlank()) { Icon(Icons.Filled.Search, contentDescription = "查询") }

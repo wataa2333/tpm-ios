@@ -69,7 +69,7 @@ private fun conditionColor(condition: String): Color = when (condition) {
 
 @Composable
 private fun Chip(text: String, color: Color) {
-    Text(
+    AnimatedLabel(
         text, Modifier.background(color.copy(alpha = 0.14f), RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 3.dp),
         style = MaterialTheme.typography.labelMedium, color = color,
     )
@@ -119,7 +119,7 @@ fun WorkflowScreen(processId: String, onBack: () -> Unit) {
     }
     LaunchedEffect(processId) { load() }
 
-    Scaffold(
+    Scaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppTopBar(
@@ -131,9 +131,9 @@ fun WorkflowScreen(processId: String, onBack: () -> Unit) {
         Box(Modifier.padding(top = scaffoldPadding.calculateTopPadding())) {
             RoundedSheet {
                 PageWidth {
-                    SelectionContainer { Column(Modifier.fillMaxSize().fadeInOnShow().elastic().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SelectionContainer { Column(Modifier.fillMaxSize().fadeInOnShow().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         error?.let { message ->
-                            Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                            AnimatedLabel(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                             TextButton(onClick = { load() }) { Text("重试") }
                         }
                         if (history.isNotEmpty()) {
@@ -151,13 +151,13 @@ fun WorkflowScreen(processId: String, onBack: () -> Unit) {
                                 definition.forEachIndexed { index, node ->
                                     val records = history.filter { it["activityId"].text == node["taskKey"].text }
                                     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text(node["taskName"].text, style = MaterialTheme.typography.titleSmall)
-                                        Text(
+                                        AnimatedLabel(node["taskName"].text, style = MaterialTheme.typography.titleSmall)
+                                        AnimatedLabel(
                                             if (records.isEmpty()) "尚无处理记录" else if (records.any { it["endTime"].isNull }) "当前节点" else "已有处理记录",
                                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                         workflowParticipantLabel(node["assignees"].text).takeIf { it.isNotEmpty() }?.let {
-                                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            AnimatedLabel(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                     }
                                     if (index < definition.lastIndex) GroupDivider()
@@ -182,13 +182,13 @@ private fun HistoryNode(node: Jv, nameOf: (String) -> String) {
         run {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(10.dp).background(typeColor(type), CircleShape))
-                Text("${historyTimePrefix(node)}：${time.ifEmpty { "等待处理" }}", style = MaterialTheme.typography.titleSmall)
-                if (time.isNotEmpty()) Text("（${relativeTimeText(time)}）", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                AnimatedLabel("${historyTimePrefix(node)}：${time.ifEmpty { "等待处理" }}", style = MaterialTheme.typography.titleSmall)
+                if (time.isNotEmpty()) AnimatedLabel("（${relativeTimeText(time)}）", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Icon(Icons.Filled.Person, contentDescription = null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(if (assignees.isEmpty()) "无" else assignees.joinToString("、", transform = nameOf), style = MaterialTheme.typography.bodyMedium)
+                    AnimatedLabel(if (assignees.isEmpty()) "无" else assignees.joinToString("、", transform = nameOf), style = MaterialTheme.typography.bodyMedium)
                 }
                 if (showsConditionTag(node)) Chip(node["condition"].text, conditionColor(node["condition"].text))
                 Chip(node["activityName"].text.ifEmpty { activityTypeText(type) }, typeColor(type))
@@ -196,21 +196,21 @@ private fun HistoryNode(node: Jv, nameOf: (String) -> String) {
             if (isCountersignHistory(node)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Chip("会签", if (node["countersignPending"].number > 0) Color(0xFFF57C00) else Color(0xFF2E7D32))
-                    if (node["countersignStatusText"].text.isNotEmpty()) Text(node["countersignStatusText"].text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (node["countersignStatusText"].text.isNotEmpty()) AnimatedLabel(node["countersignStatusText"].text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 listOf("会签人员" to countersignNames(node, "all"), "已处理" to countersignNames(node, "completed"), "待处理" to countersignNames(node, "pending")).forEach { (label, list) ->
-                    if (list.isNotEmpty()) Text("$label：${list.joinToString("、", transform = nameOf)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (list.isNotEmpty()) AnimatedLabel("$label：${list.joinToString("、", transform = nameOf)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             val comments = node["comments"].array
             comments.forEach { comment ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
                     Chip(commentTypeText(comment), when (comment["type"].text) { "transfer" -> Color(0xFFF57C00); "delegate" -> Color(0xFF8E24AA); "delegateResolve" -> Color(0xFF00897B); else -> MaterialTheme.colorScheme.primary })
-                    Text(comment["fullMessage"].text.ifEmpty { comment["message"].text }, style = MaterialTheme.typography.bodyMedium)
+                    AnimatedLabel(comment["fullMessage"].text.ifEmpty { comment["message"].text }, style = MaterialTheme.typography.bodyMedium)
                 }
             }
             if (comments.isEmpty() && type == "userTask" && !node["endTime"].isNull) Text("意见说明：无", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (node["durationInMillis"].number > 0) Text("耗时：" + historyDuration(node["durationInMillis"].number), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (node["durationInMillis"].number > 0) AnimatedLabel("耗时：" + historyDuration(node["durationInMillis"].number), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

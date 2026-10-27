@@ -64,13 +64,13 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
             Text("日期范围",style=MaterialTheme.typography.titleSmall)
             RepairDateControls(vm)
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                Button(enabled=!vm.loading && vm.selectedSpan!=null,onClick=vm::prepare){Text(if(vm.started) "重新查询" else "查询")}
+                Button(enabled=!vm.loading && vm.selectedSpan!=null,onClick=vm::prepare){AnimatedLabel(if(vm.started) "重新查询" else "查询")}
                 if(vm.loading) TextButton(onClick=vm::pause){Text("暂停")}
                 else if(vm.started && !vm.showingPrevious && !vm.snapshot.exhausted) TextButton(onClick={vm.load()}){Text("继续")}
             }
             if(vm.loading) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
-                Text(if(vm.checking) "正在预估数量" else "已读${vm.snapshot.readCount} / ${vm.expectedTotal?.toString() ?: "未知"}",style=MaterialTheme.typography.bodySmall)
+                AnimatedLabel(if(vm.checking) "正在预估数量" else "已读${vm.snapshot.readCount} / ${vm.expectedTotal?.toString() ?: "未知"}",style=MaterialTheme.typography.bodySmall)
             }
             } }
             GroupCard { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
@@ -80,7 +80,7 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
                 ChoiceChip(monthly,{monthly=true},"按月")
             }
             Text("按故障发现日期统计待确认、待复线及已完结的维修单。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            if(!complete) Text(if(vm.started) "数据未读完整，图表和表格仅为已加载数量。" else "选择日期后查询，再查看完整图表。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
+            if(!complete) AnimatedLabel(if(vm.started) "数据未读完整，图表和表格仅为已加载数量。" else "选择日期后查询，再查看完整图表。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
             } }
         }
     }
@@ -88,17 +88,17 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
         LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(start=12.dp,end=12.dp,top=12.dp,bottom=12.dp+navigationBottom),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             if(vm.showingPrevious) item { GroupCard { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                 Text("上次数据 · 非最新",style=MaterialTheme.typography.titleSmall,color=accent)
-                Text("查询时间：${vm.queriedAt}",style=MaterialTheme.typography.bodySmall)
+                AnimatedLabel("查询时间：${vm.queriedAt}",style=MaterialTheme.typography.bodySmall)
             } } }
             if(!landscape) {
                 item { controls() }
                 item { GroupCard { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                     Text("人员对比",style=MaterialTheme.typography.titleSmall)
-                    OutlinedButton(onClick={picker=true},modifier=Modifier.fillMaxWidth(),border=BorderStroke(1.dp,accent.copy(alpha=.55f))){Text("选择对比人员 · 已选${shown.count{it.key!=ALL_REPAIR_TREND}}人")}
+                    OutlinedButton(onClick={picker=true},modifier=Modifier.fillMaxWidth(),border=BorderStroke(1.dp,accent.copy(alpha=.55f))){AnimatedLabel("选择对比人员 · 已选${shown.count{it.key!=ALL_REPAIR_TREND}}人")}
                 } } }
             }
             item {
-                Text("${span?.summary ?: "请选择日期"} · ${days}天",style=MaterialTheme.typography.titleSmall)
+                AnimatedLabel("${span?.summary ?: "请选择日期"} · ${days}天",style=MaterialTheme.typography.titleSmall)
                 if(!complete) Text("未读完：空白数据为未知，曲线断开，不按0绘制。",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
             }
             if(series.isNotEmpty()) item {
@@ -133,7 +133,7 @@ private fun LazyListScope.trendPersonItems(series:List<RepairTrend>,selected:Set
     item {
         GroupCard { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text("人员与全部汇总",style=MaterialTheme.typography.titleSmall)
-        Row { TextButton(onClick=if(series.all{it.key in selected}) clear else selectAll){Text(if(series.all{it.key in selected}) "取消全选" else "全选")};TextButton(onClick=clear){Text("清空")}}
+        Row { TextButton(onClick=if(series.all{it.key in selected}) clear else selectAll){AnimatedLabel(if(series.all{it.key in selected}) "取消全选" else "全选")};TextButton(onClick=clear){Text("清空")}}
         } }
     }
     series.firstOrNull{it.key==ALL_REPAIR_TREND}?.let{all->item{TrendPerson(all,all.key in selected,colors[all.key] ?: Color.Gray,{toggle(all.key)},Modifier.fillMaxWidth())}}
@@ -151,9 +151,9 @@ private fun TrendPerson(person:RepairTrend,selected:Boolean,color:Color,onClick:
     val outline by animateColorAsState(if(selected) color else MaterialTheme.colorScheme.outlineVariant,tween(Motion.Normal,easing=Motion.Change),label="trend person outline")
     Surface(modifier=modifier.animateContentSize(tween(Motion.Normal,easing=Motion.Change)),shape=RoundedCornerShape(12.dp),color=fill,border=BorderStroke(1.dp,outline)){
         Column(Modifier.clickable(onClick=onClick).padding(8.dp),verticalArrangement=Arrangement.spacedBy(3.dp)){
-            Text((if(selected) "✓ " else "")+person.name,color=color,style=MaterialTheme.typography.labelLarge,maxLines=1,overflow=TextOverflow.Ellipsis)
-            Text(if(person.key==ALL_REPAIR_TREND) "所有人员，含身份未明确" else person.key?.removePrefix("user:")?.removePrefix("id:") ?: "身份未明确",style=MaterialTheme.typography.labelSmall,maxLines=1,overflow=TextOverflow.Ellipsis)
-            Text("${person.counts.sumOf{it ?: 0}}单",style=MaterialTheme.typography.labelMedium)
+            AnimatedLabel((if(selected) "✓ " else "")+person.name,color=color,style=MaterialTheme.typography.labelLarge,maxLines=1,overflow=TextOverflow.Ellipsis)
+            AnimatedLabel(if(person.key==ALL_REPAIR_TREND) "所有人员，含身份未明确" else person.key?.removePrefix("user:")?.removePrefix("id:") ?: "身份未明确",style=MaterialTheme.typography.labelSmall,maxLines=1,overflow=TextOverflow.Ellipsis)
+            AnimatedLabel("${person.counts.sumOf{it ?: 0}}单",style=MaterialTheme.typography.labelMedium)
         }
     }
 }

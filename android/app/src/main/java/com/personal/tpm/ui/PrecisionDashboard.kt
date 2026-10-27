@@ -30,34 +30,34 @@ fun PrecisionDashboard(onBack: () -> Unit, openAsset: (String) -> Unit) {
     LaunchedEffect(scope, queries.revision) { vm.ensureLoaded(scope, queries.revision) }
     val colors = listOf(Color(0xFF167D8D), Color(0xFF4388C7), Color(0xFF8B86AF), Color(0xFFC68A30), Color(0xFFBC5360))
     val matching = remember(vm.snapshot, vm.search, vm.grade) { vm.matching() }
-    Scaffold(topBar = { AppTopBar("精密度检查看板", onBack = onBack, loading = vm.loading) }) { padding ->
+    Scaffold(contentWindowInsets = appContentInsets(), topBar = { AppTopBar("精密度检查看板", onBack = onBack, loading = vm.loading) }) { padding ->
         PageWidth {
-            ScrollableLazyColumn(Modifier.padding(padding).fillMaxSize().elastic(), state = vm.listState,
+            ScrollableLazyColumn(Modifier.padding(padding).fillMaxSize(), state = vm.listState,
                 contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
                     PrecisionPanel {
                         Text("017CNC加工中心", style = MaterialTheme.typography.titleLarge)
-                        Text(owner.currentFactoryName)
-                        Text("查询：${queries.label(owner)} · 登录：${owner.accountName}", style = MaterialTheme.typography.bodySmall)
+                        AnimatedLabel(owner.currentFactoryName)
+                        AnimatedLabel("查询：${queries.label(owner)} · 登录：${owner.accountName}", style = MaterialTheme.typography.bodySmall)
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(vm.readAt.takeIf { it.isNotEmpty() }?.let { "更新：$it" }.orEmpty(), style = MaterialTheme.typography.bodySmall)
-                            TextButton(enabled = !vm.loading, onClick = vm::refresh) { Text(if (vm.loading) "更新中…" else "刷新数据") }
+                            AnimatedLabel(vm.readAt.takeIf { it.isNotEmpty() }?.let { "更新：$it" }.orEmpty(), style = MaterialTheme.typography.bodySmall)
+                            TextButton(enabled = !vm.loading, onClick = vm::refresh) { AnimatedLabel(if (vm.loading) "更新中…" else "刷新数据") }
                         }
-                        if (vm.error.isNotEmpty()) Text(vm.error, color = MaterialTheme.colorScheme.error)
+                        if (vm.error.isNotEmpty()) AnimatedLabel(vm.error, color = MaterialTheme.colorScheme.error)
                     }
                 }
                 vm.snapshot?.let { data ->
                     item {
                         PrecisionPanel {
                             Text("检测进度", style = MaterialTheme.typography.titleMedium)
-                            Text("已检：${data.rows.size}台", style = MaterialTheme.typography.headlineSmall)
+                            AnimatedLabel("已检：${data.rows.size}台", style = MaterialTheme.typography.headlineSmall)
                             val total = data.total
                             if (total != null && total > 0) {
-                                Text("总数：${total}台 · 未检：${total - data.rows.size}台")
+                                AnimatedLabel("总数：${total}台 · 未检：${total - data.rows.size}台")
                                 LinearProgressIndicator(progress = { data.rows.size.toFloat() / total }, modifier = Modifier.fillMaxWidth().clip(CircleShape))
-                                Text("覆盖率：${percent(data.rows.size, total)}")
+                                AnimatedLabel("覆盖率：${percent(data.rows.size, total)}")
                             }
-                            if (data.totalNotice.isNotEmpty()) Text(data.totalNotice, color = MaterialTheme.colorScheme.error)
+                            if (data.totalNotice.isNotEmpty()) AnimatedLabel(data.totalNotice, color = MaterialTheme.colorScheme.error)
                         }
                     }
                     item {
@@ -73,11 +73,11 @@ fun PrecisionDashboard(onBack: () -> Unit, openAsset: (String) -> Unit) {
                             PrecisionPanel {
                                 val total = data.brandTotals?.get(brand)
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(brand, style = MaterialTheme.typography.titleMedium)
-                                    if (total != null) Text("共${total}台", style = MaterialTheme.typography.bodyMedium)
+                                    AnimatedLabel(brand, style = MaterialTheme.typography.titleMedium)
+                                    if (total != null) AnimatedLabel("共${total}台", style = MaterialTheme.typography.bodyMedium)
                                 }
                                 if (total != null && total > 0) {
-                                    Text("已检：${rows.size}台（${percent(rows.size, total)}）\n未检：${total - rows.size}台（${percent(total - rows.size, total)}）", style = MaterialTheme.typography.bodySmall)
+                                    AnimatedLabel("已检：${rows.size}台（${percent(rows.size, total)}）\n未检：${total - rows.size}台（${percent(total - rows.size, total)}）", style = MaterialTheme.typography.bodySmall)
                                 } else Text("设备总数暂不可用", style = MaterialTheme.typography.bodySmall)
                                 GradeBar(data.grades(rows), colors, total?.minus(rows.size) ?: 0)
                                 FlowLegend(data.grades(rows), colors)
@@ -95,7 +95,7 @@ fun PrecisionDashboard(onBack: () -> Unit, openAsset: (String) -> Unit) {
                             SectionTitle("设备检测明细")
                             SearchField(vm.search, { vm.search = it; vm.shown = 20 }, "搜索机台号、编码、名称或等级", {})
                             GradeFilters(vm.grade) { vm.grade = it; vm.shown = 20 }
-                            Text("共${matching.size}台 · 已显示${minOf(vm.shown, matching.size)}台", style = MaterialTheme.typography.bodySmall)
+                            AnimatedLabel("共${matching.size}台 · 已显示${minOf(vm.shown, matching.size)}台", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     matching.take(vm.shown).forEach { row ->
@@ -107,13 +107,13 @@ fun PrecisionDashboard(onBack: () -> Unit, openAsset: (String) -> Unit) {
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)) {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                        Text(asset["addressCode"].text.ifEmpty { asset["assetCode"].text }, fontWeight = FontWeight.Light, style = MaterialTheme.typography.titleLarge)
-                                        Text(asset["assetName"].text, fontWeight = FontWeight.Light, style = MaterialTheme.typography.bodyMedium)
-                                        Text(asset["assetCode"].text, fontWeight = FontWeight.Light, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text("检测日期：${row["analysisDate"].text}", fontWeight = FontWeight.Light, style = MaterialTheme.typography.bodySmall)
-                                        Text(vm.people[id] ?: "工单检测人：读取中…", fontWeight = FontWeight.Light, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        AnimatedLabel(asset["addressCode"].text.ifEmpty { asset["assetCode"].text }, fontWeight = FontWeight.Light, style = MaterialTheme.typography.titleLarge)
+                                        AnimatedLabel(asset["assetName"].text, fontWeight = FontWeight.Light, style = MaterialTheme.typography.bodyMedium)
+                                        AnimatedLabel(asset["assetCode"].text, fontWeight = FontWeight.Light, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        AnimatedLabel("检测日期：${row["analysisDate"].text}", fontWeight = FontWeight.Light, style = MaterialTheme.typography.bodySmall)
+                                        AnimatedLabel(vm.people[id] ?: "工单检测人：读取中…", fontWeight = FontWeight.Light, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    Text(row["analysisResult"].text.removePrefix("RESULT_"), fontSize = 64.sp, lineHeight = 72.sp, fontWeight = FontWeight.Light,
+                                    AnimatedLabel(row["analysisResult"].text.removePrefix("RESULT_"), fontSize = 64.sp, lineHeight = 72.sp, fontWeight = FontWeight.Light,
                                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f), maxLines = 1, softWrap = false,
                                         modifier = Modifier.widthIn(min = 80.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                                 }
@@ -152,9 +152,9 @@ private fun FlowLegend(counts: List<Int>, colors: List<Color>, missing: Int? = n
     val missingColor = MaterialTheme.colorScheme.outlineVariant
     FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         precisionGrades.forEachIndexed { i, grade ->
-            Text(buildAnnotatedString { withStyle(SpanStyle(color = colors[i])) { append("● ") }; append("$grade：${counts[i]}") }, style = MaterialTheme.typography.bodySmall)
+            AnimatedLabel(buildAnnotatedString { withStyle(SpanStyle(color = colors[i])) { append("● ") }; append("$grade：${counts[i]}") }, style = MaterialTheme.typography.bodySmall)
         }
-        if (missing != null) Text(buildAnnotatedString { withStyle(SpanStyle(color = missingColor)) { append("● ") }; append("未检：$missing") }, style = MaterialTheme.typography.bodySmall)
+        if (missing != null) AnimatedLabel(buildAnnotatedString { withStyle(SpanStyle(color = missingColor)) { append("● ") }; append("未检：$missing") }, style = MaterialTheme.typography.bodySmall)
     }
 }
 

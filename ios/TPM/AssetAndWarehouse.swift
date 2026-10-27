@@ -13,12 +13,12 @@ struct SignInPreview: View {
     var body: some View {
         List {
             Section("待签到设备") {
-                Text(asset.name).font(AppFont.headline)
-                LabeledContent("机台号", value: asset.id)
-                LabeledContent("资产编码", value: "FA-" + asset.id)
-                LabeledContent("地址", value: asset.location)
-                LabeledContent("维修人", value: "示例用户")
-                LabeledContent("签到状态", value: signed ? "已签到" : "待签到")
+                Text(asset.name).animatedTextValue(asset.name).font(AppFont.headline)
+                LabeledContent("机台号") { Text(asset.id).animatedTextValue(asset.id) }
+                LabeledContent("资产编码") { Text("FA-" + asset.id).animatedTextValue("FA-" + asset.id) }
+                LabeledContent("地址") { Text(asset.location).animatedTextValue(asset.location) }
+                LabeledContent("维修人") { Text("示例用户").animatedTextValue("示例用户") }
+                LabeledContent("签到状态") { Text(signed ? "已签到" : "待签到").animatedTextValue(signed ? "已签到" : "待签到") }
             }
             Section { NavigationLink { WorkflowNodesView(processID: "", preview: true) } label: { Label("处理流程", systemImage: "point.3.connected.trianglepath.dotted") } }
             Section { DemoNotice() }
@@ -57,15 +57,15 @@ struct AssetRecordDetail: View {
             LoadingRow(isPresented: loading || gate.busy, title: "正在加载" + tabs[tab])
             CardGroup {
                 VStack(alignment: .leading, spacing: RowMetrics.spacing) {
-                    WrappingContent { Text(asset["assetName"].text).font(AppFont.headline) }
-                    WrappingContent { Text(asset["assetCode"].text).font(AppFont.subheadline).foregroundStyle(.secondary) }
+                    WrappingContent { Text(asset["assetName"].text).animatedTextValue(asset["assetName"].text).font(AppFont.headline) }
+                    WrappingContent { Text(asset["assetCode"].text).animatedTextValue(asset["assetCode"].text).font(AppFont.subheadline).foregroundStyle(.secondary) }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(RowMetrics.insets)
             }
             if tab == 0 {
                 Text("基本信息").font(AppFont.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 32)
                 CardGroup {
                     ForEach(assetFields, id: \.0) { key, label in
-                        LabeledContent(label, value: assetDisplayValue(asset.at(key), key: key)).padding(RowMetrics.insets)
+                        LabeledContent(label) { Text(assetDisplayValue(asset.at(key), key: key)).animatedTextValue(assetDisplayValue(asset.at(key), key: key)) }.padding(RowMetrics.insets)
                     }
                 }
             } else if tab == 6 {
@@ -90,9 +90,9 @@ struct AssetRecordDetail: View {
                 CardGroup {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(row["taskName"].text.isEmpty ? row.object.label : row["taskName"].text).font(AppFont.headline)
-                            Text(readableDate(row["createTime"])).font(AppFont.subheadline).foregroundStyle(.secondary)
-                            if !row["content"].text.isEmpty { Text(row["content"].text).font(AppFont.subheadline) }
+                            Text(row["taskName"].text.isEmpty ? row.object.label : row["taskName"].text).animatedTextValue(row["taskName"].text.isEmpty ? row.object.label : row["taskName"].text).font(AppFont.headline)
+                            Text(readableDate(row["createTime"])).animatedTextValue(readableDate(row["createTime"])).font(AppFont.subheadline).foregroundStyle(.secondary)
+                            if !row["content"].text.isEmpty { Text(row["content"].text).animatedTextValue(row["content"].text).font(AppFont.subheadline) }
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(RowMetrics.insets)
                     }
                 }
@@ -158,10 +158,10 @@ struct WarehouseStockView: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 NavigationLink { WarehouseStockFacts(row: row) } label: {
                     VStack(alignment: .leading, spacing: RowMetrics.spacing) {
-                        HStack { Text(row["material"]["materialName"].text).font(AppFont.headline); Spacer(); Text(quantity(row)).font(AppFont.subheadline.weight(.medium)) }
-                        Text("编号：" + row["material"]["materialNum"].text).font(AppFont.subheadline).foregroundStyle(.secondary)
-                        Text("仓库：" + row["warehouse"]["warehouseName"].text).font(AppFont.subheadline).foregroundStyle(.secondary)
-                        Text("记录时间：" + readableDate(row["createTime"])).font(AppFont.subheadline).foregroundStyle(.secondary)
+                        HStack { Text(row["material"]["materialName"].text).animatedTextValue(row["material"]["materialName"].text).font(AppFont.headline); Spacer(); Text(quantity(row)).animatedTextValue(quantity(row)).font(AppFont.subheadline.weight(.medium)) }
+                        Text("编号：" + row["material"]["materialNum"].text).animatedTextValue("编号：" + row["material"]["materialNum"].text).font(AppFont.subheadline).foregroundStyle(.secondary)
+                        Text("仓库：" + row["warehouse"]["warehouseName"].text).animatedTextValue("仓库：" + row["warehouse"]["warehouseName"].text).font(AppFont.subheadline).foregroundStyle(.secondary)
+                        Text("记录时间：" + readableDate(row["createTime"])).animatedTextValue("记录时间：" + readableDate(row["createTime"])).font(AppFont.subheadline).foregroundStyle(.secondary)
                     }
                 }.uniformRow()
             }
@@ -210,8 +210,8 @@ struct WarehouseStockFacts: View {
     }
     var body: some View {
         List {
-            Section("物料信息") { ForEach([("material.materialName", "名称"), ("material.materialNum", "物料编号"), ("material.materialModel", "规格型号"), ("material.brand.brandName", "品牌"), ("material.materialCategory.categoryName", "类别"), ("warehouse.warehouseName", "仓库"), ("place", "库位"), ("amount", "库存数量"), ("averagePrice", "平均价格"), ("inventoryLowerLimit", "库存下限"), ("inventoryLimit", "库存上限"), ("createTime", "记录时间")], id: \.0) { key, title in LabeledContent(title, value: value(key)) } }
-            LabeledContent("单位", value: row["material"]["unit"].text.isEmpty ? "PCS" : row["material"]["unit"].text)
+            Section("物料信息") { ForEach([("material.materialName", "名称"), ("material.materialNum", "物料编号"), ("material.materialModel", "规格型号"), ("material.brand.brandName", "品牌"), ("material.materialCategory.categoryName", "类别"), ("warehouse.warehouseName", "仓库"), ("place", "库位"), ("amount", "库存数量"), ("averagePrice", "平均价格"), ("inventoryLowerLimit", "库存下限"), ("inventoryLimit", "库存上限"), ("createTime", "记录时间")], id: \.0) { key, title in LabeledContent(title) { Text(value(key)).animatedTextValue(value(key)) } } }
+            LabeledContent("单位") { Text(row["material"]["unit"].text.isEmpty ? "PCS" : row["material"]["unit"].text).animatedTextValue(row["material"]["unit"].text.isEmpty ? "PCS" : row["material"]["unit"].text) }
         }.navigationTitle("仓库库存详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
     }
 }
@@ -228,11 +228,11 @@ struct WarehouseReceiptsView: View {
             LoadingRow(isPresented: loading || gate.busy, title: "正在加载入库记录")
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 Section(row["entryNumber"].text) {
-                    LabeledContent("入库时间", value: readableDate(row["warehousingTime"]))
-                    LabeledContent("入库仓库", value: row["warehouse"]["warehouseName"].text)
-                    LabeledContent("入库人", value: row["user"]["realName"].text)
-                    LabeledContent("申请日期", value: readableDate(row["applyDate"]))
-                }
+                    LabeledContent("入库时间") { Text(readableDate(row["warehousingTime"])).animatedTextValue(readableDate(row["warehousingTime"])) }
+                    LabeledContent("入库仓库") { Text(row["warehouse"]["warehouseName"].text).animatedTextValue(row["warehouse"]["warehouseName"].text) }
+                    LabeledContent("入库人") { Text(row["user"]["realName"].text).animatedTextValue(row["user"]["realName"].text) }
+                    LabeledContent("申请日期") { Text(readableDate(row["applyDate"])).animatedTextValue(readableDate(row["applyDate"])) }
+                }.animatedTextValue(row["entryNumber"].text)
             }
             if preview { DemoNotice() }
         }.navigationTitle("入库记录").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()

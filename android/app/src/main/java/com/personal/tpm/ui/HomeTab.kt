@@ -134,7 +134,7 @@ fun HomeTab(vm: HomeViewModel, gridState: LazyGridState, pullState: PullToRefres
             LazyVerticalGrid(
                 state = gridState,
                 columns = GridCells.Adaptive(minSize = 150.dp),
-                modifier = nested.fillMaxSize().pullDown(pullState, vm.refreshing).elastic(top = false),
+                modifier = nested.fillMaxSize().scrollEdges(MaterialTheme.colorScheme.background, before = { gridState.canScrollBackward }, after = { gridState.canScrollForward }),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 104.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -154,7 +154,7 @@ fun HomeTab(vm: HomeViewModel, gridState: LazyGridState, pullState: PullToRefres
 
 @Composable
 fun SectionTitle(text: String) {
-    Text(text, Modifier.padding(start = 4.dp, top = 4.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+    AnimatedLabel(text, Modifier.padding(start = 4.dp, top = 4.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
 }
 
 /** A soft round badge with the icon in the card's colour. */
@@ -174,7 +174,7 @@ fun AnimatedCount(count: Int?, style: androidx.compose.ui.text.TextStyle, color:
             if (initialState == null) fadeIn(tween(Motion.Normal, easing = Motion.Change)) togetherWith fadeOut(tween(Motion.Instant, easing = Motion.Change))
             else (slideInVertically(tween(Motion.Slow, easing = Motion.Change)) { it / 2 } + fadeIn(tween(Motion.Slow, easing = Motion.Change))) togetherWith (slideOutVertically(tween(Motion.Slow, easing = Motion.Change)) { -it / 2 } + fadeOut(tween(Motion.Fast, easing = Motion.Change)))
         },
-    ) { value -> if (value == null) LoadingText("", style.copy(fontWeight = weight), color) else Text(value.toString(), style = style, fontWeight = weight, color = color) }
+    ) { value -> if (value == null) LoadingText("", style.copy(fontWeight = weight), color) else AnimatedLabel(value.toString(), style = style, fontWeight = weight, color = color) }
 }
 
 /** A full-width card: badge, title and a line under it, the number (or an arrow) on the right. */
@@ -187,8 +187,8 @@ fun WideCard(title: String, subtitle: String, icon: ImageVector, tint: Color, co
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Badge(icon, tint)
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                AnimatedLabel(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                AnimatedLabel(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             AnimatedCount(count, MaterialTheme.typography.headlineSmall, tint)
         }
@@ -224,7 +224,7 @@ fun StateCard(title: String, icon: ImageVector, tint: Color, count: Int?, onClic
                 if (title == "已完结") Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 else AnimatedCount(count, MaterialTheme.typography.headlineSmall, tint)
             }
-            Text(title, style = MaterialTheme.typography.titleMedium)
+            AnimatedLabel(title, style = MaterialTheme.typography.titleMedium)
         }
     }
 }

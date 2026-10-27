@@ -76,27 +76,27 @@ struct WorkOrderCard<Destination: View>: View {
             Button { open() } label: {
                 // The status word sits on the first line of the title, on the same baseline.
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    WrappingContent { Text(title).font(AppFont.headline).foregroundStyle(Color.primary) }
-                    if !status.isEmpty { Text(status).font(AppFont.subheadline.weight(.semibold)).foregroundStyle(emphasis).frame(maxWidth: 96, alignment: .trailing).fixedSize(horizontal: false, vertical: true) }
+                    WrappingContent { Text(title).animatedTextValue(title).font(AppFont.headline).foregroundStyle(Color.primary) }
+                    if !status.isEmpty { Text(status).animatedTextValue(status).font(AppFont.subheadline.weight(.semibold)).foregroundStyle(emphasis).frame(maxWidth: 96, alignment: .trailing).fixedSize(horizontal: false, vertical: true) }
                 }
                 .contentShape(.rect)
             }.buttonStyle(.plain).navigationLinkIndicatorVisibility(.hidden)
                 .accessibilityIdentifier("order-title-" + reference)
-            WrappingContent { Text((reference.isEmpty ? "—" : reference) + (machine.isEmpty ? "" : " · " + machine)).font(AppFont.subheadline).foregroundStyle(.secondary) }
+            WrappingContent { Text((reference.isEmpty ? "—" : reference) + (machine.isEmpty ? "" : " · " + machine)).animatedTextValue((reference.isEmpty ? "—" : reference) + (machine.isEmpty ? "" : " · " + machine)).font(AppFont.subheadline).foregroundStyle(.secondary) }
                 .accessibilityLabel(referenceTitle + "：" + reference + (machine.isEmpty ? "" : "，机台号：" + machine))
                 .accessibilityIdentifier("order-reference-" + reference)
             ForEach(Array(summaryFacts.enumerated()), id: \.offset) { _, fact in
-                WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(AppFont.subheadline).foregroundStyle(.secondary) }
+                WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).animatedTextValue(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(AppFont.subheadline).foregroundStyle(.secondary) }
             }
             ForEach(Array(statusNote.enumerated()), id: \.offset) { _, fact in
-                WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(AppFont.subheadline).foregroundStyle(.orange) }
+                WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).animatedTextValue(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(AppFont.subheadline).foregroundStyle(.orange) }
                     .accessibilityIdentifier("order-note-" + reference)
             }
             VStack(spacing: 0) {
             ViewThatFits(in: .horizontal) {
                 footer
                 VStack(alignment: .trailing, spacing: 6) {
-                    Text(time).font(AppFont.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                    Text(time).animatedTextValue(time).font(AppFont.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("order-time-" + reference)
                     expandButton
                 }
@@ -107,7 +107,7 @@ struct WorkOrderCard<Destination: View>: View {
                         ReadableFact(title: fact.0, value: fact.1)
                     }
                     Button { open() } label: {
-                        Label(selecting == nil ? "打开工单" : "查看工单", systemImage: "arrow.up.right.square").font(AppFont.subheadline.weight(.semibold))
+                        Label(selecting == nil ? "打开工单" : "查看工单", systemImage: "arrow.up.right.square").animatedTextValue(selecting == nil ? "打开工单" : "查看工单").font(AppFont.subheadline.weight(.semibold))
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }.buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.regular)
                         .accessibilityIdentifier("order-open-" + reference)
@@ -123,7 +123,7 @@ struct WorkOrderCard<Destination: View>: View {
     }
     private var footer: some View {
         HStack(alignment: .center, spacing: 12) {
-                Text(time).font(AppFont.subheadline).foregroundStyle(.secondary).fixedSize()
+                Text(time).animatedTextValue(time).font(AppFont.subheadline).foregroundStyle(.secondary).fixedSize()
                     .accessibilityIdentifier("order-time-" + reference)
                 Spacer(minLength: 0)
                 expandButton
@@ -132,7 +132,7 @@ struct WorkOrderCard<Destination: View>: View {
     private var expandButton: some View {
         Button { withAnimation(reduceMotion ? nil : .smooth(duration: 0.5)) { expanded.toggle() } } label: {
             HStack(alignment: .center, spacing: 6) {
-                Text(expanded ? "收起详情" : "展开详情").font(AppFont.subheadline.weight(.medium))
+                Text(expanded ? "收起详情" : "展开详情").animatedTextValue(expanded ? "收起详情" : "展开详情").font(AppFont.subheadline.weight(.medium))
                 Image(systemName: "chevron.down").font(.system(size: 12, weight: .semibold)).frame(width: 14, height: 20).rotationEffect(.degrees(expanded ? 180 : 0))
             }
             .foregroundStyle(.white).padding(.horizontal, 12)
@@ -150,8 +150,8 @@ struct ReadableFact: View {
     var body: some View {
         // Fixed title column, left-aligned values: every row of every card lines up the same way.
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(title).foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
-            WrappingContent(alignment: .leading) { Text(value.isEmpty ? "—" : value) }
+            Text(title).animatedTextValue(title).foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
+            WrappingContent(alignment: .leading) { Text(value.isEmpty ? "—" : value).animatedTextValue(value.isEmpty ? "—" : value) }
         }.font(AppFont.subheadline).contentShape(.rect)
             .accessibilityElement(children: .contain)
             .onTapGesture { shown = true }
@@ -177,7 +177,7 @@ struct FullTextSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                Text(text).textSelection(.enabled)
+                Text(text).animatedTextValue(text).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(20)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
             }
@@ -204,7 +204,7 @@ struct CopyButton: View {
             copied = true
             Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
         } label: {
-            Label(copied ? "已复制" : title, systemImage: copied ? "checkmark" : "doc.on.doc")
+            Label(copied ? "已复制" : title, systemImage: copied ? "checkmark" : "doc.on.doc").animatedTextValue(copied ? "已复制" : title)
         }
         .disabled(text.isEmpty)
         .sensoryFeedback(.success, trigger: copied) { _, new in new }
@@ -237,7 +237,7 @@ func limitedText(_ value: String, limit: Int) -> String {
 struct CharacterCount: View {
     let text: String
     let limit: Int
-    var body: some View { Text("\(text.utf16.count)/\(limit) 字符").font(AppFont.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing) }
+    var body: some View { Text("\(text.utf16.count)/\(limit) 字符").animatedTextValue("\(text.utf16.count)/\(limit) 字符").font(AppFont.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing) }
 }
 
 /// A detail screen always wants the tab bar hidden, whatever the screens around it do.

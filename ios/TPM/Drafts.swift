@@ -174,8 +174,8 @@ struct DraftBoxView: View {
                     onPick(draft)
                 } label: {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(draft.title).font(AppFont.headline).foregroundStyle(Color.primary)
-                        Text(draft.subtitle).font(AppFont.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                        Text(draft.title).animatedTextValue(draft.title).font(AppFont.headline).foregroundStyle(Color.primary)
+                        Text(draft.subtitle).animatedTextValue(draft.subtitle).font(AppFont.subheadline).foregroundStyle(.secondary).lineLimit(2)
                     }.frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect)
                 }
                 .buttonStyle(.plain)

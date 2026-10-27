@@ -12,10 +12,10 @@ import androidx.compose.ui.unit.dp
 val LocalScrollSurface = compositionLocalOf<Color?> { null }
 
 /** Same soft colour edge as the chrome; paint only, never intercepts a tap or changes scroll geometry. */
-fun Modifier.scrollEdges(color: Color): Modifier = drawWithContent {
+fun Modifier.scrollEdges(color: Color, before: () -> Boolean = { true }, after: () -> Boolean = { true }): Modifier = drawWithContent {
     drawContent()
     val top = minOf(18.dp.toPx(), size.height / 3)
     val bottom = minOf(22.dp.toPx(), size.height / 3)
-    drawRect(Brush.verticalGradient(listOf(color, color.copy(alpha = .55f), Color.Transparent), 0f, top), size = Size(size.width, top))
-    drawRect(Brush.verticalGradient(listOf(Color.Transparent, color.copy(alpha = .55f), color), size.height - bottom, size.height), Offset(0f, size.height - bottom), Size(size.width, bottom))
+    if (before()) drawRect(Brush.verticalGradient(listOf(color, color.copy(alpha = .55f), Color.Transparent), 0f, top), size = Size(size.width, top))
+    if (after()) drawRect(Brush.verticalGradient(listOf(Color.Transparent, color.copy(alpha = .55f), color), size.height - bottom, size.height), Offset(0f, size.height - bottom), Size(size.width, bottom))
 }

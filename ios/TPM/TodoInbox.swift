@@ -119,8 +119,8 @@ struct TodoCardRow: View, Equatable {
                 LiveWorkflowDetail(kind: kind, id: task["businessKey"].text)
             } else {
                 List {
-                    LabeledContent("流程类型", value: "其他流程")
-                    LabeledContent("当前节点", value: task["name"].text)
+                    LabeledContent("流程类型") { Text("其他流程").animatedTextValue("其他流程") }
+                    LabeledContent("当前节点") { Text(task["name"].text).animatedTextValue(task["name"].text) }
                     Text("此类流程暂未开放处理").foregroundStyle(.secondary)
                 }.navigationTitle("待办详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
             }

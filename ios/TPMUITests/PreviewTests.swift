@@ -141,7 +141,7 @@ final class PreviewTests: XCTestCase {
         }
     }
 
-    func testDraftBoxOpensFromTheNewFormAndKeyboardButtonSitsInTheActionBar() {
+    func testKeyboardDoneDismissesKeyboardAndRestoresDocumentActions() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "new-fault", "--skip-biometrics"]
         app.launch()
@@ -157,8 +157,14 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(dismiss.waitForExistence(timeout: 10))
         let save = app.buttons["保存"], submit = app.buttons["提交"]
         XCTAssertFalse(dismiss.frame.isEmpty, "键盘附件栏中的收起键盘按钮必须可见")
+        XCTAssertFalse(save.exists, "输入时不叠加保存按钮")
+        XCTAssertFalse(submit.exists, "输入时不叠加提交按钮")
         dismiss.tap()
-        XCTAssertFalse(app.buttons["keyboard-dismiss"].waitForExistence(timeout: 2))
+        let closed = NSPredicate { _, _ in app.keyboards.count == 0 }
+        expectation(for: closed, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(submit.exists)
     }
 
     func testSwipeMenuPinsAnOptionToTheTopOfThePicker() {

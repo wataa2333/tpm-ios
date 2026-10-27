@@ -12,6 +12,10 @@ private struct InterfaceMotion<Value: Equatable>: ViewModifier {
 }
 
 extension View {
+    /// State-driven text replacement; preserve the original Text's formatting and localization.
+    func animatedTextValue(_ value: String) -> some View {
+        contentTransition(.opacity).interfaceMotion(value, duration: 0.25)
+    }
     func interfaceMotion<Value: Equatable>(_ value: Value, duration: Double = 0.3) -> some View {
         modifier(InterfaceMotion(value: value, duration: duration))
     }

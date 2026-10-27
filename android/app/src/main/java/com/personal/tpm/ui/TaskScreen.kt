@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import com.personal.tpm.data.Jv
 import com.personal.tpm.data.OrderKind
@@ -85,7 +86,7 @@ fun TaskActionBar(kind: OrderKind, order: Jv, includeNavigationPadding: Boolean 
     Surface(Modifier.fadeAbove(MaterialTheme.colorScheme.background), color = MaterialTheme.colorScheme.background, shadowElevation = 0.dp) {
         Row(Modifier.fillMaxWidth().then(if(includeNavigationPadding) Modifier.navigationBarsPadding() else Modifier).padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical), horizontalArrangement = Arrangement.spacedBy(BarSpec.Gap)) {
             if (canReturn) SoftButton(onClick = { onOpen(true) }, Modifier.weight(1f).height(BarSpec.ButtonHeight)) { Text("退单") }
-            Button(onClick = { onOpen(false) }, Modifier.weight(1f).height(BarSpec.ButtonHeight)) { Text(taskActionTitle(task, kind)) }
+            Button(onClick = { onOpen(false) }, Modifier.weight(1f).height(BarSpec.ButtonHeight)) { AnimatedLabel(taskActionTitle(task, kind)) }
         }
     }
 }
@@ -247,7 +248,19 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
         }) return@LaunchedEffect
         submit()
     }
-    Scaffold(
+    val processingDefault = !startReturn && loadError == null && failure == null && (!autoSubmitAttempted || submitting) && (loading || assignmentsLoading || !assignmentsReady || state["canSubmit"].bool)
+    if (processingDefault) {
+        Scaffold(contentWindowInsets = appContentInsets(), containerColor = MaterialTheme.colorScheme.background) { padding ->
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    androidx.compose.material3.CircularProgressIndicator()
+                    AnimatedLabel(if (submitting) "正在提交…" else "正在准备提交…")
+                }
+            }
+        }
+        return
+    }
+    Scaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppTopBar(
@@ -272,15 +285,15 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
                 Button(
                     onClick = { submit() }, enabled = ready,
                     modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical).height(BarSpec.ButtonHeight),
-                ) { Text(if (submitting) "正在提交…" else if (category == "SIGNED" && condition == "agree") "签到" else "提交") }
+                ) { AnimatedLabel(if (submitting) "正在提交…" else if (category == "SIGNED" && condition == "agree") "签到" else "提交") }
             }
         },
     ) { padding ->
         Box(Modifier.padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding())) {
             RoundedSheet {
                 PageWidth {
-                    Column(Modifier.fillMaxSize().elastic().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        loadError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        loadError?.let { AnimatedLabel(it, color = MaterialTheme.colorScheme.error) }
                         if (kind == OrderKind.Fault && category == "SIGNED") {
                             FormTitle("签到设备")
                             GroupCard {
@@ -313,8 +326,8 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
                                 lines.forEachIndexed { i, line ->
                                     val material = line["material"]
                                     Column(Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp)) {
-                                        Text(material["materialDesc"].text, style = MaterialTheme.typography.titleSmall)
-                                        Text("申请数量 " + materialQuantity(line["entryQuantity"].text, material), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        AnimatedLabel(material["materialDesc"].text, style = MaterialTheme.typography.titleSmall)
+                                        AnimatedLabel("申请数量 " + materialQuantity(line["entryQuantity"].text, material), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         InputRow("实发数量", actual[i].orEmpty(), { actual = actual + (i to it) }, required = true, suffix = materialUnit(material))
                                     }
                                     if (i < lines.lastIndex) GroupDivider()
@@ -379,7 +392,7 @@ private fun HandoffSheet(taskId: String, operation: String, onDismiss: () -> Uni
     val title = when (operation) { "transfer" -> "流程转办"; "delegate" -> "流程委派"; else -> "委派完成" }
     AppSheet(onDismissRequest = { if (!saving) onDismiss() }, containerColor = MaterialTheme.colorScheme.surfaceContainerLowest) {
         Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(title, style = MaterialTheme.typography.titleLarge)
+            AnimatedLabel(title, style = MaterialTheme.typography.titleLarge)
             if (operation != "resolve") GroupCard { PickRow(if (operation == "transfer") "转办人" else "委派给", user.label, true) { picking = true } }
             TextEntry(if (operation == "resolve") "处理说明" else "原因", reason, { reason = it }, limit = 255, minLines = 3, required = true, placeholder = "请输入")
             Button(
@@ -402,7 +415,7 @@ private fun HandoffSheet(taskId: String, operation: String, onDismiss: () -> Uni
                 },
                 enabled = !saving && reason.isNotBlank() && (operation == "resolve" || user["userName"].text.isNotEmpty()),
                 modifier = Modifier.fillMaxWidth().height(48.dp),
-            ) { Text(if (saving) "正在提交…" else "提交") }
+            ) { AnimatedLabel(if (saving) "正在提交…" else "提交") }
         }
     }
     if (picking) ReferenceSheet(RefSource.WorkflowUsers, emptySet(), false, null, onToggle = { user = it }, onDismiss = { picking = false })

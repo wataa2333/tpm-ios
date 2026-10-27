@@ -21,7 +21,7 @@ fun DisclosureToggle(expanded: Boolean, label: String, compact: Boolean = false,
     Row(Modifier.fillMaxWidth().heightIn(min=if(compact) 40.dp else 48.dp)
         .clickable(interactionSource=remember{MutableInteractionSource()},indication=null,role=androidx.compose.ui.semantics.Role.Button,onClick=onClick),
         verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
-        Text(label,color=MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.labelLarge)
+        AnimatedLabel(label,color=MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.labelLarge)
         Icon(Icons.Default.ExpandMore,contentDescription=if(expanded) "收起" else "展开",tint=MaterialTheme.colorScheme.primary,modifier=Modifier.graphicsLayer{rotationZ=angle})
     }
 }

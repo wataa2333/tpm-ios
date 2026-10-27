@@ -42,8 +42,8 @@ struct DashboardCard: View {
                 Image(systemName: symbol).font(AppFont.title2.weight(.semibold)).foregroundStyle(tint)
             }
             Spacer(minLength: 6)
-            Text(title).font(largeTitle ? AppFont.title2.weight(.bold) : AppFont.headline).foregroundStyle(.primary).multilineTextAlignment(.leading)
-            if !subtitle.isEmpty { Text(subtitle).font(AppFont.caption).foregroundStyle(.secondary).multilineTextAlignment(.leading) }
+            Text(title).animatedTextValue(title).font(largeTitle ? AppFont.title2.weight(.bold) : AppFont.headline).foregroundStyle(.primary).multilineTextAlignment(.leading)
+            if !subtitle.isEmpty { Text(subtitle).animatedTextValue(subtitle).font(AppFont.caption).foregroundStyle(.secondary).multilineTextAlignment(.leading) }
         }
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: wide ? wideHeight : smallHeight, alignment: .leading)
@@ -89,7 +89,7 @@ struct QuickQueryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center) {
-                Text(title).font(AppFont.headline).foregroundStyle(.primary)
+                Text(title).animatedTextValue(title).font(AppFont.headline).foregroundStyle(.primary)
                 Spacer(minLength: 8)
                 Image(systemName: symbol).font(AppFont.title2.weight(.semibold)).foregroundStyle(tint)
             }
@@ -142,7 +142,7 @@ private struct DashboardWave: Shape {
 private struct DashboardHeading: View {
     let title: String
     var body: some View {
-        Text(title).font(AppFont.title3.weight(.semibold)).foregroundStyle(.primary)
+        Text(title).animatedTextValue(title).font(AppFont.title3.weight(.semibold)).foregroundStyle(.primary)
             .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8).accessibilityAddTraits(.isHeader)
     }
 }

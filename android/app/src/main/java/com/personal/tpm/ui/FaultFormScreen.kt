@@ -120,7 +120,7 @@ fun FaultFormScreen(existingId: String?, startDraftId: String?, onClose: () -> U
         bottomBar = { FormActionBar(busy = form.saving || form.loading, enabled = form.ready && !form.loading && !photoBusy, onSave = { if (draftsAllowed) keepDraft() else submit(false) }, onSubmit = { submit(true) }) },
     ) {
         if (form.error != null && !form.ready) {
-            Text(form.error ?: "", color = MaterialTheme.colorScheme.error)
+            AnimatedLabel(form.error ?: "", color = MaterialTheme.colorScheme.error)
             androidx.compose.material3.TextButton(onClick = { scope.launch { initialize() } }) { Text("重试") }
             return@FormPage
         }

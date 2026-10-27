@@ -45,7 +45,7 @@ fun RepairTrendTable(series:List<RepairTrend>,focus:Int,onFocus:(Int)->Unit,mont
     var transposed by rememberSaveable { mutableStateOf(false) }
     GroupCard {
         Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-            Text("统计表 · ${if(monthly) "按月" else "按天"}",style=MaterialTheme.typography.titleSmall)
+            AnimatedLabel("统计表 · ${if(monthly) "按月" else "按天"}",style=MaterialTheme.typography.titleSmall)
             FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 ChoiceChip(!transposed,{transposed=false},"日期为行")
                 ChoiceChip(transposed,{transposed=true},"人员为行")
@@ -91,17 +91,17 @@ private fun TrendTableGrid(series:List<RepairTrend>,focus:Int,onFocus:(Int)->Uni
     fun total(values:List<Int?>)=if(values.any{it!=null}) values.sumOf{it ?: 0}.toString() else "—"
     @Composable fun Label(text:String,account:String?=null,color:Color=MaterialTheme.colorScheme.onSurface) {
         Column(Modifier.width(labelWidth).padding(end=6.dp),verticalArrangement=Arrangement.spacedBy(2.dp)) {
-            Text(text,color=color,style=MaterialTheme.typography.labelMedium,maxLines=1,overflow=TextOverflow.Ellipsis)
-            if(account!=null) Text(account,style=MaterialTheme.typography.labelSmall,maxLines=1,overflow=TextOverflow.Ellipsis)
+            AnimatedLabel(text,color=color,style=MaterialTheme.typography.labelMedium,maxLines=1,overflow=TextOverflow.Ellipsis)
+            if(account!=null) AnimatedLabel(account,style=MaterialTheme.typography.labelSmall,maxLines=1,overflow=TextOverflow.Ellipsis)
         }
     }
-    @Composable fun Total(text:String) { Text(text,Modifier.width(totalWidth).padding(end=6.dp),color=accent,style=MaterialTheme.typography.labelMedium,maxLines=1) }
+    @Composable fun Total(text:String) { AnimatedLabel(text,Modifier.width(totalWidth).padding(end=6.dp),color=accent,style=MaterialTheme.typography.labelMedium,maxLines=1) }
     @Composable fun RowScope.Cells(background:Color=base,content:@Composable RowScope.()->Unit) {
         Box(Modifier.weight(1f).tableEdgeFade(horizontal,background)) {
             Row(Modifier.fillMaxWidth().horizontalScroll(horizontal)) { Row(Modifier.width(cellWidth*columns),content=content) }
         }
     }
-    @Composable fun Value(text:String,index:Int=-1) { Text(text,Modifier.width(cellWidth).then(if(swapped && index==focus) Modifier.background(MaterialTheme.colorScheme.primaryContainer).clickable{onFocus(index)} else if(swapped && index>=0) Modifier.clickable{onFocus(index)} else Modifier).padding(horizontal=8.dp,vertical=6.dp),color=if(swapped && index==focus) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,style=MaterialTheme.typography.bodySmall,maxLines=1) }
+    @Composable fun Value(text:String,index:Int=-1) { AnimatedLabel(text,Modifier.width(cellWidth).then(if(swapped && index==focus) Modifier.background(MaterialTheme.colorScheme.primaryContainer).clickable{onFocus(index)} else if(swapped && index>=0) Modifier.clickable{onFocus(index)} else Modifier).padding(horizontal=8.dp,vertical=6.dp),color=if(swapped && index==focus) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,style=MaterialTheme.typography.bodySmall,maxLines=1) }
     Column {
         Row(Modifier.fillMaxWidth().padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
             Label(if(swapped) "人员" else "日期")
@@ -109,12 +109,12 @@ private fun TrendTableGrid(series:List<RepairTrend>,focus:Int,onFocus:(Int)->Uni
             Cells {
                 if(swapped) dates.forEachIndexed { index,date ->
                     Box(Modifier.width(cellWidth).then(if(index==focus) Modifier.background(MaterialTheme.colorScheme.primaryContainer) else Modifier).clickable{onFocus(index)}.padding(horizontal=8.dp,vertical=6.dp)) {
-                        Text(trendDateLabel(date,monthly),style=MaterialTheme.typography.labelMedium,maxLines=1,overflow=TextOverflow.Ellipsis)
+                        AnimatedLabel(trendDateLabel(date,monthly),style=MaterialTheme.typography.labelMedium,maxLines=1,overflow=TextOverflow.Ellipsis)
                     }
                 } else people.forEach { person ->
                     Column(Modifier.width(cellWidth).padding(horizontal=8.dp),verticalArrangement=Arrangement.spacedBy(2.dp)) {
-                        Text(person.name,color=colors[person.key] ?: accent,style=MaterialTheme.typography.labelMedium,maxLines=1,overflow=TextOverflow.Ellipsis)
-                        Text(person.key?.removePrefix("user:")?.removePrefix("id:") ?: "身份未明确",style=MaterialTheme.typography.labelSmall,maxLines=1,overflow=TextOverflow.Ellipsis)
+                        AnimatedLabel(person.name,color=colors[person.key] ?: accent,style=MaterialTheme.typography.labelMedium,maxLines=1,overflow=TextOverflow.Ellipsis)
+                        AnimatedLabel(person.key?.removePrefix("user:")?.removePrefix("id:") ?: "身份未明确",style=MaterialTheme.typography.labelSmall,maxLines=1,overflow=TextOverflow.Ellipsis)
                     }
                 }
             }

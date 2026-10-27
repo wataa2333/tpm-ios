@@ -33,8 +33,8 @@ internal fun PrecisionApiProbe() {
     }
     GroupCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("当前账号：${session.accountName} · ${session.currentFactoryName}")
-            Text("查询账号：${queries.label(session)}")
+            AnimatedLabel("当前账号：${session.accountName} · ${session.currentFactoryName}")
+            AnimatedLabel("查询账号：${queries.label(session)}")
             Text("使用已配置的查询账号，只显示017CNC加工中心。不会自动查询或修改单据。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SoftButton(enabled = !busy && session.signedIn && session.currentFactoryId.isNotEmpty(),
@@ -81,8 +81,8 @@ internal fun PrecisionApiProbe() {
                             if (session.scope.value == requestedScope && queries.revision == revision) busy = false
                         }
                     }
-                }) { Text(if (busy) "正在验证…" else "验证精密度接口") }
-            if (result.isNotEmpty()) Text(result,
+                }) { AnimatedLabel(if (busy) "正在验证…" else "验证精密度接口") }
+            if (result.isNotEmpty()) AnimatedLabel(result,
                 color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.bodySmall)
         }

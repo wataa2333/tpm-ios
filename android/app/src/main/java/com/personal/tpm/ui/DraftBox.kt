@@ -24,14 +24,14 @@ import com.personal.tpm.data.DraftTarget
 fun DraftBoxScreen(onBack: () -> Unit, onOpenNew: (String) -> Unit) {
     val session = LocalSession.current
     var notice by remember { mutableStateOf<String?>(null) }
-    Scaffold(
+    Scaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(title = "草稿箱", onBack = onBack) },
     ) { padding ->
         androidx.compose.foundation.layout.Box(Modifier.padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding())) {
             RoundedSheet {
                 PageWidth {
-                    Column(Modifier.fillMaxSize().elastic().verticalScroll(rememberScrollState()).padding(top = 8.dp, bottom = 24.dp)) {
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 8.dp, bottom = 24.dp)) {
                         DraftList(session.draftScope, DraftTarget.Everything) { draft ->
                             if (draft.orderId == null) onOpenNew(draft.id)
                             else notice = "这份草稿属于单号 " + (draft.orderSn ?: "") + " 的工单。请打开那张工单，点右上角的“编辑”继续。"

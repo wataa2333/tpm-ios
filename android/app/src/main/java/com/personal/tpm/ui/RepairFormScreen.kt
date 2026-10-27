@@ -179,8 +179,8 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
                 Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
                     Row(Modifier.padding(start = 26.dp, end = 12.dp), verticalAlignment = Alignment.Top) {
                         Column(Modifier.weight(1f)) {
-                            Text(material["materialDesc"].text, style = MaterialTheme.typography.titleSmall)
-                            Text("料号：" + com.personal.tpm.data.repairMaterialCode(row).ifEmpty { "未提供" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            AnimatedLabel(material["materialDesc"].text, style = MaterialTheme.typography.titleSmall)
+                            AnimatedLabel("料号：" + com.personal.tpm.data.repairMaterialCode(row).ifEmpty { "未提供" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(
                                 listOf(row["outbound"]["outNumber"].text, row["outbound"]["recipientUser"]["realName"].text, "申请 " + materialQuantity(line["entryQuantity"].text, material), "实发 " + materialQuantity(line["actualQuantity"].text, material),
                                     "剩余 " + materialQuantity(quantityText(line["actualQuantity"].number - line["usedQuantity"].number), material)).filter { it.isNotEmpty() }.joinToString(" · "),
@@ -221,6 +221,6 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
 private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, contentDescription = null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+        AnimatedLabel(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }

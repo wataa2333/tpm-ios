@@ -26,6 +26,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalLayoutDirection
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 
@@ -100,8 +101,14 @@ fun ScrollableLazyColumn(modifier:Modifier=Modifier,state:LazyListState=remember
         val average=info.visibleItemsInfo.map{it.size}.average().takeIf{it.isFinite() && it>0} ?: return 1f
         return (viewport/(average*info.totalItemsCount)).toFloat().coerceIn(.04f,1f)
     }
-    Box(modifier,propagateMinConstraints=true) {
-        NativeLazyColumn(state=state,contentPadding=contentPadding,reverseLayout=reverseLayout,
+    val surface = LocalScrollSurface.current ?: MaterialTheme.colorScheme.background
+    val direction = LocalLayoutDirection.current
+    val sheetBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val listPadding = PaddingValues(start = contentPadding.calculateStartPadding(direction), end = contentPadding.calculateEndPadding(direction),
+        top = contentPadding.calculateTopPadding(), bottom = contentPadding.calculateBottomPadding() + sheetBottom)
+    Box(modifier.scrollEdges(surface, before = { if (reverseLayout) state.canScrollForward else state.canScrollBackward },
+        after = { if (reverseLayout) state.canScrollBackward else state.canScrollForward }),propagateMinConstraints=true) {
+        NativeLazyColumn(state=state,contentPadding=listPadding,reverseLayout=reverseLayout,
             verticalArrangement=verticalArrangement,horizontalAlignment=horizontalAlignment,
             flingBehavior=flingBehavior,userScrollEnabled=userScrollEnabled,content=content)
         Box(Modifier.matchParentSize()) {
@@ -130,9 +137,14 @@ fun ScrollableLazyColumn(modifier:Modifier=Modifier,state:LazyListState=remember
 }
 
 fun Modifier.pageVerticalScroll(state:ScrollState,enabled:Boolean=true,flingBehavior:FlingBehavior?=null,
-    reverseScrolling:Boolean=false):Modifier = this.pageScrollbar(
+    reverseScrolling:Boolean=false):Modifier = composed {
+    val surface = LocalScrollSurface.current ?: MaterialTheme.colorScheme.background
+    this.scrollEdges(surface, before = { if (reverseScrolling) state.canScrollForward else state.canScrollBackward },
+        after = { if (reverseScrolling) state.canScrollBackward else state.canScrollForward }).pageScrollbar(
         position={val progress=state.value.toFloat()/state.maxValue.coerceAtLeast(1);if(reverseScrolling) 1-progress else progress},
         fraction={state.viewportSize.toFloat()/(state.viewportSize.toLong()+state.maxValue).coerceAtLeast(1)},
         canScroll={enabled && state.maxValue in 1 until Int.MAX_VALUE},
         seek={value->state.scrollTo(((if(reverseScrolling) 1-value else value)*state.maxValue).toInt())}
     ).nativeVerticalScroll(state,enabled,flingBehavior,reverseScrolling)
+        .navigationBarsPadding()
+}

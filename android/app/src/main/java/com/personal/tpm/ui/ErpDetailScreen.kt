@@ -86,7 +86,7 @@ fun ErpDetailScreen(id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit
     LaunchedEffect(id, changed, if (independent) queryAccounts.revision else 0) { load() }
 
     Box(Modifier.fillMaxSize()) {
-    Scaffold(
+    Scaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = { if (!peeking) operatorDetail?.let { TaskActionBar(com.personal.tpm.data.OrderKind.Erp, it, onOpen=onOpenTask) } },
         topBar = {
@@ -107,17 +107,17 @@ fun ErpDetailScreen(id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit
                 PageWidth {
                     if (order == null) Box(Modifier.fillMaxSize(), Alignment.Center) {
                         if (error != null) Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(error ?: "", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
+                            AnimatedLabel(error ?: "", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
                             TextButton(onClick = { load() }) { Text("重试") }
                         }
-                    } else SelectionContainer { Column(Modifier.fillMaxSize().fadeInOnShow().elastic().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    } else SelectionContainer { Column(Modifier.fillMaxSize().fadeInOnShow().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         SectionTitle("ERP出库详情")
                         GroupCard {
                             FactRow("出库单号", order["outNumber"].text)
                             FactRow("单号", order["sn"].text)
                             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                 Text("状态", Modifier.width(96.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(approvalStateName(order["approvalState"].text), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = approvalColor(order["approvalState"].text))
+                                AnimatedLabel(approvalStateName(order["approvalState"].text), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = approvalColor(order["approvalState"].text))
                             }
                             FactRow("申请人", order["user"]["realName"].text)
                             FactRow("申请日期", order["applyDate"].dateText)
@@ -146,7 +146,7 @@ fun ErpDetailScreen(id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit
                         }
                         if (order["remark"].text.isNotEmpty()) {
                             SectionTitle("用途")
-                            GroupCard { Box(Modifier.padding(16.dp)) { SelectionContainer { Text(order["remark"].text) } } }
+                            GroupCard { Box(Modifier.padding(16.dp)) { SelectionContainer { AnimatedLabel(order["remark"].text) } } }
                         }
                         val process = order["processInstanceId"].text
                         if (process.isNotEmpty()) GroupCard {

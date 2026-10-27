@@ -46,11 +46,11 @@ struct ReadOnlyPoolView: View {
                         time: readableDate(row["planStartDate"]), facts: facts(row)) {
                         List {
                             Section("工单信息") {
-                                LabeledContent("工单名称", value: row[kind.nameKey].text)
-                                LabeledContent("状态", value: "待接单")
-                                if !row["asset"]["addressCode"].text.isEmpty { LabeledContent("机台号", value: row["asset"]["addressCode"].text) }
+                                LabeledContent("工单名称") { Text(row[kind.nameKey].text).animatedTextValue(row[kind.nameKey].text) }
+                                LabeledContent("状态") { Text("待接单").animatedTextValue("待接单") }
+                                if !row["asset"]["addressCode"].text.isEmpty { LabeledContent("机台号") { Text(row["asset"]["addressCode"].text).animatedTextValue(row["asset"]["addressCode"].text) } }
                                 ForEach(Array(facts(row).enumerated()), id: \.offset) { _, fact in
-                                    LabeledContent(fact.0, value: fact.1)
+                                    LabeledContent(fact.0) { Text(fact.1).animatedTextValue(fact.1) }
                                 }
                             }
                         }

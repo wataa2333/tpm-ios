@@ -103,7 +103,7 @@ fun ErpFormScreen(existingId: String?, referenceSn: String?, onClose: () -> Unit
         bottomBar = { FormActionBar(busy = form.saving, enabled = form.ready, onSave = { keepDraft() }, onSubmit = { submit() }) },
     ) {
         if (form.error != null && !form.ready) {
-            Text(form.error ?: "", color = MaterialTheme.colorScheme.error)
+            AnimatedLabel(form.error ?: "", color = MaterialTheme.colorScheme.error)
             TextButton(onClick = { scope.launch { form.load(session, existingId, referenceSn) } }) { Text("重试") }
             return@FormPage
         }
@@ -138,8 +138,8 @@ fun ErpFormScreen(existingId: String?, referenceSn: String?, onClose: () -> Unit
                 Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     Row(Modifier.padding(start = 26.dp, end = 12.dp), verticalAlignment = Alignment.Top) {
                         Column(Modifier.weight(1f)) {
-                            Text(material["materialDesc"].text, style = MaterialTheme.typography.titleSmall)
-                            Text(listOf(material["materialCode"].text, "库存 " + materialQuantity(material["onhandQty"].text, material), material["lot"].text, material["subInv"].text).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            AnimatedLabel(material["materialDesc"].text, style = MaterialTheme.typography.titleSmall)
+                            AnimatedLabel(listOf(material["materialCode"].text, "库存 " + materialQuantity(material["onhandQty"].text, material), material["lot"].text, material["subInv"].text).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         IconButton(onClick = { form.removeLine(index) }) { Icon(Icons.Filled.Delete, contentDescription = "删除明细", tint = MaterialTheme.colorScheme.error) }
                     }

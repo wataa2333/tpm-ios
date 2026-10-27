@@ -24,8 +24,8 @@ internal fun QueryAccountSettings() {
     var message by remember { mutableStateOf("") }
     GroupCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("查询账号：${queries.label(owner)}")
-            queries.fallbackNotice?.let { Text(it) }
+            AnimatedLabel("查询账号：${queries.label(owner)}")
+            queries.fallbackNotice?.let { AnimatedLabel(it) }
             Text("用于查询和看板的数据读取；工单操作仍使用当前登录账号。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(name, { name = it }, label = { Text("查询账号") }, singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth())
@@ -40,19 +40,19 @@ internal fun QueryAccountSettings() {
                     catch (e: Exception) { message = "设置失败：${e.message ?: "未知错误"}" }
                     finally { busy = false }
                 }
-            }) { Text(if (busy) "正在验证…" else "验证并保存") }
+            }) { AnimatedLabel(if (busy) "正在验证…" else "验证并保存") }
             TextButton(enabled = !busy && queries.username.isNotEmpty(), onClick = {
                 try { queries.useOperator(); password = ""; message = "已删除独立查询凭据，改用当前登录账号" }
                 catch (e: Exception) { message = e.message ?: "无法删除查询凭据" }
             }) { Text("使用当前登录账号并删除查询凭据") }
-            if (message.isNotEmpty()) Text(message, style = MaterialTheme.typography.bodySmall)
+            if (message.isNotEmpty()) AnimatedLabel(message, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
 
 @Composable
 fun QueryAccountSettingsScreen(onBack: () -> Unit) {
-    Scaffold(topBar = { AppTopBar("独立查询账号", onBack = onBack) }) { padding ->
+    Scaffold(contentWindowInsets = appContentInsets(), topBar = { AppTopBar("独立查询账号", onBack = onBack) }) { padding ->
         PageWidth { Column(Modifier.padding(padding).pageVerticalScroll(rememberScrollState()).padding(16.dp)) { QueryAccountSettings() } }
     }
 }

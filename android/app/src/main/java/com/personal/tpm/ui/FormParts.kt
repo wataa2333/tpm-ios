@@ -106,7 +106,7 @@ fun ChoiceChip(selected: Boolean, onClick: () -> Unit, label: String, enabled: B
             enter = androidx.compose.animation.expandHorizontally(androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), expandFrom = Alignment.Start) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change)),
             exit = androidx.compose.animation.shrinkHorizontally(androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), shrinkTowards = Alignment.Start) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(Motion.Fast, easing = Motion.Change)),
         ) { Icon(Icons.Filled.Check, contentDescription = null, Modifier.padding(end = 6.dp).size(16.dp), tint = content) }
-        Text(label, style = MaterialTheme.typography.labelLarge, color = if(enabled) content else content.copy(alpha=.38f), maxLines = 1, softWrap = false)
+        AnimatedLabel(label, style = MaterialTheme.typography.labelLarge, color = if(enabled) content else content.copy(alpha=.38f), maxLines = 1, softWrap = false)
     }
 }
 
@@ -117,7 +117,7 @@ fun FormTitle(text: String) {
     // own grey could not be seen, and its rounded corner cut the bar in half).
     Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         androidx.compose.foundation.layout.Box(Modifier.width(4.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.primary))
-        Text(text, Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+        AnimatedLabel(text, Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -137,7 +137,7 @@ fun PickRow(label: String, value: String, required: Boolean, onClick: () -> Unit
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer).clickable(onClick = onClick).padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(requiredLabel(label, required), style = MaterialTheme.typography.bodyMedium, maxLines = 1, softWrap = false)
+        AnimatedLabel(requiredLabel(label, required), style = MaterialTheme.typography.bodyMedium, maxLines = 1, softWrap = false)
         Text(
             value.ifEmpty { "请选择" }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             color = if (value.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface, textAlign = androidx.compose.ui.text.style.TextAlign.End,
@@ -152,8 +152,8 @@ fun ReadOnlyFormRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
         .padding(start = 14.dp, end = 28.dp, top = 12.dp, bottom = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Text(value, Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.End, style = MaterialTheme.typography.bodyMedium)
+        AnimatedLabel(label, style = MaterialTheme.typography.bodyMedium)
+        AnimatedLabel(value, Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.End, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -168,12 +168,12 @@ fun TextEntry(
     val multiline = minLines > 1
     Surface(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLowest) {
         androidx.compose.foundation.layout.Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(requiredLabel(label, required), Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            AnimatedLabel(requiredLabel(label, required), Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             androidx.compose.material3.TextField(
                 value = value, onValueChange = { onChange(it.take(limit)) },
                 modifier = Modifier.fillMaxWidth().animateContentSize(androidx.compose.animation.core.tween(Motion.Fast, easing = Motion.Change)),
                 shape = RoundedCornerShape(8.dp),
-                placeholder = if (placeholder.isEmpty()) null else ({ Text(placeholder) }),
+                placeholder = if (placeholder.isEmpty()) null else ({ AnimatedLabel(placeholder) }),
                 minLines = 1, maxLines = if (multiline) maxOf(maxLines, 8) else 1, singleLine = !multiline,
                 keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
                 colors = androidx.compose.material3.TextFieldDefaults.colors(
@@ -206,7 +206,7 @@ fun DateTimeField(label: String, value: String, dateOnly: Boolean, required: Boo
                 TextButton(enabled = state.selectedDateMillis != null, onClick = {
                     val day = Instant.ofEpochMilli(state.selectedDateMillis!!).atZone(ZoneOffset.UTC).toLocalDate()
                     if (dateOnly) { onChange(day.toString()); step = 0 } else { pickedDate = day; step = 2 }
-                }) { Text(if (dateOnly) "确定" else "下一步") }
+                }) { AnimatedLabel(if (dateOnly) "确定" else "下一步") }
             },
             dismissButton = { TextButton(onClick = { step = 0 }) { Text("取消") } },
         ) { DatePicker(state) }
@@ -268,7 +268,7 @@ fun PhotosField(albums: Jv, onChange: (JSONArray) -> Unit, directory: String, on
         list.forEachIndexed { index, image ->
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Filled.Image, contentDescription = null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                Text(image["name"].text.ifEmpty { "照片 ${index + 1}" }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                AnimatedLabel(image["name"].text.ifEmpty { "照片 ${index + 1}" }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                 IconButton(onClick = { onChange(JSONArray().also { a -> list.forEachIndexed { i, v -> if (i != index) a.put(v.raw) } }) }) { Icon(Icons.Filled.Delete, contentDescription = "删除照片", tint = MaterialTheme.colorScheme.error) }
             }
         }
@@ -280,7 +280,7 @@ fun PhotosField(albums: Jv, onChange: (JSONArray) -> Unit, directory: String, on
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Filled.AddPhotoAlternate, contentDescription = null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-            Text(if (uploading) "正在上传照片…" else "选择现场照片（${list.size}/9）", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+            AnimatedLabel(if (uploading) "正在上传照片…" else "选择现场照片（${list.size}/9）", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -298,7 +298,7 @@ fun FormActionBar(busy: Boolean, enabled: Boolean, onSave: (() -> Unit)?, onSubm
             horizontalArrangement = Arrangement.spacedBy(BarSpec.Gap), verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onSave != null) SoftButton(onClick = onSave, enabled = enabled && !busy, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight)) { Text("保存") }
-            Button(onClick = onSubmit, enabled = enabled && !busy, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight)) { Text(if (busy) "请稍候…" else submitLabel) }
+            Button(onClick = onSubmit, enabled = enabled && !busy, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight)) { AnimatedLabel(if (busy) "请稍候…" else submitLabel) }
         }
     }
 }
@@ -360,7 +360,7 @@ fun FormPage(
     androidx.activity.compose.BackHandler(enabled = !backEnabled) { }
     androidx.activity.compose.BackHandler(enabled = backEnabled && interceptBack) { onBackGesture() }
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
-    CompactTheme { androidx.compose.material3.Scaffold(
+    CompactTheme { androidx.compose.material3.Scaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(title = title, onBack = onClose, loading = busy, actions = actions) },
         bottomBar = bottomBar,
@@ -370,7 +370,7 @@ fun FormPage(
             RoundedSheet {
                 PageWidth {
                     androidx.compose.foundation.layout.Column(
-                        Modifier.fillMaxSize().elastic().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
+                        Modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) { content() }
                 }
@@ -395,8 +395,8 @@ fun DraftList(scopeKey: String, target: com.personal.tpm.data.DraftTarget, onPic
             androidx.compose.material3.ListItem(
                 modifier = Modifier.clip(RoundedCornerShape(14.dp)).clickable { onPick(draft) },
                 colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
-                headlineContent = { Text(draft.title) },
-                supportingContent = { Text(draft.subtitle, maxLines = 2) },
+                headlineContent = { AnimatedLabel(draft.title) },
+                supportingContent = { AnimatedLabel(draft.subtitle, maxLines = 2) },
                 trailingContent = {
                     IconButton(onClick = { drafts.remove(draft.id, scopeKey); list = drafts.drafts(scopeKey, target) }) { Icon(Icons.Filled.Delete, contentDescription = "删除草稿", tint = MaterialTheme.colorScheme.error) }
                 },
@@ -440,7 +440,7 @@ fun InputRow(
             onChange(com.personal.tpm.data.quantityText(maximum))
     }
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(requiredLabel(label, required), style = style, maxLines = 1, softWrap = false)
+        AnimatedLabel(requiredLabel(label, required), style = style, maxLines = 1, softWrap = false)
         androidx.compose.foundation.text.BasicTextField(
             value = value, onValueChange = { onChange(it.take(limit)) }, singleLine = true, modifier = Modifier.weight(1f).onFocusChanged {
                 if (wasFocused && !it.isFocused) confirmQuantity()
@@ -452,12 +452,12 @@ fun InputRow(
             cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
             decorationBox = { inner ->
                 androidx.compose.foundation.layout.Box(contentAlignment = Alignment.CenterEnd) {
-                    if (value.isEmpty()) Text(placeholder, style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (value.isEmpty()) AnimatedLabel(placeholder, style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     inner()
                 }
             },
         )
-        if (suffix.isNotEmpty()) Text(suffix, style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (suffix.isNotEmpty()) AnimatedLabel(suffix, style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

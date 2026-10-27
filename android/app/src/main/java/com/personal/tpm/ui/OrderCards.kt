@@ -87,7 +87,7 @@ import com.personal.tpm.ui.theme.ThemeConfig
  */
 fun androidx.compose.foundation.lazy.LazyItemScope.fadeItem(skeleton: Boolean = false): Modifier =
     Modifier.animateItem(
-        fadeInSpec = if (skeleton) null else tween(Motion.Slow, easing = Motion.Change), placementSpec = null,
+        fadeInSpec = if (skeleton) null else tween(Motion.Slow, easing = Motion.Change), placementSpec = if (skeleton) null else tween(Motion.Normal, easing = Motion.Change),
         fadeOutSpec = if (skeleton) tween(Motion.Normal, easing = Motion.Change) else null,
     )
 
@@ -186,8 +186,8 @@ fun OrderCard(model: CardModel, expanded: Boolean, onToggle: () -> Unit, modifie
     ) {
         Column(Modifier.padding(CardMetrics.padding)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(shownModel.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                if (shownModel.status.isNotEmpty()) Text(shownModel.status, modifier = editing?.fieldModifier?.invoke("状态") ?: Modifier, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = tint, maxLines = 1)
+                AnimatedLabel(shownModel.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                if (shownModel.status.isNotEmpty()) AnimatedLabel(shownModel.status, modifier = editing?.fieldModifier?.invoke("状态") ?: Modifier, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = tint, maxLines = 1)
             }
             Spacer(Modifier.height(CardMetrics.lineGap))
             Box(Modifier.fillMaxWidth()) {
@@ -231,7 +231,7 @@ private fun CompactCardGrid(cells: List<CompactCell>, type: CardType, editing: C
                     parts.forEach { cell ->
                         if (cell == null) Text("·", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         else if (cell.field == DETAIL_BUTTON) button()
-                        else Text((if (CardPreferences.showLabel(type, cell.field)) cell.field + " " else "") + cell.value,
+                        else AnimatedLabel((if (CardPreferences.showLabel(type, cell.field)) cell.field + " " else "") + cell.value,
                             modifier = editing?.fieldModifier?.invoke(cell.field) ?: Modifier,
                             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -268,7 +268,7 @@ private fun CompactCardGrid(cells: List<CompactCell>, type: CardType, editing: C
 private fun DetailToggle(expanded: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val turn by animateFloatAsState(if (expanded) 180f else 0f, tween(Motion.Normal, easing = Motion.Change), label = "chevron")
     FilledTonalButton(onClick = onClick, contentPadding = PaddingValues(start = 14.dp, end = 10.dp), modifier = modifier.height(CardMetrics.footerHeight)) {
-        Text(if (expanded) "收起详情" else "展开详情", style = MaterialTheme.typography.labelLarge, maxLines = 1, softWrap = false)
+        AnimatedLabel(if (expanded) "收起详情" else "展开详情", style = MaterialTheme.typography.labelLarge, maxLines = 1, softWrap = false)
         Icon(Icons.Filled.ExpandMore, contentDescription = null, Modifier.size(18.dp).graphicsLayer { rotationZ = turn })
     }
 }
@@ -332,10 +332,10 @@ private fun SummaryGrid(items: List<Pair<String, String>>, type: CardType, editi
                     if (index == 1 && row.all { it.first.isNotEmpty() }) Text("·", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(Modifier.weight(1f, fill = false).then(if (label.isEmpty()) Modifier else editing?.fieldModifier?.invoke(label) ?: Modifier)) {
                         if (label.isNotEmpty() && CardPreferences.showLabel(type, label)) {
-                            Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false)
+                            AnimatedLabel(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false)
                             Spacer(Modifier.width(6.dp))
                         }
-                        Text(value, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        AnimatedLabel(value, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -354,8 +354,8 @@ private fun FactsGrid(items: List<Pair<String, String>>, type: CardType, editing
                     if (index == 1 && row.all { it.first.isNotEmpty() }) Text("·", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Column(Modifier.weight(1f, fill = false).then(if (label.isEmpty()) Modifier else editing?.fieldModifier?.invoke(label) ?: Modifier)) {
                         if (label.isNotEmpty()) {
-                            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(value, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            AnimatedLabel(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            AnimatedLabel(value, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -367,8 +367,8 @@ private fun FactsGrid(items: List<Pair<String, String>>, type: CardType, editing
 @Composable
 private fun PlainFact(label: String, value: String, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
-        Text(label, Modifier.width(88.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value.ifEmpty { "—" }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        AnimatedLabel(label, Modifier.width(88.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        AnimatedLabel(value.ifEmpty { "—" }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -414,7 +414,7 @@ fun SkeletonCard(modifier: Modifier = Modifier, cardType: CardType = CardType.Fa
 @Composable
 fun EmptyState(title: String = "暂无相关单据") {
     Column(Modifier.fillMaxWidth().padding(vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
+        AnimatedLabel(title, style = MaterialTheme.typography.titleMedium)
         Text("可切换状态或调整搜索条件", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

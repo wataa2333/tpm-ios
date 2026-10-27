@@ -204,7 +204,7 @@ fun NewButton(visible: Boolean, label: String, onClick: () -> Unit) {
             androidx.compose.material3.ExtendedFloatingActionButton(
                 onClick = onClick, containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
                 elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) }, text = { Text(label) },
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) }, text = { AnimatedLabel(label) },
             )
         }
     }
@@ -228,7 +228,7 @@ fun BatchBarHost(active: Boolean, content: @Composable () -> Unit) {
     // Draw before padding so the surface includes the navigation inset; buttons do not.
     Box(Modifier.fillMaxWidth()
         .background(if (present) MaterialTheme.colorScheme.background else Color.Transparent)
-        .navigationBarsPadding()) {
+        .then(if (present) Modifier.navigationBarsPadding() else Modifier)) {
         androidx.compose.runtime.CompositionLocalProvider(LocalBarInsetsHandled provides true) {
             // Keep the content alive through the complete exit, including quick reversals.
             if (present) {
@@ -274,9 +274,9 @@ fun BatchBar(batch: BatchSelection, candidates: () -> List<BatchItem>) {
         Column(Modifier.fillMaxWidth().then(if (LocalBarInsetsHandled.current) Modifier else Modifier.navigationBarsPadding()).padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f)) {
-                    Text("已选 ${batch.items.size}/$BATCH_LIMIT", style = MaterialTheme.typography.titleMedium)
+                    AnimatedLabel("已选 ${batch.items.size}/$BATCH_LIMIT", style = MaterialTheme.typography.titleMedium)
                     androidx.compose.animation.Crossfade(batch.groupTitle, animationSpec = tween(Motion.Normal, easing = Motion.Change), label = "groupTitle") { title ->
-                        Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        AnimatedLabel(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 Box {
@@ -298,11 +298,11 @@ fun BatchBar(batch: BatchSelection, candidates: () -> List<BatchItem>) {
                     onClick = { scope.launch { batch.prepare(BatchOperation.Reject, session, prefs) } },
                     enabled = batch.items.isNotEmpty(), modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight),
                     contentColor = MaterialTheme.colorScheme.error,
-                ) { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null, Modifier.padding(end = 6.dp)); Text(action?.rejectTitle ?: "批量退单", maxLines = 1) }
+                ) { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null, Modifier.padding(end = 6.dp)); AnimatedLabel(action?.rejectTitle ?: "批量退单", maxLines = 1) }
                 Button(
                     onClick = { scope.launch { batch.prepare(BatchOperation.Proceed, session, prefs) } },
                     enabled = batch.items.isNotEmpty(), modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight),
-                ) { Text(action?.title ?: "批量处理", maxLines = 1) }
+                ) { AnimatedLabel(action?.title ?: "批量处理", maxLines = 1) }
             }
         }
         }
@@ -368,10 +368,10 @@ private fun BatchPresetSheet(request: PresetRequest, count: Int, onDismiss: () -
                 Modifier.zIndex(1f).fadeBelow(MaterialTheme.colorScheme.background).background(MaterialTheme.colorScheme.background).fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
                 style = MaterialTheme.typography.titleLarge,
             )
-            Column(Modifier.weight(1f).elastic(top = false).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (operation == BatchOperation.Reject) {
                     TextEntry(action.rejectWord + "原因", preset.comment, { preset = preset.copy(comment = it) }, limit = 255, minLines = 3, required = true, placeholder = "请输入${action.rejectWord}原因")
-                    Text("所选 $count 张单据都会${action.rejectWord}，并写上这条原因。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    AnimatedLabel("所选 $count 张单据都会${action.rejectWord}，并写上这条原因。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     if (action == BatchAction.Accept) {
                         FormTitle("受理方案")
@@ -380,7 +380,7 @@ private fun BatchPresetSheet(request: PresetRequest, count: Int, onDismiss: () -
                             DateTimeField("预计完成时间", preset.estimated, dateOnly = false, required = true) { preset = preset.copy(estimated = it) }
                             PickRow("维修人员（选填）", preset.assignUser.label, false) { pick = PickRequest(RefSource.Users, { preset = preset.copy(assignUser = it) }) }
                         }
-                        Text("所选 $count 张单据都按这个方案受理，各单的故障类型不变；维修班组不选时，用各单原来带的班组。不选维修人员就是派单，选了就按“指派”处理。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        AnimatedLabel("所选 $count 张单据都按这个方案受理，各单的故障类型不变；维修班组不选时，用各单原来带的班组。不选维修人员就是派单，选了就按“指派”处理。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (action == BatchAction.Complete) CompleteSections(request, preset, count, { preset = it }) { pick = it }
                     if (preset.needsApprovers(action)) {
@@ -398,7 +398,7 @@ private fun BatchPresetSheet(request: PresetRequest, count: Int, onDismiss: () -
                 onClick = { scope.launch { sheetState.hide(); onStart(preset) } }, enabled = preset.isComplete(action, operation),
                 colors = if (operation == BatchOperation.Reject) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error) else ButtonDefaults.buttonColors(),
                 modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical).height(BarSpec.ButtonHeight),
-            ) { Text("开始处理 $count 张") }
+            ) { AnimatedLabel("开始处理 $count 张") }
             }
         }
     }
@@ -411,7 +411,7 @@ private fun CompleteSections(request: PresetRequest, preset: BatchPreset, count:
     GroupCard {
         PickRow("维修故障类型", preset.faultType.label, true) { pick(PickRequest(RefSource.FaultTypes, { set(preset.copy(faultType = it)) })) }
     }
-    Text("所选 $count 张单据都按这个方案提交维修结果；每张单据原有的维修领料不变。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    AnimatedLabel("所选 $count 张单据都按这个方案提交维修结果；每张单据原有的维修领料不变。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     TextEntry("工作说明", preset.content, { set(preset.copy(content = it)) }, limit = 255, minLines = 3, required = true, placeholder = "请输入工作说明")
     GroupCard {
         InputRow(
@@ -487,7 +487,7 @@ private fun CompleteSections(request: PresetRequest, preset: BatchPreset, count:
 private fun LineAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, contentDescription = null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+        AnimatedLabel(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -497,8 +497,8 @@ private fun QuantityLine(title: String, subtitle: String, label: String, quantit
     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleSmall)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                AnimatedLabel(title, style = MaterialTheme.typography.titleSmall)
+                AnimatedLabel(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error) }
         }
@@ -532,11 +532,16 @@ private fun BatchRunDialog(run: BatchRun, onClose: () -> Unit) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             LinearProgressIndicator(progress = { run.processed.toFloat() / maxOf(run.total, 1) }, Modifier.fillMaxWidth())
                             Row {
-                                Text(runHeadline(run), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                                Text("${run.processed}/${run.total}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                AnimatedLabel(runHeadline(run), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                                AnimatedLabel("${run.processed}/${run.total}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            run.current?.let { FactRow("正在处理", it.name + if (it.reference.isEmpty()) "" else " · ${it.reference}", inset = 0.dp) }
-                            run.endedEarly?.let { Text(it, color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodyMedium) }
+                            run.current?.let {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("正在处理", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    AnimatedLabel(it.name + if (it.reference.isEmpty()) "" else " · ${it.reference}", style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                            run.endedEarly?.let { AnimatedLabel(it, color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodyMedium) }
                         }
                     }
                     FormTitle("统计")
@@ -567,9 +572,9 @@ private fun BatchRunDialog(run: BatchRun, onClose: () -> Unit) {
             Dialog(onDismissRequest = {}, properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)) { TransparentSystemBars(); EnsureScaled {
                 Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(problem.title, style = MaterialTheme.typography.titleLarge)
-                        Text(problem.order.name + if (problem.order.reference.isEmpty()) "" else " · ${problem.order.reference}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        SelectionContainer { Text(problem.message, Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodyLarge) }
+                        AnimatedLabel(problem.title, style = MaterialTheme.typography.titleLarge)
+                        AnimatedLabel(problem.order.name + if (problem.order.reference.isEmpty()) "" else " · ${problem.order.reference}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        SelectionContainer { AnimatedLabel(problem.message, Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodyLarge) }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("后面遇到同样的情况，都这样处理", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                             Switch(checked = applyToRest, onCheckedChange = { applyToRest = it })
@@ -606,9 +611,9 @@ private fun runHeadline(run: BatchRun): String {
 private fun ResultRow(name: String, reference: String, message: String, color: androidx.compose.ui.graphics.Color, onCopy: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(name, style = MaterialTheme.typography.titleSmall)
-            if (reference.isNotEmpty()) Text(reference, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            SelectionContainer { Text(message, style = MaterialTheme.typography.bodyMedium, color = color) }
+            AnimatedLabel(name, style = MaterialTheme.typography.titleSmall)
+            if (reference.isNotEmpty()) AnimatedLabel(reference, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SelectionContainer { AnimatedLabel(message, style = MaterialTheme.typography.bodyMedium, color = color) }
         }
         IconButton(onClick = onCopy) { Icon(Icons.Filled.ContentCopy, contentDescription = "复制") }
     }

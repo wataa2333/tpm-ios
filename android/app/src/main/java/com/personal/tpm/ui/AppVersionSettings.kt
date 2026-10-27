@@ -23,7 +23,7 @@ fun AppVersionSettings() {
     var showing by remember { mutableStateOf(false) }
     SectionTitle("版本信息")
     GroupCard {
-        ListItem(headlineContent = { Text("当前版本") }, supportingContent = { Text("${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）") }, colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+        ListItem(headlineContent = { Text("当前版本") }, supportingContent = { AnimatedLabel("${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）") }, colors = ListItemDefaults.colors(containerColor = Color.Transparent))
         GroupDivider()
         ListItem(headlineContent = { Text("历史更新日志") }, supportingContent = { Text("随安装包提供，可离线查看") }, modifier = Modifier.clickable { showing = true }, colors = ListItemDefaults.colors(containerColor = Color.Transparent))
     }
@@ -57,18 +57,18 @@ private fun ReleaseHistoryDialog(onDismiss: () -> Unit) {
             Text("历史更新日志", style = MaterialTheme.typography.headlineSmall)
             Text("点版本展开查看更新内容", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (loading) LoadingText("加载中")
-            if (error.isNotBlank()) { Text(error); TextButton(onClick = { attempt++ }) { Text("重试") } }
+            if (error.isNotBlank()) { AnimatedLabel(error); TextButton(onClick = { attempt++ }) { Text("重试") } }
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(entries, key = { it.version }) { entry ->
                     GroupCard { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(Modifier.fillMaxWidth().clickable { expanded = if (entry.version in expanded) expanded - entry.version else expanded + entry.version }, horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(entry.version + if (entry.version == BuildConfig.VERSION_NAME) " · 当前版本" else "", style = MaterialTheme.typography.titleSmall)
-                            Text(if (entry.version in expanded) "收起" else "展开", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                            AnimatedLabel(entry.version + if (entry.version == BuildConfig.VERSION_NAME) " · 当前版本" else "", style = MaterialTheme.typography.titleSmall)
+                            AnimatedLabel(if (entry.version in expanded) "收起" else "展开", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
                         }
                         Reveal(entry.version in expanded) {
                             Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                 releaseNoteParagraphs(entry.notes).forEach { paragraph ->
-                                    Text(paragraph, style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 24.sp))
+                                    AnimatedLabel(paragraph, style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 24.sp))
                                 }
                             }
                         }

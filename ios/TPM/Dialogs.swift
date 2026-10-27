@@ -3,6 +3,9 @@ import UIKit
 
 /// Ends editing in whichever field has the keyboard, wherever it is.
 func endEditing() {
+    for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) where scene.activationState == .foregroundActive {
+        for window in scene.windows where window.isKeyWindow { window.endEditing(true) }
+    }
     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 }
 
@@ -25,21 +28,21 @@ struct DialogSheet: View {
     var body: some View {
         VStack(spacing: 22) {
             VStack(spacing: 10) {
-                Text(title).font(AppFont.title3.weight(.semibold)).multilineTextAlignment(.center)
+                Text(title).animatedTextValue(title).font(AppFont.title3.weight(.semibold)).multilineTextAlignment(.center)
                 if let message, !message.isEmpty {
-                    Text(message).font(AppFont.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    Text(message).animatedTextValue(message).font(AppFont.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
                         .textSelection(.enabled)
                 }
             }.frame(maxWidth: .infinity).fixedSize(horizontal: false, vertical: true)
             VStack(spacing: 10) {
                 Button(role: primaryRole) { dismiss(); onPrimary() } label: {
-                    Text(primary).font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28)
+                    Text(primary).animatedTextValue(primary).font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28)
                 }
                 .buttonStyle(.glassProminent).controlSize(.large)
                 .tint(primaryRole == .destructive ? .red : .accentColor)
                 .accessibilityIdentifier("dialog-primary")
                 if let secondary {
-                    Button(role: .destructive) { dismiss(); onSecondary() } label: { Text(secondary).font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28) }
+                    Button(role: .destructive) { dismiss(); onSecondary() } label: { Text(secondary).animatedTextValue(secondary).font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28) }
                         .buttonStyle(.glass).controlSize(.large)
                         .accessibilityIdentifier("dialog-secondary")
                 }
@@ -94,11 +97,13 @@ struct EntryField: View {
         VStack(alignment: .leading, spacing: 8) {
             Group {
                 if let lines { TextField(placeholder, text: $text, axis: axis).lineLimit(lines) }
-                else { TextField(placeholder, text: $text, axis: axis) }
+                else if axis == .horizontal {
+                    TextField(placeholder, text: $text).submitLabel(.done).onSubmit { endEditing() }
+                } else { TextField(placeholder, text: $text, axis: axis) }
             }
             .keyboardType(keyboard)
             .onChange(of: text) { _, value in if let limit { text = limitedText(value, limit: limit) } }
-            if let limit { Text("\(text.utf16.count)/\(limit) 字符").font(AppFont.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing) }
+            if let limit { Text("\(text.utf16.count)/\(limit) 字符").monospacedDigit().font(AppFont.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing).transaction { $0.animation = nil } }
         }
         .fullSeparator()
     }
@@ -155,7 +160,7 @@ struct FullRowButton: View {
         self.title = title; self.systemImage = systemImage; self.action = action
     }
     var body: some View {
-        Button(action: action) { Label(title, systemImage: systemImage).fullRow() }
+        Button(action: action) { Label(title, systemImage: systemImage).animatedTextValue(title).fullRow() }
     }
 }
 
@@ -198,7 +203,7 @@ private struct ToastModifier: ViewModifier {
         content
             .overlay(alignment: .top) {
                 if let message {
-                    Text(message).font(AppFont.subheadline.weight(.medium)).multilineTextAlignment(.center)
+                    Text(message).animatedTextValue(message).font(AppFont.subheadline.weight(.medium)).multilineTextAlignment(.center)
                         .padding(.horizontal, 18).padding(.vertical, 10)
                         .glassEffect(.regular, in: .capsule)
                         .padding(.top, 8).padding(.horizontal, 24)

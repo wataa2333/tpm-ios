@@ -493,7 +493,7 @@ fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = 
                             (androidx.compose.animation.slideInVertically(tween(Motion.Normal, easing = Motion.Change)) { it / 2 } + androidx.compose.animation.fadeIn(tween(Motion.Normal, easing = Motion.Change))) togetherWith
                                 (androidx.compose.animation.slideOutVertically(tween(Motion.Normal, easing = Motion.Change)) { -it / 2 } + androidx.compose.animation.fadeOut(tween(Motion.Fast, easing = Motion.Change)))
                         },
-                    ) { text -> Text(text, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    ) { text -> AnimatedLabel(text, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     androidx.compose.animation.AnimatedVisibility(
                         visible = subtitle != null,
                         enter = androidx.compose.animation.expandVertically(tween(Motion.Normal, easing = Motion.Change)) + androidx.compose.animation.fadeIn(tween(Motion.Normal, easing = Motion.Change)),
@@ -502,7 +502,7 @@ fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = 
                         androidx.compose.animation.AnimatedContent(
                             targetState = lastSubtitle, label = "subtitle",
                             transitionSpec = { (androidx.compose.animation.slideInVertically(tween(Motion.Normal, easing = Motion.Change)) { it } + androidx.compose.animation.fadeIn(tween(Motion.Normal, easing = Motion.Change))) togetherWith (androidx.compose.animation.slideOutVertically(tween(Motion.Fast, easing = Motion.Change)) { -it } + androidx.compose.animation.fadeOut(tween(Motion.Fast, easing = Motion.Change))) },
-                        ) { text -> Text(text.orEmpty(), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = headerContent().copy(alpha = 0.75f)) }
+                        ) { text -> AnimatedLabel(text.orEmpty(), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = headerContent().copy(alpha = 0.75f)) }
                     }
                 }
                 actions()
@@ -547,7 +547,7 @@ class CollapsingBarState(private val maxCollapsePx: Float) {
     /** Put this on the container of the scrolling list (inside any pull-to-refresh, so the bar opens before the refresh starts). */
     val connection = object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-            // Reveal before the child's elastic edge consumes a downward drag; fold before scrolling up.
+            // Reveal before the child's native overscroll handles a downward drag; fold before scrolling up.
             return if (available.y != 0f) Offset(0f, dragBy(available.y)) else Offset.Zero
         }
         override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
@@ -706,7 +706,8 @@ fun AppSheet(
         override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource) = Offset(0f, available.y)
         override suspend fun onPostFling(consumed: Velocity, available: Velocity) = Velocity(0f, available.y)
     } }
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismissRequest, sheetState = sheetState, containerColor = containerColor) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismissRequest, sheetState = sheetState, containerColor = containerColor,
+        contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) }) {
         TransparentSystemBars()
         androidx.compose.runtime.CompositionLocalProvider(LocalScrollSurface provides containerColor) {
             Column(Modifier.nestedScroll(scrollBoundary)) { EnsureScaled { content() } }

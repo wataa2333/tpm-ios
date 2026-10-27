@@ -81,16 +81,16 @@ fun CardLayoutEditor(onBack: () -> Unit) {
                 )
             }
     }
-    Scaffold(topBar = { AppTopBar("卡片自定义", onBack = onBack) }) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize().elastic().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Scaffold(contentWindowInsets = appContentInsets(), topBar = { AppTopBar("卡片自定义", onBack = onBack) }) { padding ->
+        Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Box {
-                TextButton(onClick = { typesOpen = true }) { Text("${type.title} ▾") }
+                TextButton(onClick = { typesOpen = true }) { AnimatedLabel("${type.title} ▾") }
                 AppOptionSheet(typesOpen, { typesOpen = false }, title = "卡片类型") {
-                    CardType.entries.forEach { item -> AppOptionItem(text = { Text(item.title) }, selected = type == item, onClick = { type = item; typesOpen = false }) }
+                    CardType.entries.forEach { item -> AppOptionItem(text = { AnimatedLabel(item.title) }, selected = type == item, onClick = { type = item; typesOpen = false }) }
                 }
             }
             Text("最多四行：标题一行，下方三行。横向虚线为行边界；同行字段紧接排列，用“ · ”分隔。拖动调整行和先后，超出内容保留在详情。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(if (dragging != null) "松手吸附到高亮行 · 边界外 32dp 仍可吸附" else "长按字段或按钮拖动，目标行高亮后松手", style = MaterialTheme.typography.labelMedium, color = if (dragging != null) accent else MaterialTheme.colorScheme.onSurfaceVariant)
+            AnimatedLabel(if (dragging != null) "松手吸附到高亮行 · 边界外 32dp 仍可吸附" else "长按字段或按钮拖动，目标行高亮后松手", style = MaterialTheme.typography.labelMedium, color = if (dragging != null) accent else MaterialTheme.colorScheme.onSurfaceVariant)
             key(type) {
                 OrderCard(remember(type) { previewCard(type) }, expanded, { expanded = !expanded },
                     Modifier.onGloballyPositioned { cardBounds = it.boundsInRoot() }.drawWithContent {
@@ -108,7 +108,7 @@ fun CardLayoutEditor(onBack: () -> Unit) {
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(onClick = { adding = true }) { Text("＋ 添加字段") }
-                TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "收起详情预览" else "展开详情预览") }
+                TextButton(onClick = { expanded = !expanded }) { AnimatedLabel(if (expanded) "收起详情预览" else "展开详情预览") }
             }
             TextButton(onClick = { CardPreferences.reset(type); expanded = false; selected = null; bounds.clear() }) { Text("恢复此类型默认布局") }
             Text("修改自动保存到本机，列表卡片与骨架屏同步更新。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -119,13 +119,13 @@ fun CardLayoutEditor(onBack: () -> Unit) {
             val fields = CardPreferences.orderedFields(type).filter { CardPreferences.placement(type, it, CardPreferences.default(type, it)) != FieldPlace.Compact }
             if (fields.isEmpty()) item { Text("所有字段都已在缩略卡片中") }
             items(fields, key = { it }) { field ->
-                ListItem(headlineContent = { Text(field) }, modifier = Modifier.clickable {
+                ListItem(headlineContent = { AnimatedLabel(field) }, modifier = Modifier.clickable {
                     CardPreferences.set(type, field, FieldPlace.Compact); selected = field; adding = false
                 })
             }
         } }, confirmButton = { TextButton(onClick = { adding = false }) { Text("完成") } })
     val field = selected
-    if (field != null) AnimatedMessageDialog(visible = editingField, onDismissRequest = { editingField = false }, title = { Text(field) },
+    if (field != null) AnimatedMessageDialog(visible = editingField, onDismissRequest = { editingField = false }, title = { AnimatedLabel(field) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (field == DETAIL_BUTTON) {
                 val position = CardPreferences.detailButtonPosition(type)
@@ -154,10 +154,10 @@ fun CardLayoutEditor(onBack: () -> Unit) {
             }
             }
         } }, confirmButton = { TextButton(onClick = { editingField = false }) { Text("完成") } })
-    if (field != null && field != DETAIL_BUTTON) AnimatedMessageDialog(visible = pairing, onDismissRequest = { pairing = false }, title = { Text("选择与「$field」同行的字段") },
+    if (field != null && field != DETAIL_BUTTON) AnimatedMessageDialog(visible = pairing, onDismissRequest = { pairing = false }, title = { AnimatedLabel("选择与「$field」同行的字段") },
         text = { LazyColumn(Modifier.heightIn(max = 360.dp).clip(RoundedCornerShape(20.dp))) {
             items(CardPreferences.orderedFields(type).filter { it != field && CardPreferences.placement(type, it, CardPreferences.default(type, it)) != FieldPlace.Hidden }, key = { it }) { target ->
-                ListItem(headlineContent = { Text(target) }, supportingContent = { Text("$target · $field") }, modifier = Modifier.clickable {
+                ListItem(headlineContent = { AnimatedLabel(target) }, supportingContent = { AnimatedLabel("$target · $field") }, modifier = Modifier.clickable {
                     CardPreferences.pair(type, field, target, true); pairing = false
                 })
             }

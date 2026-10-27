@@ -59,14 +59,14 @@ struct ReturnNoteSection: View {
     var body: some View {
         Section(kind == "退单" ? "维修退单说明" : "驳回说明") {
             if kind == "退单" { ReturnActorRow(processID: orderProcessID(fault)) }
-            else { LabeledContent("处理人", value: person.isEmpty ? "—" : person) }
-            if !readableDate(repair["signTime"]).isEmpty && kind == "退单" { LabeledContent("签到时间", value: readableDate(repair["signTime"])) }
+            else { LabeledContent("处理人") { Text(person.isEmpty ? "—" : person).animatedTextValue(person.isEmpty ? "—" : person) } }
+            if !readableDate(repair["signTime"]).isEmpty && kind == "退单" { LabeledContent("签到时间") { Text(readableDate(repair["signTime"])).animatedTextValue(readableDate(repair["signTime"])) } }
             VStack(alignment: .leading, spacing: 6) {
-                Text(kind + "原因").font(AppFont.subheadline).foregroundStyle(.secondary)
-                Text(reason.isEmpty ? "未填写" : reason).textSelection(.enabled)
+                Text(kind + "原因").animatedTextValue(kind + "原因").font(AppFont.subheadline).foregroundStyle(.secondary)
+                Text(reason.isEmpty ? "未填写" : reason).animatedTextValue(reason.isEmpty ? "未填写" : reason).textSelection(.enabled)
             }
             .contextMenu { if !reason.isEmpty { Button("复制", systemImage: "doc.on.doc") { copyToPasteboard(reason) } } }
-        }
+        }.animatedTextValue(kind == "退单" ? "维修退单说明" : "驳回说明")
     }
 }
 
@@ -128,10 +128,10 @@ struct ReturnActorRow: View {
             if loading {
                 HStack { Text("退单人"); Spacer(); ProgressView(); Text("加载中...").foregroundStyle(.secondary) }
             } else if let failure {
-                Text("退单人读取失败：" + failure).font(AppFont.subheadline).foregroundStyle(.secondary)
+                Text("退单人读取失败：" + failure).animatedTextValue("退单人读取失败：" + failure).font(AppFont.subheadline).foregroundStyle(.secondary)
                 Button("重试") { retry += 1 }
             } else {
-                LabeledContent("退单人", value: names.isEmpty ? "未找到最新已完成退单动作的实际执行人" : names)
+                LabeledContent("退单人") { Text(names.isEmpty ? "未找到最新已完成退单动作的实际执行人" : names).animatedTextValue(names.isEmpty ? "未找到最新已完成退单动作的实际执行人" : names) }
                 if nameLookupIncomplete { Button("重试读取姓名") { retry += 1 } }
             }
         }
@@ -180,9 +180,9 @@ struct RepairResultSection: View {
     let repair: JSONValue
     var body: some View {
         Section("维修解决方案") {
-            if !repair["user"]["realName"].text.isEmpty { LabeledContent("执行人", value: repair["user"]["realName"].text) }
+            if !repair["user"]["realName"].text.isEmpty { LabeledContent("执行人") { Text(repair["user"]["realName"].text).animatedTextValue(repair["user"]["realName"].text) } }
             let solution = repair["content"].text
-            Text(solution.isEmpty ? "未填写" : solution).textSelection(.enabled)
+            Text(solution.isEmpty ? "未填写" : solution).animatedTextValue(solution.isEmpty ? "未填写" : solution).textSelection(.enabled)
                 .contextMenu { if !solution.isEmpty { Button("复制", systemImage: "doc.on.doc") { copyToPasteboard(solution) } } }
         }
     }

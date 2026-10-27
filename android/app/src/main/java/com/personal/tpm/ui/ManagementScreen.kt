@@ -37,9 +37,9 @@ fun PersonnelManagementScreen(onBack: () -> Unit, openOrder: (String) -> Unit) {
     val current = if (tab == 0) pending else history
     val navigationBottom=WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Scaffold(contentWindowInsets=WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),topBar = { AppTopBar("人员与工单分析", onBack = ::leaveDashboard, loading = current.loading) }) { padding ->
-        LazyColumn(Modifier.padding(padding).fillMaxSize().elastic(), contentPadding = PaddingValues(start=16.dp,end=16.dp,top=16.dp,bottom=16.dp+navigationBottom), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(start=16.dp,end=16.dp,top=16.dp,bottom=16.dp+navigationBottom), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
-                Text(session.currentFactoryName, style = MaterialTheme.typography.titleLarge)
+                AnimatedLabel(session.currentFactoryName, style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(8.dp))
                 BlockSegmented(listOf("维修待处理", "处理统计"), tab, { tab = it })
             }
@@ -62,5 +62,5 @@ fun PersonnelManagementScreen(onBack: () -> Unit, openOrder: (String) -> Unit) {
 
 @Composable
 private fun ExplanationPart(title:String,body:String) {
-    Column(verticalArrangement=Arrangement.spacedBy(4.dp)) { Text(title,style=MaterialTheme.typography.titleSmall); Text(body,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+    Column(verticalArrangement=Arrangement.spacedBy(4.dp)) { AnimatedLabel(title,style=MaterialTheme.typography.titleSmall); AnimatedLabel(body,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
 }

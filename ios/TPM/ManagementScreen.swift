@@ -61,7 +61,7 @@ struct ManagementScreen: View {
                 HStack {
                     Text("人员／已加载").font(AppFont.headline)
                     Spacer()
-                    Button(ascending ? "数量升序" : "数量降序", systemImage: ascending ? "arrow.up" : "arrow.down") { ascending.toggle() }
+                    Button(ascending ? "数量升序" : "数量降序", systemImage: ascending ? "arrow.up" : "arrow.down") { ascending.toggle() }.animatedTextValue(ascending ? "数量升序" : "数量降序")
                         .font(AppFont.subheadline).buttonStyle(.bordered)
                 }
                 if !historical {
@@ -72,7 +72,8 @@ struct ManagementScreen: View {
                     Text("可同时选择两种状态；筛选只影响已加载人员与工单。").font(AppFont.caption).foregroundStyle(.secondary)
                 }
                 if people.isEmpty {
-                    ContentUnavailableView(model.slices.isEmpty ? "尚未读取" : "没有匹配工单", systemImage: "person.2", description: Text(model.slices.isEmpty ? "按需读取当前厂区维修工单。" : "请检查状态筛选和读取情况。"))
+                    ContentUnavailableView(model.slices.isEmpty ? "尚未读取" : "没有匹配工单", systemImage: "person.2", description: Text(model.slices.isEmpty ? "按需读取当前厂区维修工单。" : "请检查状态筛选和读取情况。")).animatedTextValue(model.slices.isEmpty ? "尚未读取" : "没有匹配工单")
+                        .interfaceMotion(model.slices.isEmpty)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
                     ForEach(people) { person in
@@ -89,9 +90,9 @@ struct ManagementScreen: View {
                     VStack(alignment: .leading, spacing: 12) {
                         ForEach(model.slices) { slice in
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(managedStateTitle(slice.state)).font(AppFont.subheadline.weight(.medium))
-                                Text("读取 \(slice.offset) 条 · 有效 \(slice.documents.count) 单 · " + (slice.complete ? "结束" : "未完整读取")).font(AppFont.caption)
-                                ForEach(slice.reasons.sorted(), id: \.self) { Text($0).font(AppFont.caption).foregroundStyle(.secondary) }
+                                Text(managedStateTitle(slice.state)).animatedTextValue(managedStateTitle(slice.state)).font(AppFont.subheadline.weight(.medium))
+                                Text("读取 \(slice.offset) 条 · 有效 \(slice.documents.count) 单 · " + (slice.complete ? "结束" : "未完整读取")).animatedTextValue("读取 \(slice.offset) 条 · 有效 \(slice.documents.count) 单 · " + (slice.complete ? "结束" : "未完整读取")).font(AppFont.caption)
+                                ForEach(slice.reasons.sorted(), id: \.self) { Text($0).animatedTextValue($0).font(AppFont.caption).foregroundStyle(.secondary) }
                             }
                         }
                         if model.report.identityUnclear { Text("缺少唯一身份或账号/ID冲突的记录单列为“执行人未明确”。").font(AppFont.caption) }
@@ -141,23 +142,24 @@ struct ManagementScreen: View {
     }
     private var queryControls: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(session.currentFactoryName).font(AppFont.headline)
-            Text("查询账号：" + queries.label(operator: session) + " · 操作账号：" + session.authentication.text("name")).font(AppFont.footnote).foregroundStyle(.secondary)
+            Text(session.currentFactoryName).animatedTextValue(session.currentFactoryName).font(AppFont.headline)
+            Text("查询账号：" + queries.label(operator: session) + " · 操作账号：" + session.authentication.text("name")).animatedTextValue("查询账号：" + queries.label(operator: session) + " · 操作账号：" + session.authentication.text("name")).font(AppFont.footnote).foregroundStyle(.secondary)
             HStack {
                 ManagementChoice(title: "当前待处理", selected: !historical) { historical = false }
                 ManagementChoice(title: "处理统计", selected: historical) { historical = true }
             }
             if historical {
                 Button { choosingDates = true } label: {
-                    Label(range.map { let w = ManagedWindow(range: $0); return w.from + " 至 " + w.to } ?? "先选择故障发现日期", systemImage: "calendar")
+                    Label(range.map { let w = ManagedWindow(range: $0); return w.from + " 至 " + w.to } ?? "先选择故障发现日期", systemImage: "calendar").animatedTextValue(range.map { let w = ManagedWindow(range: $0); return w.from + " 至 " + w.to } ?? "先选择故障发现日期")
                         .font(AppFont.subheadline).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }.buttonStyle(.bordered).disabled(model.running || model.estimating)
                 Text("待确认＋待复线＋已完结 · 按故障发现时间").font(AppFont.caption).foregroundStyle(.secondary)
             }
             if sourceSession == nil { Button("重试连接查询账号") { Task { await restorePrevious() } }.buttonStyle(.bordered) }
-            Text(model.status).font(AppFont.subheadline).foregroundStyle(.secondary).accessibilityIdentifier("management-status")
+            Text(model.status).animatedTextValue(model.status).font(AppFont.subheadline).foregroundStyle(.secondary).accessibilityIdentifier("management-status")
             if !model.slices.isEmpty {
                 Text("接口查询 · 实际查询耗时 " + String(format: "%.1f", model.elapsedSeconds) + " 秒")
+                    .monospacedDigit().transaction { $0.animation = nil }
                     .font(AppFont.caption).foregroundStyle(.secondary).monospacedDigit()
             }
             if model.running || model.estimating { ProgressView().frame(maxWidth: .infinity, alignment: .leading) }
@@ -169,22 +171,22 @@ struct ManagementScreen: View {
                     VStack(alignment: .leading) { readButtons }
                 }.disabled(sourceSession == nil || model.estimating || historical && range == nil)
             }
-            if let first = model.slices.first { Text("本次每页 \(first.pageSize) · 详情并发 \(model.detailConcurrency)").font(AppFont.caption).foregroundStyle(.secondary) }
+            if let first = model.slices.first { Text("本次每页 \(first.pageSize) · 详情并发 \(model.detailConcurrency)").animatedTextValue("本次每页 \(first.pageSize) · 详情并发 \(model.detailConcurrency)").font(AppFont.caption).foregroundStyle(.secondary) }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
             .background(.background, in: RoundedRectangle(cornerRadius: 20))
     }
     @ViewBuilder private var readButtons: some View {
         if model.hasUnfinished { Button("继续／重试", systemImage: "play") { start(restart: false) }.buttonStyle(.borderedProminent) }
-        Button(model.slices.isEmpty ? "预估并读取" : "重新读取", systemImage: "arrow.clockwise") { prepare() }.buttonStyle(.bordered)
+        Button(model.slices.isEmpty ? "预估并读取" : "重新读取", systemImage: "arrow.clockwise") { prepare() }.animatedTextValue(model.slices.isEmpty ? "预估并读取" : "重新读取").buttonStyle(.bordered)
     }
     private func personCard(_ person: ManagedPerson) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(person.name).font(AppFont.headline).foregroundStyle(.primary)
-            Text(person.identity).font(AppFont.caption).foregroundStyle(.secondary)
-            if historical { Text("处理 \(person.processed) 单").font(AppFont.subheadline).foregroundStyle(Color.accentColor) }
+            Text(person.name).animatedTextValue(person.name).font(AppFont.headline).foregroundStyle(.primary)
+            Text(person.identity).animatedTextValue(person.identity).font(AppFont.caption).foregroundStyle(.secondary)
+            if historical { Text("处理 \(person.processed) 单").animatedTextValue("处理 \(person.processed) 单").font(AppFont.subheadline).foregroundStyle(Color.accentColor) }
             else {
-                if showSigned { Text("待签到 \(person.signed)").font(AppFont.subheadline).foregroundStyle(Color.accentColor) }
-                if showWorking { Text("待完成 \(person.working)").font(AppFont.subheadline).foregroundStyle(Color.accentColor) }
+                if showSigned { Text("待签到 \(person.signed)").animatedTextValue("待签到 \(person.signed)").font(AppFont.subheadline).foregroundStyle(Color.accentColor) }
+                if showWorking { Text("待完成 \(person.working)").animatedTextValue("待完成 \(person.working)").font(AppFont.subheadline).foregroundStyle(Color.accentColor) }
             }
         }.frame(maxWidth: .infinity, alignment: .topLeading).padding(12)
             .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 16)).contentShape(.rect)
@@ -221,7 +223,7 @@ struct ManagementChoice: View {
         Button(action: action) {
             HStack(spacing: 5) {
                 if selected { Image(systemName: "checkmark").font(AppFont.caption.weight(.bold)).transition(.opacity) }
-                Text(title).font(AppFont.subheadline.weight(.medium)).fixedSize(horizontal: false, vertical: true)
+                Text(title).animatedTextValue(title).font(AppFont.subheadline.weight(.medium)).fixedSize(horizontal: false, vertical: true)
             }.frame(maxWidth: fillWidth ? .infinity : nil, minHeight: 32).padding(.horizontal, 10).padding(.vertical, 4)
                 .foregroundStyle(selected ? Color.white : Color.primary)
                 .background(selected ? Color.accentColor : Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
@@ -251,8 +253,8 @@ private struct ManagedPersonOrders: View {
         List {
             Section {
                 if model.showingPrevious { PreviousDataNotice(date: model.cachedAt, message: "请返回分析页重新查询获取最新数据。") }
-                Text(person?.identity ?? "当前范围内没有此执行人的已加载记录。").font(AppFont.subheadline).foregroundStyle(.secondary)
-                Text(model.status).font(AppFont.footnote).foregroundStyle(.secondary)
+                Text(person?.identity ?? "当前范围内没有此执行人的已加载记录。").animatedTextValue(person?.identity ?? "当前范围内没有此执行人的已加载记录。").font(AppFont.subheadline).foregroundStyle(.secondary)
+                Text(model.status).animatedTextValue(model.status).font(AppFont.footnote).foregroundStyle(.secondary)
                 Picker("状态", selection: $state) {
                     Text("全部已选状态").tag("")
                     if historical { Text("待确认").tag("VERIFIED"); Text("待复线").tag("RESOLVED"); Text("已完结").tag("FINISHED") }
@@ -268,15 +270,15 @@ private struct ManagedPersonOrders: View {
                         LiveWorkflowDetail(kind: .fault, id: doc.businessID, usesQueryAccount: true)
                     } label: {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(doc.title).font(AppFont.headline)
-                            Text(managedStateTitle(doc.state)).font(AppFont.subheadline).foregroundStyle(.secondary)
-                            Text(doc.number.isEmpty ? "业务编号：" + doc.businessID : "单号：" + doc.number).font(AppFont.caption).foregroundStyle(.secondary)
-                            if historical { Text("维修结束：" + doc.end).font(AppFont.caption).foregroundStyle(.secondary) }
+                            Text(doc.title).animatedTextValue(doc.title).font(AppFont.headline)
+                            Text(managedStateTitle(doc.state)).animatedTextValue(managedStateTitle(doc.state)).font(AppFont.subheadline).foregroundStyle(.secondary)
+                            Text(doc.number.isEmpty ? "业务编号：" + doc.businessID : "单号：" + doc.number).animatedTextValue(doc.number.isEmpty ? "业务编号：" + doc.businessID : "单号：" + doc.number).font(AppFont.caption).foregroundStyle(.secondary)
+                            if historical { Text("维修结束：" + doc.end).animatedTextValue("维修结束：" + doc.end).font(AppFont.caption).foregroundStyle(.secondary) }
                         }.padding(.vertical, 3)
                     }
                 }
                 if rows.isEmpty { Text("已加载范围内没有匹配工单。").foregroundStyle(.secondary) }
-            }
+            }.animatedTextValue("仅已加载记录 · \(rows.count) 单")
         }
         .navigationTitle(person?.name ?? "人员工单").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(DetailTabVisibility()).interfaceMotion(state)

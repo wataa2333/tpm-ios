@@ -93,7 +93,7 @@ fun RepairTrendChart(series:List<RepairTrend>,focus:Int,onFocus:(Int)->Unit,mont
     val grid=MaterialTheme.colorScheme.outlineVariant
     val ink=MaterialTheme.colorScheme.onSurfaceVariant
     GroupCard{Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
-        Text(if(monthly) "每月工单数量" else "每日工单数量",style=MaterialTheme.typography.titleSmall)
+        AnimatedLabel(if(monthly) "每月工单数量" else "每日工单数量",style=MaterialTheme.typography.titleSmall)
         Text("上下滑动页面，横向拖动看日期，双指缩放",style=MaterialTheme.typography.bodySmall)
         Canvas(Modifier.fillMaxWidth().height(240.dp)
             .pointerInput(first,visible,pointCount){detectTapGestures{p->
@@ -179,13 +179,13 @@ fun RepairTrendChart(series:List<RepairTrend>,focus:Int,onFocus:(Int)->Unit,mont
             }
         }
         if(pointCount>visible){
-            Text("可视日期：${trendDateLabel(dates[first],monthly)} — ${trendDateLabel(dates[last],monthly)}",style=MaterialTheme.typography.labelSmall)
+            AnimatedLabel("可视日期：${trendDateLabel(dates[first],monthly)} — ${trendDateLabel(dates[last],monthly)}",style=MaterialTheme.typography.labelSmall)
         }
-        Text(trendDateLabel(dates[focus.coerceIn(0,dates.lastIndex)],monthly),style=MaterialTheme.typography.titleSmall)
+        AnimatedLabel(trendDateLabel(dates[focus.coerceIn(0,dates.lastIndex)],monthly),style=MaterialTheme.typography.titleSmall)
         FlowRow(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)){
-            series.take(6).forEach{item->Text("${item.name} ${item.counts[focus.coerceIn(0,item.counts.lastIndex)]?.toString() ?: "未知"}",color=colors[item.key] ?: ink,style=MaterialTheme.typography.labelMedium)}
+            series.take(6).forEach{item->AnimatedLabel("${item.name} ${item.counts[focus.coerceIn(0,item.counts.lastIndex)]?.toString() ?: "未知"}",color=colors[item.key] ?: ink,style=MaterialTheme.typography.labelMedium)}
         }
-        if(series.size>6) Text("已显示${series.size}条曲线，完整人员数量见下方统计表。",style=MaterialTheme.typography.bodySmall)
+        if(series.size>6) AnimatedLabel("已显示${series.size}条曲线，完整人员数量见下方统计表。",style=MaterialTheme.typography.bodySmall)
     }}
 }
 

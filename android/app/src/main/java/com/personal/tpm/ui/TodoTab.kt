@@ -111,9 +111,9 @@ fun TodoTab(vm: TodoViewModel, listState: LazyListState, pullState: PullToRefres
     LaunchedEffect(input) { if (input.trim() != vm.query) { delay(350); vm.search(input) } }
     PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.reload(pull = true) }, state = pullState, indicator = {}, modifier = Modifier.fillMaxSize()) {
         PageWidth {
-            Box(nested.fillMaxSize().pullDown(pullState, vm.refreshing)) {
+            Box(nested.fillMaxSize()) {
                 LazyColumn(
-                    state = listState, modifier = Modifier.fillMaxSize().elastic(top = false, onEnd = { vm.loadMore() }),
+                    state = listState, modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 88.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -133,7 +133,7 @@ fun TodoTab(vm: TodoViewModel, listState: LazyListState, pullState: PullToRefres
                     }
                     item(contentType = "footer") {
                         when {
-                            vm.error != null -> Text(vm.error ?: "", Modifier.fillMaxWidth().padding(16.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                            vm.error != null -> AnimatedLabel(vm.error ?: "", Modifier.fillMaxWidth().padding(16.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                             !vm.loading && vm.rows.isEmpty() -> EmptyState("暂无待办")
                             vm.rows.isNotEmpty() && !vm.last -> { Text("加载更多内容", Modifier.fillMaxWidth().padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
                             vm.rows.isNotEmpty() -> Text(

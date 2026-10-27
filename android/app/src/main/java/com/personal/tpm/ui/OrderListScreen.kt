@@ -118,7 +118,7 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
         vm.reload(pull = true)
     }
 
-    Scaffold(
+    Scaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = { BatchBarHost(batch.active) { BatchBar(batch) { vm.rows.map { batchItem(com.personal.tpm.data.OrderKind.Fault, it) } } } },
@@ -169,9 +169,9 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
                         PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.reload(pull = true) }, state = pull, indicator = {}, modifier = Modifier.fillMaxSize()) {
                             // While a search or a date is loading, the old rows stay but dim; they fade out as the new ones fade in.
                             val dim by animateFloatAsState(if (vm.loading && vm.rows.isNotEmpty()) 0.45f else 1f, tween(Motion.Fast, easing = Motion.Change), label = "dim")
-                            Box(Modifier.fillMaxSize().pullDown(pull, vm.refreshing).nestedScroll(hide.connection)) {
+                            Box(Modifier.fillMaxSize().nestedScroll(hide.connection)) {
                                 LazyColumn(
-                                    state = listState, modifier = Modifier.fillMaxSize().elastic(top = false, onEnd = { vm.loadMore() }).then(if (dim < 1f) Modifier.graphicsLayer { alpha = dim } else Modifier),
+                                    state = listState, modifier = Modifier.fillMaxSize().then(if (dim < 1f) Modifier.graphicsLayer { alpha = dim } else Modifier),
                                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = if (onNew != null) 88.dp else 24.dp),
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
@@ -225,7 +225,7 @@ private fun SearchRow(vm: OrderListViewModel, input: String, onInput: (String) -
     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextField(
             value = input, onValueChange = onInput, singleLine = true, modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("搜索" + vm.field.label) },
+            placeholder = { AnimatedLabel("搜索" + vm.field.label) },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             trailingIcon = { if (input.isNotEmpty()) IconButton(onClick = { onInput(""); if (vm.searchMode) vm.search("") }) { Icon(Icons.Filled.Close, contentDescription = "清空") } },
             shape = CircleShape,
@@ -241,7 +241,7 @@ private fun SearchRow(vm: OrderListViewModel, input: String, onInput: (String) -
             BlockChip("按" + vm.field.label + "搜索", { fieldMenu = true }, trailing = { Icon(Icons.Filled.ExpandMore, contentDescription = null, Modifier.size(18.dp)) })
             AppOptionSheet(expanded = fieldMenu, onDismissRequest = { fieldMenu = false }, title = "搜索方式") {
                 FaultSearchField.entries.forEach { option ->
-                    AppOptionItem(text = { Text(option.label) }, selected = option == vm.field, onClick = { fieldMenu = false; vm.changeField(option) })
+                    AppOptionItem(text = { AnimatedLabel(option.label) }, selected = option == vm.field, onClick = { fieldMenu = false; vm.changeField(option) })
                 }
             }
         }
@@ -263,7 +263,7 @@ private fun StatusStrip(vm: OrderListViewModel) {
         scroll.animateScrollTo((left - 48).coerceAtLeast(0))
     }
     Row(
-        Modifier.fillMaxWidth().elasticRow().horizontalScroll(scroll).padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().horizontalScroll(scroll).padding(horizontal = 16.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
         states.forEachIndexed { index, st ->
@@ -275,7 +275,7 @@ private fun StatusStrip(vm: OrderListViewModel) {
                     .clickable { vm.select(st.code) }.padding(horizontal = 14.dp, vertical = 7.dp),
                 horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(st.title, style = MaterialTheme.typography.labelLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = content, maxLines = 1, softWrap = false)
+                AnimatedLabel(st.title, style = MaterialTheme.typography.labelLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = content, maxLines = 1, softWrap = false)
                 if (st.hasCount) AnimatedCount(vm.counts[st.code], MaterialTheme.typography.labelLarge, content, weight = if (on) FontWeight.SemiBold else FontWeight.Normal)
             }
         }

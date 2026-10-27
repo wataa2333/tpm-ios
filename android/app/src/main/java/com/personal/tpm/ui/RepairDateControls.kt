@@ -21,7 +21,7 @@ fun RepairDateControls(vm:RepairPendingViewModel) {
         ChoiceChip(vm.thisMonth,vm::selectThisMonth,"这个月",enabled=!vm.loading)
         ChoiceChip(vm.customSpan!=null,{choosing=true},"自定义",enabled=!vm.loading)
     }
-    vm.selectedSpan?.let { Text("${it.summary} · ${it.dayCount()}天",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+    vm.selectedSpan?.let { AnimatedLabel("${it.summary} · ${it.dayCount()}天",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
     AnimatedAppDialog(choosing, {choosing=false}) {
         val current=vm.selectedSpan
         fun millis(date:java.time.LocalDate)=date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()

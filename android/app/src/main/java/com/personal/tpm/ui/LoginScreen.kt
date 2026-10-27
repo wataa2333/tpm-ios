@@ -108,7 +108,7 @@ fun LoginScreen(session: Session, vault: AccountVault) {
     if (busy) LinearProgressIndicator(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding())
     PageWidth {
         Column(
-            Modifier.fillMaxSize().safeDrawingPadding().elastic().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+            Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.Center,
         ) {
             Text("登录", style = MaterialTheme.typography.headlineLarge)
@@ -137,7 +137,7 @@ fun LoginScreen(session: Session, vault: AccountVault) {
             }
             Spacer(Modifier.height(16.dp))
             Button(onClick = { signIn() }, enabled = canSignIn, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                Text(if (busy && signingInAs == null) "登录中…" else "登录")
+                AnimatedLabel(if (busy && signingInAs == null) "登录中…" else "登录")
             }
             if (remembered.isNotEmpty()) {
                 Spacer(Modifier.height(32.dp))
@@ -148,8 +148,8 @@ fun LoginScreen(session: Session, vault: AccountVault) {
                         ListItem(
                             modifier = Modifier.clickable(enabled = !busy) { signInWith(account) },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            headlineContent = { Text(account.displayName.ifEmpty { account.username }) },
-                            supportingContent = { Text(account.username) },
+                            headlineContent = { AnimatedLabel(account.displayName.ifEmpty { account.username }) },
+                            supportingContent = { AnimatedLabel(account.username) },
                             leadingContent = { Icon(Icons.Filled.AccountCircle, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                         )
                         if (index < remembered.lastIndex) GroupDivider()

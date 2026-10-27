@@ -51,7 +51,7 @@ fun DeveloperPasswordDialog(onDismiss: () -> Unit, onVerified: () -> Unit) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = onDismiss, title = { Text("开发者验证") },
             text = { androidx.compose.material3.OutlinedTextField(value = password, onValueChange = { password = it.take(16); wrong = false },
-                label = { Text(if (wrong) "密码不正确" else "请输入密码") }, isError = wrong,
+                label = { AnimatedLabel(if (wrong) "密码不正确" else "请输入密码") }, isError = wrong,
                 visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword), singleLine = true) },
             confirmButton = { androidx.compose.material3.TextButton(onClick = { if (password == "1331") { password = ""; onVerified() } else wrong = true }) { Text("验证") } },
@@ -63,7 +63,7 @@ fun DeveloperPasswordDialog(onDismiss: () -> Unit, onVerified: () -> Unit) {
 @Composable
 fun DevScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    Scaffold(
+    Scaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(title = "开发者", onBack = onBack) },
     ) { padding ->
@@ -71,7 +71,7 @@ fun DevScreen(onBack: () -> Unit) {
             RoundedSheet {
                 PageWidth {
                     Column(
-                        Modifier.elastic().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
+                        Modifier.verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         SectionTitle("管理功能")
@@ -103,7 +103,7 @@ fun DevScreen(onBack: () -> Unit) {
                                         }
                                     }
                                 }
-                                Text("当前：每页${AppPreferences.effectiveRepairPageSize}单，详情同时核对${AppPreferences.effectiveRepairConcurrency}单。", style = MaterialTheme.typography.bodySmall)
+                                AnimatedLabel("当前：每页${AppPreferences.effectiveRepairPageSize}单，详情同时核对${AppPreferences.effectiveRepairConcurrency}单。", style = MaterialTheme.typography.bodySmall)
                                 Text("下一次重新查询生效，暂停后继续沿用原档位。处理统计只读列表，并发档位仅用于待处理详情。关闭开关恢复默认500／8。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
@@ -112,8 +112,8 @@ fun DevScreen(onBack: () -> Unit) {
                             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Motion.tiers.indices.forEach { index ->
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(Motion.tierTitles[index], Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                                        Text("${Motion.length(index)} ms", style = MaterialTheme.typography.bodyMedium, color = accentInk())
+                                        AnimatedLabel(Motion.tierTitles[index], Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                                        AnimatedLabel("${Motion.length(index)} ms", style = MaterialTheme.typography.bodyMedium, color = accentInk())
                                     }
                                     Slider(
                                         value = Motion.length(index).toFloat(), onValueChange = { Motion.setLength(index, (it / 10f).roundToInt() * 10) },
@@ -125,7 +125,7 @@ fun DevScreen(onBack: () -> Unit) {
                         GroupCard {
                             Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Motion.roleTitles.indices.forEach { role ->
-                                    Text(Motion.roleTitles[role], style = MaterialTheme.typography.bodyMedium)
+                                    AnimatedLabel(Motion.roleTitles[role], style = MaterialTheme.typography.bodyMedium)
                                     BlockSegmented(Motion.Curve.entries.map { it.title }, Motion.curve(role).ordinal, { Motion.setCurve(role, Motion.Curve.entries[it]) })
                                 }
                             }
@@ -137,7 +137,7 @@ fun DevScreen(onBack: () -> Unit) {
                                 listOf("到来" to Motion.Arrive, "离开" to Motion.Leave, "变化" to Motion.Change).forEach { (name, curve) ->
                                     val fraction by animateFloatAsState(if (on) 1f else 0f, tween(Motion.Slow, easing = curve), label = "demo")
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        Text(name, Modifier.width(36.dp), style = MaterialTheme.typography.labelMedium)
+                                        AnimatedLabel(name, Modifier.width(36.dp), style = MaterialTheme.typography.labelMedium)
                                         Box(Modifier.weight(1f).height(14.dp).clip(RoundedCornerShape(7.dp)).background(MaterialTheme.colorScheme.surfaceContainer)) {
                                             Box(Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(14.dp).clip(RoundedCornerShape(7.dp)).background(MaterialTheme.colorScheme.primary))
                                         }

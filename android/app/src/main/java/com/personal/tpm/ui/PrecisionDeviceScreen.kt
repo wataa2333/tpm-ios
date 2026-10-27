@@ -75,49 +75,49 @@ fun PrecisionDeviceScreen(assetId: String, onBack: () -> Unit) {
             finally { loadingRecords = false }
         }
     }
-    Scaffold(topBar = { AppTopBar("逐项精度数据", onBack = onBack, loading = loadingPage || loadingOrders || loadingRecords) }) { padding ->
+    Scaffold(contentWindowInsets = appContentInsets(), topBar = { AppTopBar("逐项精度数据", onBack = onBack, loading = loadingPage || loadingOrders || loadingRecords) }) { padding ->
         PageWidth {
             ScrollableLazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
                     val asset = workOrders.firstOrNull()?.get("asset") ?: Jv.NULL
-                    Text(asset["addressCode"].text.ifEmpty { asset["assetCode"].text.ifEmpty { "设备检测记录" } }, style = MaterialTheme.typography.titleLarge)
-                    Text(asset["assetName"].text, style = MaterialTheme.typography.bodyMedium)
-                    Text(asset["assetCode"].text, style = MaterialTheme.typography.bodySmall)
-                    Text("查询：${queries.label(owner)} · ${owner.currentFactoryName}", style = MaterialTheme.typography.bodySmall)
-                    if (pageError.isNotEmpty()) Text(pageError, color = MaterialTheme.colorScheme.error)
+                    AnimatedLabel(asset["addressCode"].text.ifEmpty { asset["assetCode"].text.ifEmpty { "设备检测记录" } }, style = MaterialTheme.typography.titleLarge)
+                    AnimatedLabel(asset["assetName"].text, style = MaterialTheme.typography.bodyMedium)
+                    AnimatedLabel(asset["assetCode"].text, style = MaterialTheme.typography.bodySmall)
+                    AnimatedLabel("查询：${queries.label(owner)} · ${owner.currentFactoryName}", style = MaterialTheme.typography.bodySmall)
+                    if (pageError.isNotEmpty()) AnimatedLabel(pageError, color = MaterialTheme.colorScheme.error)
                     TextButton(onClick = { retry++ }, enabled = !loadingPage) { Text("重新读取") }
                     if (!loadingPage && workOrders.isEmpty() && pageError.isEmpty()) Text("当前查询账号未返回此设备的检查工单，无法从汇总等级还原逐项数据。")
                     if (workOrders.size > 1) SectionTitle("选择检测工单")
                 }
                 workOrders.forEach { order ->
                     item(key = "precise-${order["preciseId"].text}") {
-                        if (workOrders.size == 1) Text("工单：${order["sn"].text}", style = MaterialTheme.typography.bodySmall)
+                        if (workOrders.size == 1) AnimatedLabel("工单：${order["sn"].text}", style = MaterialTheme.typography.bodySmall)
                         else FilterChip(selected = selectedPrecise == order["preciseId"].text, onClick = { selectedPrecise = order["preciseId"].text },
-                            label = { Text("${order["planStartDate"].dateText}\n${order["sn"].text}") })
+                            label = { AnimatedLabel("${order["planStartDate"].dateText}\n${order["sn"].text}") })
                     }
                 }
                 item {
                     if ((total ?: 0) > 20) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         TextButton(enabled = page > 0 && !loadingPage, onClick = { page-- }) { Text("上一页") }
-                        Text("${page + 1}页 · 共${total ?: "—"}单", style = MaterialTheme.typography.bodySmall)
+                        AnimatedLabel("${page + 1}页 · 共${total ?: "—"}单", style = MaterialTheme.typography.bodySmall)
                         TextButton(enabled = total != null && (page + 1) * 20 < total!! && !loadingPage, onClick = { page++ }) { Text("下一页") }
                     }
                     executions.forEach { execution ->
-                        if (executions.size == 1) Text("检测时间：${execution["endTime"].dateText.ifEmpty { execution["createTime"].dateText }}\n检测人：${execution["user"].label.ifEmpty { "未记录" }}", style = MaterialTheme.typography.bodyMedium)
+                        if (executions.size == 1) AnimatedLabel("检测时间：${execution["endTime"].dateText.ifEmpty { execution["createTime"].dateText }}\n检测人：${execution["user"].label.ifEmpty { "未记录" }}", style = MaterialTheme.typography.bodyMedium)
                         else FilterChip(selected = selectedExecution == execution["orderId"].text, onClick = { selectedExecution = execution["orderId"].text },
-                            label = { Text("${execution["endTime"].dateText.ifEmpty { execution["createTime"].dateText }} · ${execution["user"].label}") })
+                            label = { AnimatedLabel("${execution["endTime"].dateText.ifEmpty { execution["createTime"].dateText }} · ${execution["user"].label}") })
                     }
                     if (!loadingOrders && selectedPrecise.isNotEmpty() && executions.isEmpty() && detailError.isEmpty()) Text("该工单暂无检查执行记录。")
-                    if (detailError.isNotEmpty()) Text(detailError, color = MaterialTheme.colorScheme.error)
+                    if (detailError.isNotEmpty()) AnimatedLabel(detailError, color = MaterialTheme.colorScheme.error)
                 }
                 records.forEachIndexed { index, record ->
                     item(key = "record-${record["recordId"].text}-$index") {
                         PrecisionPanel {
                             val name = record["itemName"].text.ifEmpty { record["preciseItem"]["itemName"].text }
-                            Text(name.replace(Regex("\\s+"), " ").trim(), style = MaterialTheme.typography.titleSmall)
-                            Text("精度判定：${record["preciseResult"].text.ifEmpty { "未记录" }}", style = MaterialTheme.typography.bodyMedium)
-                            Text("记录值：${record["description"].text.ifEmpty { "未记录" }}", style = MaterialTheme.typography.bodyMedium)
-                            if (record["executeResult"].text != "EXECUTED") Text(when (record["executeResult"].text) { "IGNORE" -> "已忽略"; "NOT" -> "未执行"; else -> "状态：${record["executeResult"].text.ifEmpty { "未知" }}" }, style = MaterialTheme.typography.bodySmall)
+                            AnimatedLabel(name.replace(Regex("\\s+"), " ").trim(), style = MaterialTheme.typography.titleSmall)
+                            AnimatedLabel("精度判定：${record["preciseResult"].text.ifEmpty { "未记录" }}", style = MaterialTheme.typography.bodyMedium)
+                            AnimatedLabel("记录值：${record["description"].text.ifEmpty { "未记录" }}", style = MaterialTheme.typography.bodyMedium)
+                            if (record["executeResult"].text != "EXECUTED") AnimatedLabel(when (record["executeResult"].text) { "IGNORE" -> "已忽略"; "NOT" -> "未执行"; else -> "状态：${record["executeResult"].text.ifEmpty { "未知" }}" }, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }

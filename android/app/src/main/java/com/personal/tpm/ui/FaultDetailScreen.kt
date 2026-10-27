@@ -145,7 +145,7 @@ fun FaultDetailScreen(
     LaunchedEffect(id, changed, if (independent) queryAccounts.revision else 0) { load() }
 
     Box(Modifier.fillMaxSize()) {
-    Scaffold(
+    Scaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             // Looking at an order from a selection is reading only: no buttons to take it forward.
@@ -174,22 +174,22 @@ fun FaultDetailScreen(
         RoundedSheet(Modifier.padding(padding)) { PageWidth { when {
             order == null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                 if (error != null) Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(error ?: "", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
+                    AnimatedLabel(error ?: "", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
                     TextButton(onClick = { load() }) { Text("重试") }
                 }
             }
             else -> SelectionContainer { Column(
-                Modifier.fillMaxSize().fadeInOnShow().elastic().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp),
+                Modifier.fillMaxSize().fadeInOnShow().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 SectionTitle("故障报修工单信息")
-                if (operationNotice.isNotEmpty()) Text(operationNotice, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                if (operationNotice.isNotEmpty()) AnimatedLabel(operationNotice, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 GroupCard {
                     FactRow("报修名称", order["faultName"].text)
                     FactRow("单号", order["sn"].text)
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         Text("状态", Modifier.width(96.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(faultStateLabel(order), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = stateColor(order["faultState"].text))
+                        AnimatedLabel(faultStateLabel(order), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = stateColor(order["faultState"].text))
                     }
                     FactRow("故障时间", order["faultTime"].dateText)
                     FactRow("报修资产", order["asset"]["assetName"].text)
@@ -205,7 +205,7 @@ fun FaultDetailScreen(
                 }
                 if (order["faultDesc"].text.isNotEmpty()) {
                     SectionTitle("故障描述")
-                    GroupCard { Box(Modifier.padding(16.dp)) { SelectionContainer { Text(order["faultDesc"].text, style = MaterialTheme.typography.bodyLarge) } } }
+                    GroupCard { Box(Modifier.padding(16.dp)) { SelectionContainer { AnimatedLabel(order["faultDesc"].text, style = MaterialTheme.typography.bodyLarge) } } }
                 }
                 if (faultMayHaveRepairNote(order)) {
                     SectionTitle("维修任务信息")
@@ -213,7 +213,7 @@ fun FaultDetailScreen(
                         when {
                             repairLoading -> Box(Modifier.padding(16.dp)) { LoadingText("读取维修任务") }
                             repairError != null -> Column(Modifier.padding(16.dp)) {
-                                Text(repairError.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                AnimatedLabel(repairError.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                                 TextButton(onClick = { scope.launch { readRepair(loadGeneration) } }) { Text("重试读取任务") }
                             }
                             repair == null -> FactRow("执行人", "接口未返回维修任务记录")
@@ -290,6 +290,6 @@ private fun PhotoRow(photo: Jv) {
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Icons.Filled.Image, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        Text(photo["name"].text.ifEmpty { "查看照片" }, color = accentInk())
+        AnimatedLabel(photo["name"].text.ifEmpty { "查看照片" }, color = accentInk())
     }
 }

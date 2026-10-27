@@ -201,9 +201,9 @@ struct QueryAccountSettingsView: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent("查询使用", value: queries.label(operator: session))
-                LabeledContent("操作使用", value: session.authentication.text("name"))
-                if let notice = queries.fallbackNotice { Text(notice).font(AppFont.footnote).foregroundStyle(.orange) }
+                LabeledContent("查询使用") { Text(queries.label(operator: session)).animatedTextValue(queries.label(operator: session)) }
+                LabeledContent("操作使用") { Text(session.authentication.text("name")).animatedTextValue(session.authentication.text("name")) }
+                if let notice = queries.fallbackNotice { Text(notice).animatedTextValue(notice).font(AppFont.footnote).foregroundStyle(.orange) }
                 Text("仅维修看板、维修搜索和详情读取使用此账号；所有单据操作始终使用当前登录账号并核对服务器权限。").font(AppFont.footnote).foregroundStyle(.secondary)
                 Button("使用当前登录账号查询") { queries.useOperator(); password = "" }
             }
@@ -219,8 +219,8 @@ struct QueryAccountSettingsView: View {
                     ForEach(saved) { account in
                         Button { username = account.username; password = "" } label: {
                             VStack(alignment: .leading) {
-                                Text(account.displayName.isEmpty ? account.username : account.displayName)
-                                Text(account.username).font(AppFont.caption).foregroundStyle(.secondary)
+                                Text(account.displayName.isEmpty ? account.username : account.displayName).animatedTextValue(account.displayName.isEmpty ? account.username : account.displayName)
+                                Text(account.username).animatedTextValue(account.username).font(AppFont.caption).foregroundStyle(.secondary)
                             }
                         }
                     }

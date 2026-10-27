@@ -160,7 +160,7 @@ fun MainShell(
         when (selected) { 0 -> homeVm.reload(pull = true); 1 -> todoVm.reload(pull = true); 2 -> workspaceVm.reload(pull = true) }
     }
 
-    Scaffold(
+    Scaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
         // A new repair report can be started from every tab of the app, not only from the order lists.
@@ -194,10 +194,10 @@ fun MainShell(
                         selected = selected == index,
                         onClick = { if (selected != index) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); selected = index } },
                         icon = {
-                            if (index == 1 && todoVm.badge > 0) BadgedBox(badge = { Badge(Modifier.offset(x = 9.dp)) { Text(if (todoVm.badge > 99) "99+" else todoVm.badge.toString()) } }) { Icon(tab.icon, contentDescription = null) }
+                            if (index == 1 && todoVm.badge > 0) BadgedBox(badge = { Badge(Modifier.offset(x = 9.dp)) { AnimatedLabel(if (todoVm.badge > 99) "99+" else todoVm.badge.toString()) } }) { Icon(tab.icon, contentDescription = null) }
                             else Icon(tab.icon, contentDescription = null)
                         },
-                        label = { Text(tab.title, maxLines = 1) },
+                        label = { AnimatedLabel(tab.title, maxLines = 1) },
                     )
                 }
             }
@@ -217,7 +217,7 @@ fun MainShell(
                     if (selected == 1) SelectButton(todoVm.batch.active) { if (todoVm.batch.active) todoVm.batch.end() else todoVm.batch.begin() }
                     // The factory: its name, and a tap to change it. Only on 主页 and 我的; the other pages work in the factory chosen there.
                     if (selected == 0 || selected == 3) TextButton(onClick = { choosingFactory = true }, colors = ButtonDefaults.textButtonColors(contentColor = LocalContentColor.current)) {
-                        Text(session.currentFactoryName, Modifier.widthIn(max = 140.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
+                        AnimatedLabel(session.currentFactoryName, Modifier.widthIn(max = 140.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
                         Icon(Icons.Filled.ArrowDropDown, contentDescription = "切换厂区")
                     }
                     if (selected <= 2) RefreshButton(spinning = working) { refresh() }
@@ -230,7 +230,7 @@ fun MainShell(
                             Card(
                                 Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                            ) { Text(notice, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer) }
+                            ) { AnimatedLabel(notice, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer) }
                         }
                         Box(Modifier.weight(1f).fillMaxWidth()) {
                             val nested = Modifier.nestedScroll(bar.connection)
@@ -269,7 +269,7 @@ fun MainShell(
 private fun Placeholder(title: String) {
     Box(Modifier.fillMaxSize(), Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleLarge)
+            AnimatedLabel(title, style = MaterialTheme.typography.titleLarge)
             Text("这一页正在对照 iOS 版移植", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -281,7 +281,7 @@ private val transparentRow @Composable get() = ListItemDefaults.colors(container
 @Composable
 private fun StepSlider(title: String, names: List<String>, selected: Int, onChange: (Int) -> Unit) {
     Column {
-        Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        AnimatedLabel(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Slider(value = selected.toFloat(), onValueChange = { onChange(it.roundToInt()) }, valueRange = 0f..names.lastIndex.toFloat(), steps = names.size - 2)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             names.forEachIndexed { index, name ->
@@ -308,9 +308,9 @@ private fun DisplayAreaSheet(onDismiss: () -> Unit) {
             Text("拖动滑块，页面会立刻缩进；该边缘留出的部分不显示内容。设置会保存，下次打开直接使用。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             @Composable fun Edge(name: String, value: Int, set: (Int) -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(name, Modifier.width(32.dp), style = MaterialTheme.typography.titleSmall)
+                    AnimatedLabel(name, Modifier.width(32.dp), style = MaterialTheme.typography.titleSmall)
                     Slider(value = value.toFloat(), onValueChange = { set(it.roundToInt()) }, valueRange = 0f..ThemeConfig.DISPLAY_AREA_MAX.toFloat(), modifier = Modifier.weight(1f))
-                    Text("$value", Modifier.width(36.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                    AnimatedLabel("$value", Modifier.width(36.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.End)
                 }
             }
             Edge("上", ThemeConfig.displayTop) { ThemeConfig.setDisplayArea(top = it) }
@@ -329,8 +329,8 @@ private fun FactorySheet(session: Session, onDismiss: () -> Unit, onPick: (Strin
     AppSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(), containerColor = MaterialTheme.colorScheme.background) {
         Column(Modifier.padding(horizontal = 20.dp)) {
             Text("切换厂区", style = MaterialTheme.typography.titleLarge)
-            Text("当前：" + session.currentFactoryName, Modifier.padding(top = 2.dp, bottom = 14.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Column(Modifier.elastic(top = false, fadeEdges = false).verticalScroll(rememberScrollState()).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AnimatedLabel("当前：" + session.currentFactoryName, Modifier.padding(top = 2.dp, bottom = 14.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 session.factories.forEach { factory ->
                     val id = factory["factoryId"].text
                     val current = id == session.currentFactoryId
@@ -343,7 +343,7 @@ private fun FactorySheet(session: Session, onDismiss: () -> Unit, onPick: (Strin
                         Box(Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainer), Alignment.Center) {
                             Icon(Icons.Filled.Factory, contentDescription = null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Text(factory["factoryName"].text, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        AnimatedLabel(factory["factoryName"].text, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (current) Icon(Icons.Filled.Check, contentDescription = "当前厂区", tint = MaterialTheme.colorScheme.primary)
                     }
                 }
@@ -399,7 +399,7 @@ private fun MineTab(session: Session, license: LicenseState.Allowed?, nested: Mo
 
     PageWidth {
         Column(
-            nested.fillMaxSize().elastic().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
+            nested.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // Who is signed in: an avatar with the first letter, the name and the account.
@@ -409,11 +409,11 @@ private fun MineTab(session: Session, license: LicenseState.Allowed?, nested: Mo
             ) {
                 Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Box(Modifier.size(56.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), Alignment.Center) {
-                        Text(name.take(1).ifEmpty { "?" }, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimary)
+                        AnimatedLabel(name.take(1).ifEmpty { "?" }, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimary)
                     }
                     Column {
-                        Text(name.ifEmpty { "—" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                        Text("账号 $current", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                        AnimatedLabel(name.ifEmpty { "—" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        AnimatedLabel("账号 $current", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             }
@@ -422,7 +422,7 @@ private fun MineTab(session: Session, license: LicenseState.Allowed?, nested: Mo
                     modifier = Modifier.clickable(onClick = onChooseFactory),
                     colors = transparentRow,
                     overlineContent = { Text("当前厂区") },
-                    headlineContent = { Text(session.currentFactoryName) },
+                    headlineContent = { AnimatedLabel(session.currentFactoryName) },
                     leadingContent = { Icon(Icons.Filled.Factory, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "切换厂区") },
                 )
@@ -431,7 +431,7 @@ private fun MineTab(session: Session, license: LicenseState.Allowed?, nested: Mo
                     ListItem(
                         colors = transparentRow,
                         overlineContent = { Text("授权") },
-                        headlineContent = { Text("${LicensePolicy.describe(it)}密钥已验证") },
+                        headlineContent = { AnimatedLabel("${LicensePolicy.describe(it)}密钥已验证") },
                         leadingContent = { Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     )
                 }
@@ -444,7 +444,7 @@ private fun MineTab(session: Session, license: LicenseState.Allowed?, nested: Mo
                 ListItem(
                     modifier = Modifier.clickable(onClick = openDrafts),
                     colors = transparentRow,
-                    headlineContent = { Text(if (draftCount > 0) "草稿箱（$draftCount）" else "草稿箱") },
+                    headlineContent = { AnimatedLabel(if (draftCount > 0) "草稿箱（$draftCount）" else "草稿箱") },
                     supportingContent = { Text("没填完的报修，保存在这台手机上") },
                     leadingContent = { Icon(Icons.Filled.Inbox, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
@@ -458,8 +458,8 @@ private fun MineTab(session: Session, license: LicenseState.Allowed?, nested: Mo
                     ListItem(
                         modifier = Modifier.clickable(enabled = !isCurrent && signingInAs == null) { switchTo(account) },
                         colors = transparentRow,
-                        headlineContent = { Text(account.displayName.ifEmpty { account.username }) },
-                        supportingContent = { Text(account.username) },
+                        headlineContent = { AnimatedLabel(account.displayName.ifEmpty { account.username }) },
+                        supportingContent = { AnimatedLabel(account.username) },
                         leadingContent = { Icon(Icons.Filled.AccountCircle, contentDescription = null, tint = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) },
                         trailingContent = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -505,7 +505,7 @@ private fun MineTab(session: Session, license: LicenseState.Allowed?, nested: Mo
                     modifier = Modifier.clickable { pickingAccent = true },
                     colors = transparentRow,
                     headlineContent = { Text("主题色") },
-                    supportingContent = { Text(if (ThemeConfig.randomOnLaunch) "每次打开随机；只用于重要信息" else (ThemeConfig.presets.firstOrNull { it.color == ThemeConfig.accent }?.name ?: "自定义") + "；只用于重要信息") },
+                    supportingContent = { AnimatedLabel(if (ThemeConfig.randomOnLaunch) "每次打开随机；只用于重要信息" else (ThemeConfig.presets.firstOrNull { it.color == ThemeConfig.accent }?.name ?: "自定义") + "；只用于重要信息") },
                     leadingContent = { Icon(Icons.Filled.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailingContent = { Box(Modifier.size(28.dp).clip(CircleShape).background(ThemeConfig.effectiveAccent)) },
                 )
@@ -520,7 +520,7 @@ private fun MineTab(session: Session, license: LicenseState.Allowed?, nested: Mo
                     modifier = Modifier.clickable { adjustingArea = true },
                     colors = transparentRow,
                     headlineContent = { Text("显示区域") },
-                    supportingContent = { Text(if (ThemeConfig.hasCustomArea) "已自定义：上 ${ThemeConfig.displayTop}  下 ${ThemeConfig.displayBottom}  左 ${ThemeConfig.displayStart}  右 ${ThemeConfig.displayEnd}（dp）" else "屏幕边缘有损坏或被遮挡时，手动留出不用的部分") },
+                    supportingContent = { AnimatedLabel(if (ThemeConfig.hasCustomArea) "已自定义：上 ${ThemeConfig.displayTop}  下 ${ThemeConfig.displayBottom}  左 ${ThemeConfig.displayStart}  右 ${ThemeConfig.displayEnd}（dp）" else "屏幕边缘有损坏或被遮挡时，手动留出不用的部分") },
                     leadingContent = { Icon(Icons.Filled.Fullscreen, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
                 )
@@ -595,7 +595,7 @@ private fun AccentSheet(onDismiss: () -> Unit) {
         ?.let { Color(0xFF000000L or it.toLong(16)) }
     fun choose(color: Color) { ThemeConfig.setAccent(color); scope.launch { sheetState.hide(); onDismiss() } }
     AppSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MaterialTheme.colorScheme.surfaceContainerLowest) {
-        Column(Modifier.elastic(top = false).verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("主题色", style = MaterialTheme.typography.titleLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 ThemeConfig.presets.forEach { preset ->
@@ -603,7 +603,7 @@ private fun AccentSheet(onDismiss: () -> Unit) {
                         Box(Modifier.size(44.dp).clip(CircleShape).background(preset.color), Alignment.Center) {
                             if (preset.color == ThemeConfig.accent) Icon(Icons.Filled.Check, contentDescription = "当前主题色", tint = ThemeConfig.onColor(preset.color))
                         }
-                        Text(preset.name, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        AnimatedLabel(preset.name, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

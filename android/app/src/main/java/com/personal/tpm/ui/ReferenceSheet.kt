@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import com.personal.tpm.ui.ScrollableLazyColumn as LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -263,8 +264,8 @@ fun ReferenceSheet(
                 horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(entry.label, style = MaterialTheme.typography.bodyMedium)
-                    lines.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = if (source == RefSource.OutboundMaterials && available(entry.value) < 1) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
+                    AnimatedLabel(entry.label, style = MaterialTheme.typography.bodyMedium)
+                    lines.forEach { AnimatedLabel(it, style = MaterialTheme.typography.bodySmall, color = if (source == RefSource.OutboundMaterials && available(entry.value) < 1) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
                 if (lists.pins.any { it.key == key }) Icon(Icons.Filled.PushPin, contentDescription = "已置顶", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                 if (defaultKey == key) Text("默认", style = MaterialTheme.typography.labelMedium, color = Color(0xFFF57C00))
@@ -277,7 +278,7 @@ fun ReferenceSheet(
             ) {
                 val pinned = lists.pins.any { it.key == key }
                 AppOptionItem(
-                    text = { Text(if (pinned) "取消置顶" else "置顶") }, leadingIcon = { Icon(Icons.Filled.PushPin, contentDescription = null) },
+                    text = { AnimatedLabel(if (pinned) "取消置顶" else "置顶") }, leadingIcon = { Icon(Icons.Filled.PushPin, contentDescription = null) },
                     onClick = {
                         menuFor = null
                         val next = if (pinned) PickerRules.unpin(key, lists) else PickerRules.pin(entry, lists)
@@ -286,7 +287,7 @@ fun ReferenceSheet(
                     },
                 )
                 if (defaultField != null) AppOptionItem(
-                    text = { Text(if (defaultKey == key) "取消默认" else "设为默认") }, leadingIcon = { Icon(Icons.Filled.Star, contentDescription = null) },
+                    text = { AnimatedLabel(if (defaultKey == key) "取消默认" else "设为默认") }, leadingIcon = { Icon(Icons.Filled.Star, contentDescription = null) },
                     onClick = {
                         menuFor = null
                         val on = defaultKey != key
@@ -302,8 +303,8 @@ fun ReferenceSheet(
         // Not the whole screen: a strip of the page stays above the sheet, so it never reaches into the status bar and swiping down is clear.
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.9f)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(source.title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                TextButton(onClick = onDismiss) { Text(if (multiple) "完成（${picked.size}）" else "关闭") }
+                AnimatedLabel(source.title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                TextButton(onClick = onDismiss) { AnimatedLabel(if (multiple) "完成（${picked.size}）" else "关闭") }
             }
             SearchField(
                 query, { query = it }, if (modes.isEmpty()) "搜索" else "搜索" + searchMode.label(source),
@@ -311,7 +312,7 @@ fun ReferenceSheet(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
             // The ways of searching: a row of chips (it scrolls sideways if the screen is narrow), each on one line.
-            if (modes.isNotEmpty()) Row(Modifier.fillMaxWidth().elasticRow().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (modes.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 modes.forEach { mode -> ChoiceChip(searchMode == mode, { searchMode = mode }, mode.label(source)) }
             }
             if (source == RefSource.Users) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -324,7 +325,7 @@ fun ReferenceSheet(
             )
             error?.let {
                 Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(it, Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                    AnimatedLabel(it, Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                     TextButton(onClick = { scope.launch { load(false) } }) { Text("重试") }
                 }
             }
@@ -340,25 +341,25 @@ fun ReferenceSheet(
                 Text("隐藏已领用完物料", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                 Switch(checked = hideUsedUp, onCheckedChange = { hideUsedUp = it })
             }
-            LazyColumn(Modifier.weight(1f).elastic(top = false)) {
+            LazyColumn(Modifier.weight(1f)) {
                 if (source.hasMenu && !searching && lists.pins.isNotEmpty()) {
                     item(key = "pins-title") { SectionLabel("置顶 · ${lists.pins.size}/${PickerLists.PIN_LIMIT}") }
-                    items(lists.pins, key = { "pin-" + it.key }) { PickerRow(it) }
+                    items(lists.pins, key = { "pin-" + it.key }) { Box(fadeItem()) { PickerRow(it) } }
                 }
                 val recents = if (!source.hasMenu || multiple || searching) emptyList() else PickerRules.shownRecents(lists)
                 if (recents.isNotEmpty()) {
                     item(key = "recents-title") { SectionLabel("最近使用") }
-                    items(recents, key = { "recent-" + it.key }) { PickerRow(it) }
+                    items(recents, key = { "recent-" + it.key }) { Box(fadeItem()) { PickerRow(it) } }
                 }
                 if (source.hasMenu && !searching && (lists.pins.isNotEmpty() || recents.isNotEmpty())) item(key = "all-title") { SectionLabel("全部") }
                 when {
                     treeSource -> items(tree.size, key = { "tree-" + tree[it].path }, contentType = { if (tree[it].opens) "branch" else "leaf" }) { index ->
                         val row = tree[index]
-                        // Do not draw removed rows across the new rows while a branch closes.
+                        // Stable paths let following branches move continuously on both expand and collapse.
                         Box(Modifier.animateItem(
                             fadeInSpec = androidx.compose.animation.core.tween(Motion.Slow, easing = Motion.Arrive),
-                            placementSpec = null,
-                            fadeOutSpec = null,
+                            placementSpec = androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change),
+                            fadeOutSpec = androidx.compose.animation.core.tween(Motion.Instant, easing = Motion.Leave),
                         )) {
                         if (row.opens) {
                             val open = searching || row.path in opened
@@ -390,11 +391,11 @@ fun ReferenceSheet(
                             val users = group["users"].array.filter { it["enabled"].raw != false && (!searching || group["groupName"].text.contains(query.trim(), true) || (it["realName"].text + it["userName"].text).contains(query.trim(), true)) }
                             if (users.isNotEmpty()) {
                                 item(key = "group-$gi") { SectionLabel(group["groupName"].text) }
-                                items(users.size, key = { "group-$gi-${users[it]["userName"].text}-$it" }) { PickerRow(entryOf(users[it])) }
+                                items(users.size, key = { "group-$gi-${users[it]["userName"].text}-$it" }) { Box(fadeItem()) { PickerRow(entryOf(users[it])) } }
                             }
                         }
                     }
-                    else -> items(shown.size, key = { "all-" + referenceKey(source, shown[it]) + it }) { PickerRow(entryOf(shown[it])) }
+                    else -> items(shown.size, key = { "all-" + referenceKey(source, shown[it]) + it }) { Box(fadeItem()) { PickerRow(entryOf(shown[it])) } }
                 }
                 if (paged && values.isNotEmpty() && !last) item(key = "more") {
                     LaunchedEffect(values.size) { if (!loading && !loadingMore) load(true) }
@@ -403,10 +404,10 @@ fun ReferenceSheet(
                 if (!loading && error == null && (if (treeSource) tree.isEmpty() else if (source == RefSource.Users && userMode == 1) userGroups.isEmpty() else shown.isEmpty())) item(key = "empty") { EmptyState("没有匹配的内容") }
             }
             if (multiple) androidx.compose.material3.Surface(Modifier.fadeAbove(MaterialTheme.colorScheme.surfaceContainerLowest), color = MaterialTheme.colorScheme.surfaceContainerLowest) {
-                Button(onClick = { finish() }, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) { Text(if (picked.isEmpty()) "完成" else "完成（已选 ${picked.size} 项）") }
+                Button(onClick = { finish() }, modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) { AnimatedLabel(if (picked.isEmpty()) "完成" else "完成（已选 ${picked.size} 项）") }
             }
             notice?.let {
-                Snackbar(Modifier.padding(16.dp), action = { TextButton(onClick = { notice = null }) { Text("好") } }) { Text(it) }
+                Snackbar(Modifier.padding(16.dp), action = { TextButton(onClick = { notice = null }) { Text("好") } }) { AnimatedLabel(it) }
             }
         }
     }
@@ -415,5 +416,5 @@ fun ReferenceSheet(
 
 @Composable
 private fun SectionLabel(text: String) {
-    Text(text, Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    AnimatedLabel(text, Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
