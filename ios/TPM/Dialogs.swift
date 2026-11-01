@@ -3,10 +3,12 @@ import UIKit
 
 /// Ends editing in whichever field has the keyboard, wherever it is.
 func endEditing() {
+    if UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) { return }
     for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) where scene.activationState == .foregroundActive {
-        for window in scene.windows where window.isKeyWindow { window.endEditing(true) }
+        for window in scene.windows where window.isKeyWindow {
+            if window.endEditing(true) { return }
+        }
     }
-    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 }
 
 /// The one dialog every confirmation and notice in the app uses: a compact bottom card with a
@@ -80,7 +82,7 @@ extension View {
     /// Dismissing the keyboard by dragging the content, and a "收起键盘" button above the keyboard
     /// for fields that have no return key (numbers, phone numbers).
     func keyboardManaged() -> some View {
-        scrollDismissesKeyboard(.interactively)
+        scrollDismissesKeyboard(.interactively).keyboardDismissToolbar()
     }
 }
 
@@ -227,4 +229,4 @@ extension View {
 }
 
 
-// Keyboard dismissal is installed globally on UITextField/UITextView by KeyboardDismissAccessory.
+// Each input page declares its system keyboard toolbar through keyboardManaged or nativeSearchable.

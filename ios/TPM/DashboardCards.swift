@@ -297,7 +297,7 @@ struct DashboardWorkspace: View {
             // Room under the last card for the floating "+" button.
             .padding(.horizontal, 16).padding(.bottom, 80)
         }
-        .scrollDismissesKeyboard(.interactively)
+        .keyboardManaged()
         .navigationDestination(item: $route) { query in
             if preview { FaultListView(initialState: .received) }
             // A new identity per query: every query opens a fresh page (own list, search, filters, scroll),

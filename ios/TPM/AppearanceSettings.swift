@@ -126,6 +126,7 @@ struct DeveloperAccessSheet: View {
                 }
             }
             .interfaceMotion(unlocked).interfaceMotion(experimental).interfaceMotion(incorrect)
+            .keyboardManaged()
             .navigationTitle(unlocked ? "开发者选项" : "开发者验证").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("完成") { dismiss() } } }
         }

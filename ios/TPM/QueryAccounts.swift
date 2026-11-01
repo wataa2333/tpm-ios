@@ -229,7 +229,7 @@ struct QueryAccountSettingsView: View {
             if !queries.username.isEmpty {
                 Section { Button("停用并移除查询凭据", role: .destructive) { queries.forget(); password = ""; saved = queries.savedAccounts } }
             }
-        }.disabled(busy)
+        }.disabled(busy).keyboardManaged()
         .navigationTitle("独立查询账号").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .errorDialog($error, title: "查询账号", clearsOnClose: true)
         .onAppear { saved = queries.savedAccounts; if !queries.username.isEmpty { username = queries.username } }

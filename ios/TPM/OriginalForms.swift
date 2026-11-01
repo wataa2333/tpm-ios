@@ -899,7 +899,6 @@ struct OriginalERPForm: View {
 }
 
 struct DocumentActions: View {
-    @ObservedObject private var keyboard = KeyboardDismissAccessory.shared
     let busy: Bool
     let submitting: Bool
     let disabled: Bool
@@ -907,17 +906,15 @@ struct DocumentActions: View {
     var submitTitle = "提交"
     let submit: () -> Void
     var body: some View {
-        Group {
-        if !keyboard.keyboardVisible {
         HStack(alignment: .center) {
             if let save { BottomAction(title: "保存", symbol: "tray.and.arrow.down", color: Color(red: 0.92, green: 0.73, blue: 0.24), busy: busy && !submitting, action: save) }
             Spacer()
             BottomAction(title: submitTitle, symbol: "checkmark.circle", color: .blue, busy: busy && submitting, action: submit)
         }
         .disabled(busy || disabled)
-        .bottomBarPadding()
-        }
-        }
+        // Keep the action row alive while SwiftUI moves the keyboard safe area.
+        // Fixed spacing avoids a second keyboard-driven padding animation.
+        .padding(.horizontal, 20).padding(.vertical, 8)
     }
 }
 

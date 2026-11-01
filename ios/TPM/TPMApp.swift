@@ -7,7 +7,7 @@ struct TPMApp: App {
     @StateObject private var session = LiveSession()
     @StateObject private var navigation = BottomNavigationModel()
     @StateObject private var queryAccounts = QueryAccountModel()
-    init() { DeveloperPreferences.start(); AppFont.configureNativeControls(); KeyboardDismissAccessory.shared.start() }
+    init() { DeveloperPreferences.start(); AppFont.configureNativeControls() }
     var body: some Scene {
         WindowGroup {
             GeometryReader { geometry in

@@ -368,7 +368,7 @@ struct NativeLoginView: View {
                 } footer: {
                     Text("密码只保存在这台手机的钥匙串里，不会显示，也不会上传。")
                 }
-            }.navigationTitle("登录").errorDialog($error, title: "登录失败", clearsOnClose: true)
+            }.keyboardManaged().navigationTitle("登录").errorDialog($error, title: "登录失败", clearsOnClose: true)
         }
     }
 }

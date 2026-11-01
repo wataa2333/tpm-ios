@@ -141,7 +141,7 @@ final class PreviewTests: XCTestCase {
         }
     }
 
-    func testKeyboardDoneDismissesKeyboardAndRestoresDocumentActions() {
+    func testKeyboardDismissalKeepsDocumentActionsVisibleAcrossTwelveCycles() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "new-fault", "--skip-biometrics"]
         app.launch()
@@ -152,9 +152,19 @@ final class PreviewTests: XCTestCase {
         app.buttons["完成"].tap()
         let name = app.textFields["请输入报修名称"]
         XCTAssertTrue(name.waitForExistence(timeout: 10))
+        repeatKeyboardDismissal(app, field: name, typedText: "keyboard-loop")
+        XCTAssertEqual(name.value as? String, "keyboard-loop")
+        let phone = app.textFields["请输入联系电话"]
+        for _ in 0..<6 where !phone.isHittable { app.swipeUp() }
+        XCTAssertTrue(phone.isHittable)
+        repeatKeyboardDismissal(app, field: phone)
+    }
+
+    private func repeatKeyboardDismissal(_ app: XCUIApplication, field: XCUIElement, typedText: String? = nil) {
         let save = app.buttons["保存"], submit = app.buttons["提交"]
-        for _ in 0..<3 {
-            name.tap()
+        for cycle in 0..<12 {
+            field.tap()
+            if cycle == 0, let typedText { field.typeText(typedText) }
             let dismiss = app.buttons["keyboard-dismiss"]
             XCTAssertTrue(dismiss.waitForExistence(timeout: 10))
             XCTAssertTrue(dismiss.isHittable)
@@ -165,14 +175,39 @@ final class PreviewTests: XCTestCase {
             XCTAssertEqual(dismiss.frame.midX, keyboard.frame.midX, accuracy: 3)
             XCTAssertLessThan(dismiss.frame.midY, keyboard.frame.midY)
             XCTAssertGreaterThan(dismiss.frame.width, dismiss.frame.height)
-            XCTAssertFalse(save.exists, "输入时不叠加保存按钮")
-            XCTAssertFalse(submit.exists, "输入时不叠加提交按钮")
+            XCTAssertTrue(save.exists, "键盘展开时保存按钮仍保留")
+            XCTAssertTrue(submit.exists, "键盘展开时提交按钮仍保留")
+            XCTAssertTrue(save.isHittable)
+            XCTAssertTrue(submit.isHittable)
             dismiss.tap()
             let closed = expectation(for: NSPredicate { _, _ in app.keyboards.count == 0 }, evaluatedWith: nil)
             wait(for: [closed], timeout: 5)
             XCTAssertTrue(save.waitForExistence(timeout: 5))
             XCTAssertTrue(save.isHittable)
             XCTAssertTrue(submit.isHittable)
+            XCTAssertEqual(app.state, .runningForeground)
+            if let typedText { XCTAssertEqual(field.value as? String, typedText) }
+        }
+    }
+
+    func testSearchKeyboardCanDismissTwelveTimesWithoutDuplicateControls() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "faults"]
+        app.launch()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
+        for cycle in 0..<12 {
+            search.tap()
+            if cycle == 0 { search.typeText("立式") }
+            let dismiss = app.buttons["keyboard-dismiss"]
+            XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+            XCTAssertEqual(app.buttons.matching(identifier: "keyboard-dismiss").count, 1)
+            XCTAssertTrue(dismiss.isHittable)
+            dismiss.tap()
+            let closed = expectation(for: NSPredicate { _, _ in app.keyboards.count == 0 }, evaluatedWith: nil)
+            wait(for: [closed], timeout: 5)
+            XCTAssertEqual(app.state, .runningForeground)
+            XCTAssertEqual(search.value as? String, "立式")
         }
     }
 

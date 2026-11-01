@@ -16,6 +16,7 @@ private struct PageSearch: ViewModifier {
         let active = presented ?? $localActive
         content
             .searchable(text: $text, isPresented: active, placement: .navigationBarDrawer(displayMode: .always), prompt: prompt)
+            .keyboardDismissToolbar()
             .onSubmit(of: .search) {
                 if text != lastSubmitted { lastSubmitted = text; submit() }
                 // Confirming a search (Return) puts the search field away and the keyboard with it.
