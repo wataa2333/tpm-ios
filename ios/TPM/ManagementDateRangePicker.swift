@@ -54,7 +54,7 @@ struct ManagementDateRangePicker: View {
             && Calendar.current.isDate(draft.to, inSameDayAs: range.to)
         return Button { draft = range } label: {
             HStack {
-                Text(title)
+                Text(title).animatedTextValue(title)
                 Spacer()
                 if selected { Image(systemName: "checkmark.circle.fill") }
             }.frame(maxWidth: .infinity).contentShape(.rect)

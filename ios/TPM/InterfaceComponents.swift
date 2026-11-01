@@ -8,8 +8,8 @@ struct PreviousDataNotice: View {
         Label {
             VStack(alignment: .leading, spacing: 4) {
                 Text("上次读取的数据，非最新").font(AppFont.subheadline.weight(.semibold))
-                if let date { Text(date.formatted(date: .numeric, time: .shortened)).font(AppFont.caption) }
-                Text(message).font(AppFont.caption)
+                if let date { Text(date.formatted(date: .numeric, time: .shortened)).animatedTextValue(date.formatted(date: .numeric, time: .shortened)).font(AppFont.caption) }
+                Text(message).animatedTextValue(message).font(AppFont.caption)
             }
         } icon: { Image(systemName: "clock.arrow.circlepath").foregroundStyle(.orange) }
         .frame(maxWidth: .infinity, alignment: .leading).padding(12)
@@ -51,12 +51,13 @@ struct InitialLoadingContent: ViewModifier {
         content.opacity(hidden ? 0 : 1)
             .accessibilityHidden(hidden)
             .allowsHitTesting(!hidden)
-
+            .animation(.easeOut(duration: reduceMotion ? 0.12 : 0.2), value: hidden)
     }
 }
 
 extension EnvironmentValues {
     @Entry var previewReferences = false
+    @Entry var bottomSafeArea: CGFloat = 0
     @Entry var closeWorkOrder: (() -> Void)? = nil
 }
 
@@ -69,13 +70,70 @@ struct BottomAction: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         Button(action: action) {
-            if busy { ProgressView().accessibilityLabel(title) }
-            else { Label(title, systemImage: symbol) }
+            VStack(spacing: 5) {
+                Group { if busy { ProgressView() } else { Image(systemName: symbol).font(.system(size: 28, weight: .medium)) } }
+                    .frame(width: 58, height: 48)
+                    .foregroundStyle(color)
+                Text(title).animatedTextValue(title).font(AppFont.subheadline.weight(.medium)).foregroundStyle(.primary)
+            }.padding(.horizontal, 8).padding(.vertical, 6)
         }
-        .buttonStyle(.borderedProminent).tint(color)
-        .disabled(busy)
+        .buttonStyle(.glass).buttonBorderShape(.roundedRectangle(radius: 24))
         .accessibilityLabel(title)
+        .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.2), value: busy)
+    }
+}
 
+/// Scrolls the list or scroll view of the page it is attached to back to its top whenever `trigger`
+/// changes (a manual refresh, another filter, a search, a changed tab). It finds the page's real
+/// scroll view in UIKit and animates it, which works for List and ScrollView alike. Loading further
+/// pages does not change `trigger`, so it never moves the list.
+struct ReloadsToTop<Trigger: Equatable>: ViewModifier {
+    let trigger: Trigger
+    func body(content: Content) -> some View {
+        content.background(ScrollToTopAnchor(trigger: trigger).frame(width: 0, height: 0).allowsHitTesting(false))
+    }
+}
+
+private struct ScrollToTopAnchor<Trigger: Equatable>: UIViewRepresentable {
+    let trigger: Trigger
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeUIView(context: Context) -> UIView { UIView() }
+    func updateUIView(_ view: UIView, context: Context) {
+        defer { context.coordinator.last = trigger }
+        guard let last = context.coordinator.last, last != trigger else { return }
+        // After the update has been laid out, so the scroll view exists and has its final insets.
+        DispatchQueue.main.async { [weak view] in
+            guard let view, let scroll = Self.scrollView(near: view) else { return }
+            scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: -scroll.adjustedContentInset.top), animated: !UIAccessibility.isReduceMotionEnabled)
+        }
+    }
+    final class Coordinator { var last: Trigger? }
+
+    /// The scroll view that belongs to the same page: searched upward from the anchor, level by level.
+    private static func scrollView(near view: UIView) -> UIScrollView? {
+        var ancestor: UIView? = view.superview
+        var depth = 0
+        while let current = ancestor, depth < 8 {
+            if let found = firstScrollView(in: current, excluding: view) { return found }
+            ancestor = current.superview; depth += 1
+        }
+        return nil
+    }
+    private static func firstScrollView(in root: UIView, excluding: UIView) -> UIScrollView? {
+        var queue: [UIView] = [root]
+        while !queue.isEmpty {
+            let current = queue.removeFirst()
+            if let scroll = current as? UIScrollView, scroll.isScrollEnabled, scroll.window != nil, scroll.bounds.height > 100,
+               scroll.contentSize.width <= scroll.bounds.width + 1 || scroll is UICollectionView { return scroll }
+            queue.append(contentsOf: current.subviews.filter { $0 !== excluding })
+        }
+        return nil
+    }
+}
+
+extension View {
+    func reloadsToTop<Trigger: Equatable>(on trigger: Trigger) -> some View {
+        modifier(ReloadsToTop(trigger: trigger))
     }
 }
 
@@ -97,12 +155,16 @@ struct LoadMoreFooter: View {
                     .frame(maxWidth: .infinity)
                     .task(id: loaded) { if !loading { await loadMore() } }
                     .accessibilityElement(children: .combine)
+                    .transition(.opacity)
             } else if loaded > 0 && !hasMore {
                 Text(total.map { "共 \($0) 单" } ?? "已显示全部 \(loaded) 条")
                     .font(AppFont.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+                    .contentTransition(.numericText()).transition(.opacity)
             }
         }
         .listRowBackground(Color.clear).listRowSeparator(.hidden)
+        .interfaceMotion(hasMore)
+        .interfaceMotion(failed)
     }
 }
 
@@ -117,11 +179,13 @@ struct AnimatedLoadingOverlay: View {
             if isPresented {
                 ProgressView().padding(.top, 14)
                     .accessibilityLabel(title)
+                    .transition(.opacity)
             }
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .allowsHitTesting(false)
+        .interfaceMotion(isPresented)
     }
 }
 
@@ -146,28 +210,53 @@ struct LoadingRow: View {
                 .padding(.vertical, 10)
                 .clipped()
                 .listRowBackground(Color.clear).listRowSeparator(.hidden)
+                .transition(.opacity)
             }
         }
+        .interfaceMotion(isPresented)
     }
 }
 
-/// A native picker keeps all categories reachable at large text sizes.
+/// One horizontal row of choices, used for order states, todo categories and asset tabs.
+/// It is a plain fixed-height row placed as the first row of a list, so it scrolls with the
+/// content and can never overlap the large title, the search field or the refresh control.
 struct ChipStrip: View {
     struct Item: Identifiable { let id: Int; let title: String; var count: Int? = nil; var color: Color = .accentColor; var showsCount = false }
     let items: [Item]
     @Binding var selection: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
-        Picker("分类", selection: $selection) {
-            ForEach(items) { item in
-                Text(item.title + (item.showsCount ? "（" + (item.count.map(String.init) ?? "…") + "）" : ""))
-                    .tag(item.id)
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                HStack(spacing: 22) {
+                    ForEach(items) { item in
+                        Button { selection = item.id } label: {
+                            VStack(spacing: 6) {
+                                HStack(spacing: 5) {
+                                    Text(item.title).animatedTextValue(item.title).font(AppFont.subheadline.weight(selection == item.id ? .semibold : .regular)).lineLimit(1)
+                                    if item.showsCount {
+                                        Text(item.count.map(String.init) ?? "…").font(AppFont.caption.weight(.semibold)).monospacedDigit()
+                                            .contentTransition(.numericText()).interfaceMotion(item.count, duration: 0.5)
+                                    }
+                                }
+                                .foregroundStyle(selection == item.id ? Color.primary : Color.secondary)
+                                Rectangle().fill(selection == item.id ? item.color : .clear).frame(height: 3)
+                            }.fixedSize().frame(minHeight: 44).contentShape(.rect)
+                        }
+                        .buttonStyle(.plain).id(item.id)
+                        .accessibilityLabel(item.title)
+                        .accessibilityValue(item.showsCount ? (item.count.map { "\($0) 单" } ?? "数量尚未获取") : "")
+                        .accessibilityAddTraits(selection == item.id ? [.isSelected] : [])
+                    }
+                }.padding(.horizontal, 16)
             }
+            .scrollIndicators(.hidden)
+            .onAppear { proxy.scrollTo(selection, anchor: .center) }
+            .onChange(of: selection) { _, index in withAnimation(reduceMotion ? nil : .smooth(duration: 0.4)) { proxy.scrollTo(index, anchor: .center) } }
         }
-        .pickerStyle(.menu)
-        .accessibilityIdentifier("category-picker")
-        .accessibilityValue(items.first { $0.id == selection }.map { item in
-            item.title + (item.showsCount ? "，" + (item.count.map { "\($0) 单" } ?? "数量尚未获取") : "")
-        } ?? "未选择")
+        .frame(height: 48)
+        .sensoryFeedback(.selection, trigger: selection)
+        .listRowInsets(EdgeInsets()).listRowBackground(Color.clear).listRowSeparator(.hidden)
     }
 }
 
@@ -185,7 +274,11 @@ struct WorkOrderStatusStrip: View {
 struct CompactEmptyState: View {
     var title = "暂无相关报修"
     var body: some View {
-        ContentUnavailableView(title, systemImage: "tray", description: Text("可切换状态或调整搜索条件"))
+        VStack(spacing: 10) {
+            Image(systemName: "tray").font(.system(size: 28)).foregroundStyle(.secondary)
+            Text(title).animatedTextValue(title).font(AppFont.headline)
+            Text("可切换状态或调整搜索条件").font(AppFont.subheadline).foregroundStyle(.secondary)
+        }.frame(maxWidth: .infinity).padding(.vertical, 28)
     }
 }
 

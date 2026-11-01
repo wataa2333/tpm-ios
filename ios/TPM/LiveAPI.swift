@@ -341,8 +341,8 @@ struct NativeLoginView: View {
                                 }
                             } label: {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(account.displayName.isEmpty ? account.username : account.displayName).foregroundStyle(Color.primary)
-                                    Text(account.username).font(AppFont.footnote).foregroundStyle(Color.secondary)
+                                    Text(account.displayName.isEmpty ? account.username : account.displayName).animatedTextValue(account.displayName.isEmpty ? account.username : account.displayName).foregroundStyle(Color.primary)
+                                    Text(account.username).animatedTextValue(account.username).font(AppFont.footnote).foregroundStyle(Color.secondary)
                                 }.frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect)
                             }
                             .buttonStyle(.plain).disabled(session.signingIn)
@@ -368,7 +368,7 @@ struct NativeLoginView: View {
                 } footer: {
                     Text("密码只保存在这台手机的钥匙串里，不会显示，也不会上传。")
                 }
-            }.keyboardManaged().navigationTitle("登录").errorDialog($error, title: "登录失败", clearsOnClose: true)
+            }.navigationTitle("登录").errorDialog($error, title: "登录失败", clearsOnClose: true)
         }
     }
 }
@@ -378,7 +378,7 @@ struct LoadingFailure: View {
     let retry: () -> Void
     var body: some View {
         if let error {
-            ContentUnavailableView { Label("加载失败", systemImage: "wifi.exclamationmark") } description: { Text(error) } actions: { Button("重试", action: retry) }
+            ContentUnavailableView { Label("加载失败", systemImage: "wifi.exclamationmark") } description: { Text(error).animatedTextValue(error) } actions: { Button("重试", action: retry) }
         } else { ProgressView("正在加载…").frame(maxWidth: .infinity, maxHeight: .infinity) }
     }
 }

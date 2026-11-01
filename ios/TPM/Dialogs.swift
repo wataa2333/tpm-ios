@@ -3,16 +3,70 @@ import UIKit
 
 /// Ends editing in whichever field has the keyboard, wherever it is.
 func endEditing() {
+    for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) where scene.activationState == .foregroundActive {
+        for window in scene.windows where window.isKeyWindow { window.endEditing(true) }
+    }
     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+}
+
+/// The one dialog every confirmation and notice in the app uses: a compact bottom card with a
+/// centred title, optional message, one large primary button and, when wanted, a cancel
+/// button. It replaces the mix of system action sheets, popover bubbles and alerts, which looked
+/// different from each other and were small.
+struct DialogSheet: View {
+    let title: String
+    var message: String? = nil
+    let primary: String
+    var primaryRole: ButtonRole? = nil
+    var showsCancel = true
+    /// An optional second choice between the main button and "取消", e.g. "不保存".
+    var secondary: String? = nil
+    var onSecondary: () -> Void = {}
+    let onPrimary: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var contentHeight: CGFloat = 280
+    var body: some View {
+        VStack(spacing: 22) {
+            VStack(spacing: 10) {
+                Text(title).animatedTextValue(title).font(AppFont.title3.weight(.semibold)).multilineTextAlignment(.center)
+                if let message, !message.isEmpty {
+                    Text(message).animatedTextValue(message).font(AppFont.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        .textSelection(.enabled)
+                }
+            }.frame(maxWidth: .infinity).fixedSize(horizontal: false, vertical: true)
+            VStack(spacing: 10) {
+                Button(role: primaryRole) { dismiss(); onPrimary() } label: {
+                    Text(primary).animatedTextValue(primary).font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28)
+                }
+                .buttonStyle(.glassProminent).controlSize(.large)
+                .tint(primaryRole == .destructive ? .red : .accentColor)
+                .accessibilityIdentifier("dialog-primary")
+                if let secondary {
+                    Button(role: .destructive) { dismiss(); onSecondary() } label: { Text(secondary).animatedTextValue(secondary).font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28) }
+                        .buttonStyle(.glass).controlSize(.large)
+                        .accessibilityIdentifier("dialog-secondary")
+                }
+                if showsCancel {
+                    Button { dismiss() } label: { Text("取消").font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28) }
+                        .buttonStyle(.glass).controlSize(.large)
+                        .accessibilityIdentifier("dialog-cancel")
+                }
+            }
+        }
+        .padding(.horizontal, 24).padding(.top, 32).padding(.bottom, 20)
+        .frame(maxWidth: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+        .presentationDetents([.height(min(contentHeight + 12, 640))])
+        .presentationDragIndicator(.hidden)
+    }
 }
 
 extension View {
     /// Tells the user something; `onClose` runs however the dialog is closed.
     func noticeDialog(_ title: String, message: String, isPresented: Binding<Bool>, onClose: @escaping () -> Void = {}) -> some View {
-        alert(title, isPresented: isPresented) {
-            Button("好", role: .cancel) {}
-        } message: { Text(message) }
-        .onChange(of: isPresented.wrappedValue) { _, shown in if !shown { onClose() } }
+        sheet(isPresented: isPresented, onDismiss: onClose) {
+            DialogSheet(title: title, message: message, primary: "好", showsCancel: false, onPrimary: {})
+        }
     }
 
     /// Shows a failure or validation message in the app's one dialog. With
@@ -26,7 +80,7 @@ extension View {
     /// Dismissing the keyboard by dragging the content, and a "收起键盘" button above the keyboard
     /// for fields that have no return key (numbers, phone numbers).
     func keyboardManaged() -> some View {
-        scrollDismissesKeyboard(.interactively).nativeKeyboardToolbar()
+        scrollDismissesKeyboard(.interactively)
     }
 }
 
@@ -69,14 +123,12 @@ struct ErrorDialog: ViewModifier {
                 if let new { shownMessage = new }
             }
             .onAppear { if let error { shownMessage = error } }
-            .alert(title, isPresented: Binding(get: { error != nil && !acknowledged }, set: { open in
+            .sheet(isPresented: Binding(get: { error != nil && !acknowledged }, set: { open in
                 if !open { acknowledged = true; if clearsOnClose { error = nil } }
             })) {
-                if let retry {
-                    Button("重试", action: retry)
-                    Button("取消", role: .cancel) {}
-                } else { Button("好", role: .cancel) {} }
-            } message: { Text(error ?? shownMessage) }
+                DialogSheet(title: title, message: error ?? shownMessage, primary: retry == nil ? "好" : "重试",
+                            showsCancel: retry != nil, onPrimary: { retry?() })
+            }
     }
 }
 
@@ -108,32 +160,59 @@ struct FullRowButton: View {
         self.title = title; self.systemImage = systemImage; self.action = action
     }
     var body: some View {
-        Button(action: action) { Label(title, systemImage: systemImage).fullRow() }
+        Button(action: action) { Label(title, systemImage: systemImage).animatedTextValue(title).fullRow() }
     }
 }
 
 extension View {
-    /// SwiftUI owns keyboard avoidance. Never animate keyboard-dependent padding.
+    /// Padding for the action buttons at the bottom of a page. The bottom padding is negative on purpose:
+    /// the buttons then sit as far from the lower screen edge as from the side edges (20pt), which keeps
+    /// them concentric with the screen's rounded corners instead of floating above the home indicator.
     func bottomBarPadding() -> some View {
-        padding(.horizontal, 20).padding(.vertical, 8)
+        modifier(BottomBarPadding())
     }
 }
 
-/// A brief inline notice made from a system Label, without movement or glass layers.
+/// The negative bottom padding only makes sense against the home indicator. With the keyboard up, the
+/// bar's bottom edge is the keyboard's top edge, and pulling it down would hide the buttons' labels
+/// behind the keys, so the padding is normal then. Follow the keyboard's own animation timing.
+private struct BottomBarPadding: ViewModifier {
+    @State private var keyboardUp = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func body(content: Content) -> some View {
+        content.padding(.horizontal, 20).padding(.top, 8).padding(.bottom, keyboardUp ? 8 : -14)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
+                updateKeyboard(notification)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
+                updateKeyboard(notification)
+            }
+    }
+    private func updateKeyboard(_ notification: Notification) {
+        let change = KeyboardMotionChange(notification)
+        guard keyboardUp != change.visible else { return }
+        withAnimation(change.animation(reduceMotion: reduceMotion)) { keyboardUp = change.visible }
+    }
+}
+
+/// A short notice that slides in below the navigation bar, speaks itself to VoiceOver and goes away alone.
 private struct ToastModifier: ViewModifier {
     @Binding var message: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .top) {
                 if let message {
-                    Label(message, systemImage: "info.circle").font(AppFont.subheadline).multilineTextAlignment(.center)
+                    Text(message).animatedTextValue(message).font(AppFont.subheadline.weight(.medium)).multilineTextAlignment(.center)
                         .padding(.horizontal, 18).padding(.vertical, 10)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .glassEffect(.regular, in: .capsule)
                         .padding(.top, 8).padding(.horizontal, 24)
+                        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                         .accessibilityIdentifier("toast")
                         .allowsHitTesting(false)
                 }
             }
+            .interfaceMotion(message, duration: 0.35)
             .onChange(of: message) { _, new in if let new { AccessibilityNotification.Announcement(new).post() } }
             .task(id: message) {
                 guard message != nil else { return }
@@ -147,4 +226,5 @@ extension View {
     func toast(_ message: Binding<String?>) -> some View { modifier(ToastModifier(message: message)) }
 }
 
-// Each input page declares its system keyboard toolbar.
+
+// Keyboard dismissal is installed globally on UITextField/UITextView by KeyboardDismissAccessory.

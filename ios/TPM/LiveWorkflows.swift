@@ -12,15 +12,20 @@ enum WorkflowKind: String, Identifiable {
 struct AuthenticatedRoot: View {
     @EnvironmentObject private var session: LiveSession
     var body: some View {
-        // Switching factory rebuilds pages for the new scope; no app-owned cross-fade.
+        // Switching factory rebuilds the pages for the new factory. They are not cut over: the old ones
+        // dim while the request runs, then fade out as the new ones fade in.
         ZStack {
             if session.signedIn {
                 LiveTabs().id(session.scopeRevision)
+                    .transition(.opacity)
                     .opacity(session.switchingFactory ? 0.35 : 1)
             } else {
-                NativeLoginView()
+                NativeLoginView().transition(.opacity)
             }
         }
+        .interfaceMotion(session.scopeRevision, duration: 0.7)
+        .interfaceMotion(session.switchingFactory, duration: 0.4)
+        .interfaceMotion(session.signedIn, duration: 0.45)
         // Pins, defaults and drafts saved under the old "name@factory name" scope move to the id-based one.
         .task(id: session.scopeRevision) { session.migrateLegacyScope() }
     }
@@ -124,20 +129,20 @@ struct LiveWorkflowList: View {
     var body: some View {
         CardPage {
             if usesQueryAccount {
-                Text("查询：" + queries.label(operator: session) + " · 操作：" + session.authentication.text("name"))
+                Text("查询：" + queries.label(operator: session) + " · 操作：" + session.authentication.text("name")).animatedTextValue("查询：" + queries.label(operator: session) + " · 操作：" + session.authentication.text("name"))
                     .font(AppFont.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
             }
             if kind == .fault && !searchMode { WorkOrderStatusStrip(selection: Binding(get: { FaultState.allCases.firstIndex { $0.code == state } ?? -1 }, set: { state = FaultState.allCases[$0].code }), counts: stateCounts) }
             if let activeRange = dateRange { DateRangeChip(range: activeRange) { self.dateRange = nil } }
             LoadingRow(isPresented: (loading || gate.busy) && !refreshing, title: "正在加载工单")
-            if kind == .fault && searching { CardGroup { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }.padding(.horizontal, 16).padding(.vertical, 6) } }
+            if kind == .fault && searching { CardGroup { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).animatedTextValue($0.rawValue).tag($0) } }.padding(.horizontal, 16).padding(.vertical, 6) } }
             CardGroup {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, item in
                     let entry = batchItem(kind: kind, item: item)
                     LiveOrderRow(kind: kind, item: item, usesQueryAccount: usesQueryAccount, selectionMode: batch.active, selected: batch.contains(entry.id), selectable: batch.isSelectable(entry), batch: batch).equatable()
                 }
                 if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无相关单据") }
-            }
+            }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).interfaceMotion(loading || gate.busy, duration: 0.4)
             LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await reload(more: true) }
         }
         .navigationTitle(pageTitle).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
@@ -147,6 +152,8 @@ struct LiveWorkflowList: View {
                           collapsesOnSubmit: searchMode, onSubmit: { if searchMode { commitQuery() } })
 
         .refreshable { refreshing = true; await reload(); await reloadCounts(); refreshing = false }
+        .reloadsToTop(on: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)-\(readContext)"))
+        .interfaceMotion(loading || gate.busy, duration: 0.45)
         .toolbar {
             if kind == .fault {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -344,45 +351,45 @@ struct LiveWorkflowDetail: View {
                 List {
                     if usesQueryAccount {
                         Section {
-                            Text("查询：" + queries.label(operator: session) + " · 操作：" + session.authentication.text("name")).font(AppFont.caption).foregroundStyle(.secondary)
+                            Text("查询：" + queries.label(operator: session) + " · 操作：" + session.authentication.text("name")).animatedTextValue("查询：" + queries.label(operator: session) + " · 操作：" + session.authentication.text("name")).font(AppFont.caption).foregroundStyle(.secondary)
                             if let operationNotice {
-                                Label(operationNotice, systemImage: "lock.fill").font(AppFont.subheadline).foregroundStyle(.secondary)
+                                Label(operationNotice, systemImage: "lock.fill").animatedTextValue(operationNotice).font(AppFont.subheadline).foregroundStyle(.secondary)
                             }
                         }
                     }
                     if kind == .fault {
                         Section("故障报修工单信息") {
-                            LabeledContent("报修名称") { Text(detail["faultName"].text) }
-                            LabeledContent("单号") { Text(detail["sn"].text) }
-                            HStack { Text("状态"); Spacer(); Text(faultStateName(detail["faultState"].text)).font(AppFont.body.weight(.semibold)).foregroundStyle(faultDisplayColor(detail["faultState"].text)) }
-                            LabeledContent("故障时间") { Text(readableDate(detail["faultTime"])) }
-                            NavigationLink { AssetRecordDetail(record: detail["asset"]) } label: { LabeledContent("报修资产") { Text(detail["asset"]["assetName"].text) } }
-                            LabeledContent("故障申请人") { Text(detail["applyUser"].object.label) }
-                            LabeledContent("申请部门") { Text(detail["applyDept"].object.label) }
-                            LabeledContent("受理部门") { Text(detail["dept"].object.label) }
-                            LabeledContent("维修受理人") { Text(detail["user"].object.label) }
-                            LabeledContent("报修人联系电话") { Text(detail["userPhone"].text) }
-                            LabeledContent("维修班组") { Text(detail["userGroup"].object.label) }
-                            LabeledContent("ERP记账部门") { Text(detail["division"].object.label) }
+                            LabeledContent("报修名称") { Text(detail["faultName"].text).animatedTextValue(detail["faultName"].text) }
+                            LabeledContent("单号") { Text(detail["sn"].text).animatedTextValue(detail["sn"].text) }
+                            HStack { Text("状态"); Spacer(); Text(faultStateName(detail["faultState"].text)).animatedTextValue(faultStateName(detail["faultState"].text)).font(AppFont.body.weight(.semibold)).foregroundStyle(faultDisplayColor(detail["faultState"].text)) }
+                            LabeledContent("故障时间") { Text(readableDate(detail["faultTime"])).animatedTextValue(readableDate(detail["faultTime"])) }
+                            NavigationLink { AssetRecordDetail(record: detail["asset"]) } label: { LabeledContent("报修资产") { Text(detail["asset"]["assetName"].text).animatedTextValue(detail["asset"]["assetName"].text) } }
+                            LabeledContent("故障申请人") { Text(detail["applyUser"].object.label).animatedTextValue(detail["applyUser"].object.label) }
+                            LabeledContent("申请部门") { Text(detail["applyDept"].object.label).animatedTextValue(detail["applyDept"].object.label) }
+                            LabeledContent("受理部门") { Text(detail["dept"].object.label).animatedTextValue(detail["dept"].object.label) }
+                            LabeledContent("维修受理人") { Text(detail["user"].object.label).animatedTextValue(detail["user"].object.label) }
+                            LabeledContent("报修人联系电话") { Text(detail["userPhone"].text).animatedTextValue(detail["userPhone"].text) }
+                            LabeledContent("维修班组") { Text(detail["userGroup"].object.label).animatedTextValue(detail["userGroup"].object.label) }
+                            LabeledContent("ERP记账部门") { Text(detail["division"].object.label).animatedTextValue(detail["division"].object.label) }
                         }
                         if let sentBack = faultReturnKind(detail) { ReturnNoteSection(kind: sentBack, repair: repairResult, fault: detail).environmentObject(sourceSession ?? session).id(explanationRevision) }
-                        if !detail["faultDesc"].text.isEmpty { Section("故障描述") { Text(detail["faultDesc"].text).textSelection(.enabled).contextMenu { Button("复制", systemImage: "doc.on.doc") { copyToPasteboard(detail["faultDesc"].text) } } } }
+                        if !detail["faultDesc"].text.isEmpty { Section("故障描述") { Text(detail["faultDesc"].text).animatedTextValue(detail["faultDesc"].text).textSelection(.enabled).contextMenu { Button("复制", systemImage: "doc.on.doc") { copyToPasteboard(detail["faultDesc"].text) } } } }
                         if !detail["albums"].array.isEmpty { Section("现场照片") { ForEach(Array(detail["albums"].array.enumerated()), id: \.offset) { _, photo in AttachmentRow(photo: photo) } } }
                         if repairResult != .null, faultReturnKind(detail) == nil { RepairResultSection(repair: repairResult) }
                     } else {
                         Section("ERP出库详情") {
-                            ForEach([("outNumber", "出库单号"), ("sn", "单号"), ("user.realName", "申请人"), ("applyDate", "申请日期"), ("projectCode", "项目号"), ("projectDesc", "项目名称"), ("referenceSn", "关联单号"), ("recipientUser.realName", "领用人"), ("dept.deptName", "领用部门"), ("division.divisionDesc", "ERP记账部门"), ("outboundTime", "出库时间")], id: \.0) { key, label in LabeledContent(label) { Text(readableDate(detail.at(key))) } }
+                            ForEach([("outNumber", "出库单号"), ("sn", "单号"), ("user.realName", "申请人"), ("applyDate", "申请日期"), ("projectCode", "项目号"), ("projectDesc", "项目名称"), ("referenceSn", "关联单号"), ("recipientUser.realName", "领用人"), ("dept.deptName", "领用部门"), ("division.divisionDesc", "ERP记账部门"), ("outboundTime", "出库时间")], id: \.0) { key, label in LabeledContent(label) { Text(readableDate(detail.at(key))).animatedTextValue(readableDate(detail.at(key))) } }
                         }
                         Section("出库物料 · \(materials.count) 项") {
                             ForEach(Array(materials.enumerated()), id: \.offset) { _, line in
                                 DisclosureGroup(line["material"]["materialDesc"].text) {
                                     MaterialFacts(material: line["material"])
-                                    LabeledContent("申请数量") { Text(materialQuantity(line["entryQuantity"].text, material: line["material"])) }
-                                    LabeledContent("实发数量") { Text(materialQuantity(line["actualQuantity"].text, material: line["material"])) }
+                                    LabeledContent("申请数量") { Text(materialQuantity(line["entryQuantity"].text, material: line["material"])).animatedTextValue(materialQuantity(line["entryQuantity"].text, material: line["material"])) }
+                                    LabeledContent("实发数量") { Text(materialQuantity(line["actualQuantity"].text, material: line["material"])).animatedTextValue(materialQuantity(line["actualQuantity"].text, material: line["material"])) }
                                 }
                             }
-                        }
-                        Section("用途") { Text(detail["remark"].text) }
+                        }.animatedTextValue("出库物料 · \(materials.count) 项")
+                        Section("用途") { Text(detail["remark"].text).animatedTextValue(detail["remark"].text) }
                     }
                     if !detail["processInstanceId"].text.isEmpty {
                         Section {
@@ -393,6 +400,7 @@ struct LiveWorkflowDetail: View {
                     }
                 }
                 .refreshable { await load() }
+                .reloadsToTop(on: gate.token)
             }
         }
         .textSelection(.enabled).navigationTitle(kind == .fault ? "报修详情" : "出库详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
@@ -416,7 +424,7 @@ struct LiveWorkflowDetail: View {
                             BottomAction(title: "退单", symbol: "arrow.uturn.backward", color: .orange) {
                                 guard actionInteractionAllowed else { return }
                                 returning = true
-                            }
+                            }.transition(.opacity)
                         }
                         Spacer()
                         BottomAction(title: taskActionTitle(task, kind: kind), symbol: "arrow.right.circle") {
@@ -429,12 +437,15 @@ struct LiveWorkflowDetail: View {
                     .opacity(returnToList || suppressActions ? 0 : 1)
                     .allowsHitTesting(actionInteractionAllowed)
                     .accessibilityHidden(!actionInteractionAllowed)
+                    .transition(.opacity)
                 }
                 if kind == .fault && !peeking && !loading && !returnToList && !suppressActions {
                     AssetReportButton(asset: detail["asset"], screenEdge: true)
                 }
             }
             .bottomBarPadding()
+            .interfaceMotion(actions)
+            .interfaceMotion(suppressActions)
         }
         .sheet(isPresented: $returning, onDismiss: taskSheetClosed) { NavigationStack { WorkflowTaskView(task: task, kind: kind, previewReturn: true, onCompleted: completed) } }
         .sheet(isPresented: $editing, onDismiss: taskSheetClosed) {
@@ -529,13 +540,13 @@ struct LiveRecordFacts: View {
     let record: JSONValue
     let title: String
     let fields: [(String, String)]
-    var body: some View { List { ForEach(fields, id: \.0) { key, label in if record.at(key) != .null { LabeledContent(label) { Text(readableDate(record.at(key))) } } } }.textSelection(.enabled).navigationTitle(title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome().modifier(DetailTabVisibility()) }
+    var body: some View { List { ForEach(fields, id: \.0) { key, label in if record.at(key) != .null { LabeledContent(label) { Text(readableDate(record.at(key))).animatedTextValue(readableDate(record.at(key))) } } } }.textSelection(.enabled).navigationTitle(title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome().modifier(DetailTabVisibility()) }
 }
 struct AttachmentRow: View {
     let photo: JSONValue
     var body: some View {
         if let url = URL(string: photo["url"].text) {
-            Link(destination: url) { Label(photo["name"].text.isEmpty ? "查看照片" : photo["name"].text, systemImage: "photo") }
+            Link(destination: url) { Label(photo["name"].text.isEmpty ? "查看照片" : photo["name"].text, systemImage: "photo").animatedTextValue(photo["name"].text.isEmpty ? "查看照片" : photo["name"].text) }
         }
     }
 }
@@ -562,22 +573,22 @@ struct LiveCatalogView: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, record in
                 NavigationLink {
                     if source == .assets { AssetRecordDetail(independent: true, record: record) }
-                    else { List { Section(record["materialDesc"].text) { MaterialFacts(material: record); LabeledContent("库存数量") { Text(materialQuantity(record["onhandQty"].text, material: record)) } } }.textSelection(.enabled).navigationTitle("库存详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome().modifier(DetailTabVisibility()) }
+                    else { List { Section(record["materialDesc"].text) { MaterialFacts(material: record); LabeledContent("库存数量") { Text(materialQuantity(record["onhandQty"].text, material: record)).animatedTextValue(materialQuantity(record["onhandQty"].text, material: record)) } }.animatedTextValue(record["materialDesc"].text) }.textSelection(.enabled).navigationTitle("库存详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome().modifier(DetailTabVisibility()) }
                 } label: { VStack(alignment: .leading, spacing: RowMetrics.spacing) {
-                    WrappingContent { Text(record.object.label).font(AppFont.headline) }
-                    WrappingContent { Text(record[source == .assets ? "assetCode" : "materialCode"].text).font(AppFont.subheadline).foregroundStyle(.secondary) }
+                    WrappingContent { Text(record.object.label).animatedTextValue(record.object.label).font(AppFont.headline) }
+                    WrappingContent { Text(record[source == .assets ? "assetCode" : "materialCode"].text).animatedTextValue(record[source == .assets ? "assetCode" : "materialCode"].text).font(AppFont.subheadline).foregroundStyle(.secondary) }
                     if source != .assets {
                         // As in the original app: organisation, batch, sub-inventory and locator, then the time of the record at the foot.
                         let facts = [record["erpTpmCompany"]["organizationName"].text, record["lot"].text, record["subInv"].text, record["locatorCode"].text].filter { !$0.isEmpty }.joined(separator: " · ")
-                        if !facts.isEmpty { WrappingContent { Text(facts).font(AppFont.footnote).foregroundStyle(.secondary) } }
-                        if !readableDate(record["updateTime"]).isEmpty { Text("入库 " + readableDate(record["updateTime"])).font(AppFont.footnote).foregroundStyle(.secondary) }
+                        if !facts.isEmpty { WrappingContent { Text(facts).animatedTextValue(facts).font(AppFont.footnote).foregroundStyle(.secondary) } }
+                        if !readableDate(record["updateTime"]).isEmpty { Text("入库 " + readableDate(record["updateTime"])).animatedTextValue("入库 " + readableDate(record["updateTime"])).font(AppFont.footnote).foregroundStyle(.secondary) }
                     }
                 } }
                 .uniformRow()
                 .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
             }
-            }
+            }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).interfaceMotion(loading || gate.busy, duration: 0.4)
             Section { LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await load(more: true) } }
         }
         .navigationTitle(source == .assets ? "资产台账" : "库存")
@@ -586,6 +597,8 @@ struct LiveCatalogView: View {
         .nativeSearchable(text: $query, isPresented: $searching, prompt: byCode ? "搜索编号" : "搜索名称")
         .onChange(of: queries.revision) { rows = []; total = nil; gate.request() }
         .onChange(of: byCode) { Task { await load() } }
+        .reloadsToTop(on: gate.id("\(byCode)-\(query)"))
+        .interfaceMotion(loading || gate.busy, duration: 0.45)
         .refreshButton(busy: loading || loadingMore || gate.busy) { gate.request() }
         .errorDialog($error, retry: { Task { await load() } })
         .task(id: gate.id("\(byCode)-\(query)")) { await gate.run(key: "\(byCode)-\(query)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await load() }) }
@@ -632,11 +645,11 @@ struct WorkflowNodesView: View {
             Section("流程节点") {
                 ForEach(Array(definition.enumerated()), id: \.offset) { _, node in
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(node["taskName"].text)
+                        Text(node["taskName"].text).animatedTextValue(node["taskName"].text)
                         let records = history.filter { $0["activityId"].text == node["taskKey"].text }
-                        Text(records.isEmpty ? "尚无处理记录" : records.contains { $0["endTime"] == .null } ? "当前节点" : "已有处理记录").font(AppFont.subheadline).foregroundStyle(.secondary)
+                        Text(records.isEmpty ? "尚无处理记录" : records.contains { $0["endTime"] == .null } ? "当前节点" : "已有处理记录").animatedTextValue(records.isEmpty ? "尚无处理记录" : records.contains { $0["endTime"] == .null } ? "当前节点" : "已有处理记录").font(AppFont.subheadline).foregroundStyle(.secondary)
                         let participant = workflowParticipantLabel(node["assignees"].text)
-                        if !participant.isEmpty { Text(participant).font(AppFont.subheadline).foregroundStyle(.secondary) }
+                        if !participant.isEmpty { Text(participant).animatedTextValue(participant).font(AppFont.subheadline).foregroundStyle(.secondary) }
                     }
                 }
             }
@@ -647,8 +660,10 @@ struct WorkflowNodesView: View {
         .textSelection(.enabled).navigationTitle("处理流程").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .errorDialog($error, retry: { Task { await load() } })
         .modifier(DetailTabVisibility())
+        .reloadsToTop(on: gate.token)
         .task(id: gate.id("flow")) { await gate.run(key: "flow") { await load() } }
         .refreshable { await load() }
+        .interfaceMotion(loading || gate.busy, duration: 0.45)
         .refreshButton(busy: loading || gate.busy) { gate.request() }
     }
     private func load() async {

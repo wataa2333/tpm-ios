@@ -221,7 +221,7 @@ struct ReferencePicker: View {
         List {
             if menu.enabled && !preview {
                 // A small hint: the pin and default actions are otherwise invisible.
-                Text(menu.supportsDefault ? "长按或向左滑动某一项，可以置顶，或设为默认。" : "长按或向左滑动某一项，可以置顶。")
+                Text(menu.supportsDefault ? "长按或向左滑动某一项，可以置顶，或设为默认。" : "长按或向左滑动某一项，可以置顶。").animatedTextValue(menu.supportsDefault ? "长按或向左滑动某一项，可以置顶，或设为默认。" : "长按或向左滑动某一项，可以置顶。")
                     .font(AppFont.footnote).foregroundStyle(.secondary)
                     .listRowBackground(Color.clear).listRowSeparator(.hidden)
                     .accessibilityIdentifier("picker-menu-hint")
@@ -230,10 +230,10 @@ struct ReferencePicker: View {
             if source == .users { Picker("人员分类", selection: $userMode) { Text("按姓名").tag(0); Text("按班组").tag(1) }.pickerStyle(.segmented) }
             if !source.searchModes.isEmpty {
                 // Always there for the lists the server searches, so the ways of searching are never hidden.
-                Section { Picker("搜索方式", selection: $searchMode) { ForEach(source.searchModes) { Text($0.label(for: source)).tag($0) } }.pickerStyle(.segmented).labelsHidden() }
+                Section { Picker("搜索方式", selection: $searchMode) { ForEach(source.searchModes) { Text($0.label(for: source)).animatedTextValue($0.label(for: source)).tag($0) } }.pickerStyle(.segmented).labelsHidden() }
             }
             if menu.enabled, query.isEmpty, !menu.pins.isEmpty {
-                Section { ForEach(menu.pins) { entry in optionRow(entry.value) } } header: { Text("置顶 · \(menu.pins.count)/\(PickerLists.pinLimit)") }
+                Section { ForEach(menu.pins) { entry in optionRow(entry.value) } } header: { Text("置顶 · \(menu.pins.count)/\(PickerLists.pinLimit)").animatedTextValue("置顶 · \(menu.pins.count)/\(PickerLists.pinLimit)") }
             }
             if menu.enabled, query.isEmpty, !menu.recents.isEmpty {
                 Section { ForEach(menu.recents) { entry in optionRow(entry.value) } } header: { Text("最近使用") }
@@ -249,19 +249,20 @@ struct ReferencePicker: View {
                     if !users.isEmpty {
                         DisclosureGroup {
                             ForEach(Array(users.enumerated()), id: \.offset) { _, user in
-                                Button { Task { await select(user) } } label: { HStack { WrappingContent { Text(user.object.label).foregroundStyle(Color.primary) }; ReferenceBadges(value: user) }.frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect) }.buttonStyle(.plain)
+                                Button { Task { await select(user) } } label: { HStack { WrappingContent { Text(user.object.label).animatedTextValue(user.object.label).foregroundStyle(Color.primary) }; ReferenceBadges(value: user) }.frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect) }.buttonStyle(.plain)
                                     .referenceMenu(for: user)
                             }
-                        } label: { WrappingContent { Text(group["groupName"].text) } }
+                        } label: { WrappingContent { Text(group["groupName"].text).animatedTextValue(group["groupName"].text) } }
                     }
                 }
             } else {
                 ForEach(visible.map { PickerEntry(key: identity($0), label: $0.object.label, value: $0) }) { entry in optionRow(entry.value) }
+                    .interfaceMotion(visible.map(identity))
             }
             } header: { if menu.enabled, query.isEmpty, !menu.pins.isEmpty || !menu.recents.isEmpty { Text("全部") } }
             if let message = pagingNotice ?? error {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(message).font(AppFont.footnote).foregroundStyle(.secondary)
+                    Text(message).animatedTextValue(message).font(AppFont.footnote).foregroundStyle(.secondary)
                     Button("重新加载") { Task { await load() } }.disabled(loading || loadingMore)
                 }.listRowBackground(Color.clear)
             }
@@ -271,6 +272,7 @@ struct ReferencePicker: View {
             if !loading && visible.isEmpty && error == nil { ContentUnavailableView("暂无匹配内容", systemImage: "magnifyingglass") }
         }
         .navigationTitle(source.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
+        .reloadsToTop(on: "\(query)-\(searchMode.rawValue)-\(userMode)")
         .errorDialog($notice, title: "不能选择", clearsOnClose: true)
         .errorDialog(Binding(get: { menu.notice }, set: { menu.notice = $0 }), title: "不能置顶", clearsOnClose: true)
         .environmentObject(menu)
@@ -302,6 +304,7 @@ struct ReferencePicker: View {
             if multiple {
                 Button { finishPicking() } label: {
                     Text(picked.isEmpty ? "完成" : "完成（已选 \(picked.count) 项）").font(AppFont.headline).frame(maxWidth: .infinity, minHeight: 28)
+                        .contentTransition(.numericText()).interfaceMotion(picked.count, duration: 0.2)
                 }
                 .buttonStyle(.glassProminent).controlSize(.large)
                 .padding(.horizontal, 20).padding(.vertical, 8)
@@ -316,11 +319,11 @@ struct ReferencePicker: View {
             HStack {
                 VStack(alignment: .leading, spacing: RowMetrics.spacing) {
                     HStack(spacing: 8) {
-                        WrappingContent { Text(label(value)).foregroundStyle(Color.primary) }
+                        WrappingContent { Text(label(value)).animatedTextValue(label(value)).foregroundStyle(Color.primary) }
                         ReferenceBadges(value: value)
                     }
                     ForEach(Array(subtitleLines(value).enumerated()), id: \.offset) { _, line in
-                        WrappingContent { Text(line).font(AppFont.subheadline).foregroundStyle(source == .outboundMaterials && available(value) < 1 ? Color.red : Color.secondary) }
+                        WrappingContent { Text(line).animatedTextValue(line).font(AppFont.subheadline).foregroundStyle(source == .outboundMaterials && available(value) < 1 ? Color.red : Color.secondary) }
                     }
                 }
                 Spacer()
@@ -328,6 +331,7 @@ struct ReferencePicker: View {
                     .frame(width: 22)
                     .opacity(picked.contains(identity(value)) ? 1 : 0)
                     .accessibilityHidden(true)
+                    .interfaceMotion(picked.contains(identity(value)), duration: 0.2)
             }
             // The empty space to the right of the text takes the tap too, not only the words.
             .frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect)
@@ -455,7 +459,7 @@ struct ReferencePicker: View {
 struct RequiredLabel: View {
     let title: String
     var body: some View {
-        HStack(spacing: 3) { Text(title); Text("＊").foregroundStyle(.red) }
+        HStack(spacing: 3) { Text(title).animatedTextValue(title); Text("＊").foregroundStyle(.red) }
             .accessibilityElement(children: .ignore).accessibilityLabel(title + "，必填")
     }
 }
@@ -470,7 +474,7 @@ struct RequiredFieldsNotice: View {
 struct RequiredFormHeader: View {
     let title: String
     var body: some View {
-        HStack { Text(title); Spacer(); RequiredFieldsNotice().textCase(nil) }
+        HStack { Text(title).animatedTextValue(title); Spacer(); RequiredFieldsNotice().textCase(nil) }
     }
 }
 
@@ -487,8 +491,8 @@ struct ReferenceField: View {
         NavigationLink {
             ReferencePicker(source: source, preview: preview, defaultField: defaultField) { result in value = result; selected?(result) }
         } label: {
-            LabeledContent { Text(value.object.isEmpty ? "请选择" : value.object.label) }
-            label: { if required { RequiredLabel(title: title) } else { Text(title) } }
+            LabeledContent { Text(value.object.isEmpty ? "请选择" : value.object.label).animatedTextValue(value.object.isEmpty ? "请选择" : value.object.label) }
+            label: { if required { RequiredLabel(title: title) } else { Text(title).animatedTextValue(title) } }
         }
         .accessibilityIdentifier("reference-" + title)
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
@@ -506,7 +510,7 @@ struct ServerDateField: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if required { RequiredLabel(title: title) } else { Text(title) }
+            if required { RequiredLabel(title: title) } else { Text(title).animatedTextValue(title) }
             HStack(spacing: 8) {
                 DatePicker("日期", selection: date, displayedComponents: [.date])
                     .labelsHidden().datePickerStyle(.compact)
@@ -543,7 +547,7 @@ struct AssigneesFields: View {
                         } else { selections[key] = [name] }
                     }
                 } label: {
-                    LabeledContent { Text(selections[key, default: []].isEmpty ? "请选择审批人" : selections[key, default: []].joined(separator: "、")) }
+                    LabeledContent { Text(selections[key, default: []].isEmpty ? "请选择审批人" : selections[key, default: []].joined(separator: "、")).animatedTextValue(selections[key, default: []].isEmpty ? "请选择审批人" : selections[key, default: []].joined(separator: "、")) }
                     label: { RequiredLabel(title: element.text("taskName")) }
                 }
                 .accessibilityIdentifier("assignee-" + key)
@@ -613,7 +617,7 @@ struct OriginalFaultForm: View {
                     EntryField(placeholder: "请输入报修名称", text: text("faultName"), limit: 64)
                 }.fullSeparator()
                 ReferenceField(title: "报修资产", source: .assets, value: field("asset"), required: true)
-                if let asset = model.data["asset"], !asset["assetCode"].text.isEmpty { LabeledContent("资产编码") { Text(asset["assetCode"].text) } }
+                if let asset = model.data["asset"], !asset["assetCode"].text.isEmpty { LabeledContent("资产编码") { Text(asset["assetCode"].text).animatedTextValue(asset["assetCode"].text) } }
                 ServerDateField(title: "故障时间", value: field("faultTime"), required: true)
             } header: { RequiredFormHeader(title: "故障报修") }
             Section("申请与受理") {
@@ -647,7 +651,7 @@ struct OriginalFaultForm: View {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { close() }.disabled(model.saving || photoUploading) }
             if draftsAllowed {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button { showingDrafts = true } label: { Label(draftCount > 0 ? "草稿箱 (\(draftCount))" : "草稿箱", systemImage: "tray.full") }
+                    Button { showingDrafts = true } label: { Label(draftCount > 0 ? "草稿箱 (\(draftCount))" : "草稿箱", systemImage: "tray.full").animatedTextValue(draftCount > 0 ? "草稿箱 (\(draftCount))" : "草稿箱") }
                         .disabled(model.saving || photoUploading).accessibilityIdentifier("draft-box-button")
                 }
             }
@@ -660,7 +664,7 @@ struct OriginalFaultForm: View {
                     .toolbar { ToolbarItem(placement: .cancellationAction) { Button("完成") { showingDrafts = false } } }
             }.presentationDetents([.medium, .large])
         }
-        .toolbar {
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             DocumentActions(busy: model.saving, submitting: confirming == true,
                             disabled: !model.ready || model.loading || photoUploading,
                             // "保存" keeps a draft on this phone: nothing is sent to the server and nothing is required.
@@ -732,7 +736,7 @@ struct OriginalPhotosField: View {
     var body: some View {
         ForEach(Array(albums.array.enumerated()), id: \.offset) { index, image in
             HStack {
-                Text(image["name"].text.isEmpty ? "照片 \(index+1)" : image["name"].text)
+                Text(image["name"].text.isEmpty ? "照片 \(index+1)" : image["name"].text).animatedTextValue(image["name"].text.isEmpty ? "照片 \(index+1)" : image["name"].text)
                 Spacer()
                 Button("删除", role: .destructive) { var values = albums.array; values.remove(at: index); albums = .array(values) }
             }
@@ -787,7 +791,7 @@ struct OriginalERPForm: View {
                 ReferenceField(title: "申请人", source: .users, value: field("user"), required: true, defaultField: "erp.user")
                 ServerDateField(title: "申请日期", value: field("applyDate"), dateOnly: true, required: true)
                 ReferenceField(title: "项目号", source: .projects, value: field("project"), required: true) { project in model.data["projectCode"] = project["projectCode"]; model.data["projectDesc"] = project["projectName"] }
-                LabeledContent("关联单号") { Text(model.data.text("referenceSn")) }
+                LabeledContent("关联单号") { Text(model.data.text("referenceSn")).animatedTextValue(model.data.text("referenceSn")) }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("关联单号")
                     .accessibilityValue(model.data.text("referenceSn"))
@@ -802,14 +806,14 @@ struct OriginalERPForm: View {
                 ForEach(Array((model.data["erpMaterialOutbounds"]?.array ?? []).enumerated()), id: \.offset) { index, line in
                     DisclosureGroup {
                         MaterialFacts(material: line["material"])
-                        LabeledContent("库存数量") { Text(materialQuantity(line["material"]["onhandQty"].text, material: line["material"])) }
-                        HStack { RequiredLabel(title: "申请数量"); Spacer(); TextField("数量", value: quantity(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(minWidth: 70); Text(materialUnit(line["material"])).foregroundStyle(.secondary) }
+                        LabeledContent("库存数量") { Text(materialQuantity(line["material"]["onhandQty"].text, material: line["material"])).animatedTextValue(materialQuantity(line["material"]["onhandQty"].text, material: line["material"])) }
+                        HStack { RequiredLabel(title: "申请数量"); Spacer(); TextField("数量", value: quantity(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(minWidth: 70); Text(materialUnit(line["material"])).animatedTextValue(materialUnit(line["material"])).foregroundStyle(.secondary) }
                         Button("删除明细", role: .destructive) { var rows = model.data["erpMaterialOutbounds"]?.array ?? []; rows.remove(at: index); model.data["erpMaterialOutbounds"] = .array(rows) }
                     } label: {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(line["material"]["materialDesc"].text)
-                            Text(line["material"]["materialCode"].text).font(AppFont.subheadline).foregroundStyle(.secondary)
-                            Text("申请数量：\(materialQuantity(line["entryQuantity"].text, material: line["material"]))").font(AppFont.subheadline).foregroundStyle(.secondary)
+                            Text(line["material"]["materialDesc"].text).animatedTextValue(line["material"]["materialDesc"].text)
+                            Text(line["material"]["materialCode"].text).animatedTextValue(line["material"]["materialCode"].text).font(AppFont.subheadline).foregroundStyle(.secondary)
+                            Text("申请数量：\(materialQuantity(line["entryQuantity"].text, material: line["material"]))").animatedTextValue("申请数量：\(materialQuantity(line["entryQuantity"].text, material: line["material"]))").font(AppFont.subheadline).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -827,7 +831,7 @@ struct OriginalERPForm: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(model.saving) }
         }
-        .toolbar {
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             DocumentActions(busy: model.saving, submitting: committed,
                             disabled: !model.ready,
                             save: { keepDraft() }, submit: { prepare(true) })
@@ -894,24 +898,25 @@ struct OriginalERPForm: View {
     }
 }
 
-/// Native bottom toolbar content. The system coordinates it with the keyboard toolbar.
-struct DocumentActions: ToolbarContent {
+struct DocumentActions: View {
+    @ObservedObject private var keyboard = KeyboardDismissAccessory.shared
     let busy: Bool
     let submitting: Bool
     let disabled: Bool
     var save: (() -> Void)? = nil
     var submitTitle = "提交"
     let submit: () -> Void
-    var body: some ToolbarContent {
-        ToolbarItemGroup(placement: .bottomBar) {
-            if let save {
-                Button("保存", systemImage: "tray.and.arrow.down", action: save)
-                    .disabled(busy || disabled)
-            }
+    var body: some View {
+        Group {
+        if !keyboard.keyboardVisible {
+        HStack(alignment: .center) {
+            if let save { BottomAction(title: "保存", symbol: "tray.and.arrow.down", color: Color(red: 0.92, green: 0.73, blue: 0.24), busy: busy && !submitting, action: save) }
             Spacer()
-            if busy { ProgressView().accessibilityLabel(submitting ? "正在提交" : "正在保存") }
-            Button(submitTitle, systemImage: "checkmark", action: submit)
-                .disabled(busy || disabled)
+            BottomAction(title: submitTitle, symbol: "checkmark.circle", color: .blue, busy: busy && submitting, action: submit)
+        }
+        .disabled(busy || disabled)
+        .bottomBarPadding()
+        }
         }
     }
 }
@@ -919,13 +924,13 @@ struct DocumentActions: ToolbarContent {
 struct MaterialFacts: View {
     let material: JSONValue
     var body: some View {
-        LabeledContent("物料编码") { Text(material["materialCode"].text) }
-        LabeledContent("ERP库存组织") { Text(material["erpTpmCompany"]["organizationName"].text) }
-        LabeledContent("批次") { Text(material["lot"].text) }
-        LabeledContent("子库") { Text(material["subInv"].text) }
-        LabeledContent("货位名称") { Text(material["locatorCode"].text) }
-        LabeledContent("货位描述") { Text(material["locatorDesc"].text) }
-        LabeledContent("单位") { Text(materialUnit(material)) }
+        LabeledContent("物料编码") { Text(material["materialCode"].text).animatedTextValue(material["materialCode"].text) }
+        LabeledContent("ERP库存组织") { Text(material["erpTpmCompany"]["organizationName"].text).animatedTextValue(material["erpTpmCompany"]["organizationName"].text) }
+        LabeledContent("批次") { Text(material["lot"].text).animatedTextValue(material["lot"].text) }
+        LabeledContent("子库") { Text(material["subInv"].text).animatedTextValue(material["subInv"].text) }
+        LabeledContent("货位名称") { Text(material["locatorCode"].text).animatedTextValue(material["locatorCode"].text) }
+        LabeledContent("货位描述") { Text(material["locatorDesc"].text).animatedTextValue(material["locatorDesc"].text) }
+        LabeledContent("单位") { Text(materialUnit(material)).animatedTextValue(materialUnit(material)) }
     }
 }
 

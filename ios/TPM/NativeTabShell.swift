@@ -15,13 +15,12 @@ struct NativeTabShell<Home: View, Todo: View, Workspace: View, Mine: View>: View
 
     var body: some View {
         TabView(selection: $selection) {
-            Tab("主页", systemImage: "house", value: 0) { home() }
-            Tab("我的待办", systemImage: "checklist", value: 2) { todo() }
+            Tab("主页", systemImage: "house", value: 0) { home().newDocumentButton(preview: preview) }
+            Tab("我的待办", systemImage: "checklist", value: 2) { todo().newDocumentButton(preview: preview) }
                 .badge(navigation.todoCount)
-            Tab("看板", systemImage: "square.grid.2x2", value: 1) { workspace() }
-            Tab(mineTitle, systemImage: "person.crop.circle", value: 3) { mine() }
+            Tab("看板", systemImage: "square.grid.2x2", value: 1) { workspace().newDocumentButton(preview: preview) }
+            Tab(mineTitle, systemImage: "person.crop.circle", value: 3) { mine().newDocumentButton(preview: preview) }
         }
-        .newDocumentButton(preview: preview)
         .onChange(of: selection) {
             navigation.searchReset = UUID()
             navigation.hideTabs = false
@@ -29,7 +28,10 @@ struct NativeTabShell<Home: View, Todo: View, Workspace: View, Mine: View>: View
     }
 }
 
-/// The system tab accessory owns placement. Search and selection use their own system controls.
+/// The "new" button, built the way the system Reminders app builds its "+": one round, blue,
+/// prominent glass button floating at the bottom-right corner, apart from everything else. It sits
+/// in the bottom safe area, so it stays above the tab bar, and it goes away with the tab bar on
+/// detail pages. The form opens as the normal sheet, so dragging it down shows the page you came from.
 struct NewDocumentButton: ViewModifier {
     var preview = false
     @EnvironmentObject private var navigation: BottomNavigationModel
@@ -38,16 +40,24 @@ struct NewDocumentButton: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .tabViewBottomAccessory(isEnabled: !navigation.hideTabs && !navigation.selectingBatch && !navigation.searchActive && !navigation.presentingDocument) {
-                Button {
-                    navigation.searchReset = UUID()
-                    navigation.presentingDocument = true
-                    creating = kind
-                } label: {
-                    Label(kind == .erp ? "新建领料单" : "新建报修", systemImage: "plus")
+            .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 0) {
+                Group {
+                    if !navigation.hideTabs && !navigation.selectingBatch {
+                        Button {
+                            navigation.searchReset = UUID()
+                            navigation.presentingDocument = true
+                            creating = kind
+                        } label: {
+                            Image(systemName: "plus").font(AppFont.title2.weight(.semibold)).frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.glassProminent).buttonBorderShape(.circle)
+                        .tint(Color.accentColor.opacity(0.55))
+                        .accessibilityLabel(kind == .erp ? "新建领料单" : "新建报修")
+                        .padding(.trailing, 20).padding(.bottom, 8)
+                        .transition(.opacity)
+                    }
                 }
-                .buttonStyle(.borderless)
-                .accessibilityLabel(kind == .erp ? "新建领料单" : "新建报修")
+                .interfaceMotion(navigation.hideTabs || navigation.selectingBatch)
             }
             .sheet(item: $creating, onDismiss: {
                 navigation.presentingDocument = false

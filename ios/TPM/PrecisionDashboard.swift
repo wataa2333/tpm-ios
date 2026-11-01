@@ -28,22 +28,22 @@ struct PrecisionDashboardScreen: View {
                 if model.showingPrevious { PreviousDataNotice(date: model.updatedAt) }
                 PrecisionPanel {
                     Text("017CNC 精密度检查看板").font(AppFont.headline)
-                    Text("查询：\(queries.label(operator: session)) · \(session.currentFactoryName)").font(AppFont.caption).foregroundStyle(.secondary)
-                    if let date = model.updatedAt { Text("更新：" + date.formatted(date: .numeric, time: .shortened)).font(AppFont.caption).foregroundStyle(.secondary) }
+                    Text("查询：\(queries.label(operator: session)) · \(session.currentFactoryName)").animatedTextValue("查询：\(queries.label(operator: session)) · \(session.currentFactoryName)").font(AppFont.caption).foregroundStyle(.secondary)
+                    if let date = model.updatedAt { Text("更新：" + date.formatted(date: .numeric, time: .shortened)).animatedTextValue("更新：" + date.formatted(date: .numeric, time: .shortened)).font(AppFont.caption).foregroundStyle(.secondary) }
                     Button("刷新数据") { Task { await model.refresh(owner: session, queries: queries) } }.disabled(model.loading)
                     if model.loading { ProgressView("正在读取") }
-                    if let error = model.error { Text(error).foregroundStyle(.red) }
+                    if let error = model.error { Text(error).animatedTextValue(error).foregroundStyle(.red) }
                 }
                 if let data = model.snapshot {
                     PrecisionPanel {
                         Text("检测进度").font(AppFont.headline)
-                        Text("已检 \(data.rows.count) 台").font(AppFont.title2.bold())
+                        Text("已检 \(data.rows.count) 台").animatedTextValue("已检 \(data.rows.count) 台").font(AppFont.title2.bold())
                         if let total = data.total, total > 0 {
-                            Text("共\(total)台 · 未检\(max(0, total - data.rows.count))台")
+                            Text("共\(total)台 · 未检\(max(0, total - data.rows.count))台").animatedTextValue("共\(total)台 · 未检\(max(0, total - data.rows.count))台")
                             ProgressView(value: Double(data.rows.count), total: Double(total))
-                            Text("覆盖率：" + precisionPercent(data.rows.count, total)).font(AppFont.subheadline)
+                            Text("覆盖率：" + precisionPercent(data.rows.count, total)).animatedTextValue("覆盖率：" + precisionPercent(data.rows.count, total)).font(AppFont.subheadline)
                         }
-                        if !data.notice.isEmpty { Text(data.notice).font(AppFont.caption).foregroundStyle(.orange) }
+                        if !data.notice.isEmpty { Text(data.notice).animatedTextValue(data.notice).font(AppFont.caption).foregroundStyle(.orange) }
                     }
                     PrecisionPanel {
                         Text("精度等级分布").font(AppFont.headline)
@@ -51,12 +51,12 @@ struct PrecisionDashboardScreen: View {
                     }
                     ForEach(data.brandNames, id: \.self) { brand in
                         PrecisionPanel {
-                            Text(brand).font(AppFont.headline)
+                            Text(brand).animatedTextValue(brand).font(AppFont.headline)
                             let rows = data.rows.filter { precisionBrand($0["asset"]["brand"]["brandName"].text) == brand }
                             let total = data.brands?[brand]
-                            Text("已检\(rows.count)台" + (total.map { " / 共\($0)台" } ?? " · 总数未知")).font(AppFont.subheadline)
+                            Text("已检\(rows.count)台" + (total.map { " / 共\($0)台" } ?? " · 总数未知")).animatedTextValue("已检\(rows.count)台" + (total.map { " / 共\($0)台" } ?? " · 总数未知")).font(AppFont.subheadline)
                             if let total, total > 0 {
-                                Text("已检 " + precisionPercent(rows.count, total) + " · 未检 " + precisionPercent(max(0, total - rows.count), total)).font(AppFont.caption)
+                                Text("已检 " + precisionPercent(rows.count, total) + " · 未检 " + precisionPercent(max(0, total - rows.count), total)).animatedTextValue("已检 " + precisionPercent(rows.count, total) + " · 未检 " + precisionPercent(max(0, total - rows.count), total)).font(AppFont.caption)
                             }
                             PrecisionGradeSummary(data: data, rows: rows, total: total)
                         }
@@ -71,19 +71,19 @@ struct PrecisionDashboardScreen: View {
                                 }
                             }
                         }
-                        Text("共\(matching.count)台 · 已显示\(min(shown, matching.count))台").font(AppFont.caption).foregroundStyle(.secondary)
+                        Text("共\(matching.count)台 · 已显示\(min(shown, matching.count))台").animatedTextValue("共\(matching.count)台 · 已显示\(min(shown, matching.count))台").font(AppFont.caption).foregroundStyle(.secondary)
                     }
                     ForEach(Array(matching.prefix(shown).enumerated()), id: \.offset) { _, row in
                         NavigationLink { PrecisionDeviceScreen(asset: row["asset"]) } label: {
                             HStack(alignment: .center, spacing: 12) {
                                 VStack(alignment: .leading, spacing: 5) {
-                                    Text(row["asset"]["addressCode"].text.isEmpty ? row["asset"]["assetCode"].text : row["asset"]["addressCode"].text).font(AppFont.precisionText(.title3, size: 20))
-                                    Text(row["asset"]["assetName"].text).font(AppFont.precisionText(.subheadline, size: 15))
-                                    Text(row["asset"]["assetCode"].text).font(AppFont.precisionText(.caption, size: 12))
-                                    Text("检测日期：" + readableDate(row["analysisDate"])).font(AppFont.precisionText(.caption, size: 12))
+                                    Text(row["asset"]["addressCode"].text.isEmpty ? row["asset"]["assetCode"].text : row["asset"]["addressCode"].text).animatedTextValue(row["asset"]["addressCode"].text.isEmpty ? row["asset"]["assetCode"].text : row["asset"]["addressCode"].text).font(AppFont.precisionText(.title3, size: 20))
+                                    Text(row["asset"]["assetName"].text).animatedTextValue(row["asset"]["assetName"].text).font(AppFont.precisionText(.subheadline, size: 15))
+                                    Text(row["asset"]["assetCode"].text).animatedTextValue(row["asset"]["assetCode"].text).font(AppFont.precisionText(.caption, size: 12))
+                                    Text("检测日期：" + readableDate(row["analysisDate"])).animatedTextValue("检测日期：" + readableDate(row["analysisDate"])).font(AppFont.precisionText(.caption, size: 12))
                                     PrecisionPeopleLabel(assetID: row["asset"]["assetId"].text, refreshID: model.updatedAt).id(row["asset"]["assetId"].text)
                                 }.frame(maxWidth: .infinity, alignment: .leading)
-                                Text(row["analysisResult"].text.replacingOccurrences(of: "RESULT_", with: ""))
+                                Text(row["analysisResult"].text.replacingOccurrences(of: "RESULT_", with: "")).animatedTextValue(row["analysisResult"].text.replacingOccurrences(of: "RESULT_", with: ""))
                                     .font(AppFont.precisionGrade)
                                     .foregroundStyle(Color.accentColor.opacity(0.65))
                                     .lineLimit(1).minimumScaleFactor(0.65).frame(minWidth: 80)
@@ -125,14 +125,14 @@ private struct PrecisionGradeSummary: View {
             ForEach(Array(precisionGrades.enumerated()), id: \.offset) { index, grade in
                 let count = data.gradeCount(grade, rows: rows)
                 HStack {
-                    Text(grade).frame(width: 28, alignment: .leading)
+                    Text(grade).animatedTextValue(grade).frame(width: 28, alignment: .leading)
                     ProgressView(value: Double(count), total: Double(max(1, total ?? rows.count))).tint(colors[index])
-                    Text("\(count)台").font(AppFont.caption).monospacedDigit().frame(minWidth: 42, alignment: .trailing)
+                    Text("\(count)台").animatedTextValue("\(count)台").font(AppFont.caption).monospacedDigit().frame(minWidth: 42, alignment: .trailing)
                 }
             }
             if let total {
                 let missing = max(0, total - rows.count)
-                HStack { Text("未检"); Spacer(); Text("\(missing)台 · " + precisionPercent(missing, total)).font(AppFont.caption) }
+                HStack { Text("未检"); Spacer(); Text("\(missing)台 · " + precisionPercent(missing, total)).animatedTextValue("\(missing)台 · " + precisionPercent(missing, total)).font(AppFont.caption) }
             }
         }
     }
@@ -192,11 +192,11 @@ private struct PrecisionDateDistribution: View {
                     SpatialTapGesture().onEnded { value in proxy.selectXValue(at: value.location.x) }
                 }
                 .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { value in
-                    AxisGridLine(); AxisTick(); AxisValueLabel { if let index = value.as(Int.self), dates.indices.contains(index) { Text(String(dates[index].0.suffix(5))).font(AppFont.caption2) } }
+                    AxisGridLine(); AxisTick(); AxisValueLabel { if let index = value.as(Int.self), dates.indices.contains(index) { Text(String(dates[index].0.suffix(5))).animatedTextValue(String(dates[index].0.suffix(5))).font(AppFont.caption2) } }
                 } }
                 .chartYAxis { AxisMarks { value in
                     AxisGridLine(); AxisTick()
-                    AxisValueLabel { if let count = value.as(Int.self) { Text(String(count)).font(AppFont.caption2) } }
+                    AxisValueLabel { if let count = value.as(Int.self) { Text(String(count)).animatedTextValue(String(count)).font(AppFont.caption2) } }
                 } }
                 .frame(height: 220)
                 .simultaneousGesture(MagnifyGesture().onChanged { value in
@@ -214,9 +214,9 @@ private struct PrecisionDateDistribution: View {
                 .transaction { if magnifyStart != nil { $0.animation = nil; $0.disablesAnimations = true } }
                 if let point = selectedPoint {
                     HStack {
-                        Text(point.0).font(AppFont.subheadline.weight(.semibold))
+                        Text(point.0).animatedTextValue(point.0).font(AppFont.subheadline.weight(.semibold))
                         Spacer()
-                        Text("\(point.1) 台").font(AppFont.headline).foregroundStyle(Color.accentColor).monospacedDigit()
+                        Text("\(point.1) 台").animatedTextValue("\(point.1) 台").font(AppFont.headline).foregroundStyle(Color.accentColor).monospacedDigit()
                     }.accessibilityElement(children: .combine).accessibilityIdentifier("precision-selected-value")
                 }
             }

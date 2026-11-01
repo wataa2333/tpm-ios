@@ -46,11 +46,11 @@ struct ReadOnlyPoolView: View {
                         time: readableDate(row["planStartDate"]), facts: facts(row)) {
                         List {
                             Section("工单信息") {
-                                LabeledContent("工单名称") { Text(row[kind.nameKey].text) }
-                                LabeledContent("状态") { Text("待接单") }
-                                if !row["asset"]["addressCode"].text.isEmpty { LabeledContent("机台号") { Text(row["asset"]["addressCode"].text) } }
+                                LabeledContent("工单名称") { Text(row[kind.nameKey].text).animatedTextValue(row[kind.nameKey].text) }
+                                LabeledContent("状态") { Text("待接单").animatedTextValue("待接单") }
+                                if !row["asset"]["addressCode"].text.isEmpty { LabeledContent("机台号") { Text(row["asset"]["addressCode"].text).animatedTextValue(row["asset"]["addressCode"].text) } }
                                 ForEach(Array(facts(row).enumerated()), id: \.offset) { _, fact in
-                                    LabeledContent(fact.0) { Text(fact.1) }
+                                    LabeledContent(fact.0) { Text(fact.1).animatedTextValue(fact.1) }
                                 }
                             }
                         }
@@ -58,13 +58,15 @@ struct ReadOnlyPoolView: View {
                     }
                 }
                 if !loading && rows.isEmpty && error == nil { CompactEmptyState(title: "暂无待接单工单") }
-            }
+            }.opacity((loading || gate.busy) && !moreLoading ? 0.4 : 1).interfaceMotion(loading || gate.busy, duration: 0.4)
             LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || moreLoading, loaded: rows.count, total: total) { await load(more: true) }
         }
         .searchPageChrome(isSearching: searching)
         .nativeSearchable(text: $query, isPresented: $searching, prompt: byAsset ? "搜索资产编码" : "搜索工单名称")
         .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .modifier(ListTabVisibility())
+        .reloadsToTop(on: gate.id("\(byAsset)-\(query)"))
+        .interfaceMotion(loading || gate.busy, duration: 0.45)
         .refreshButton(busy: loading || moreLoading || gate.busy) { gate.request() }
         .errorDialog($error, retry: { Task { await load() } })
         .task(id: gate.id("\(byAsset)-\(query)")) { await gate.run(key: "\(byAsset)-\(query)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await load() }) }

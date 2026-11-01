@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// One rhythm for every list row and card in the app: 12pt above and below, 16pt at the sides, 6pt between lines,
-/// with a system disclosure control below the summary.
+/// and a footer that moves its button below the time when the available width is too small.
 enum RowMetrics {
     static let spacing: CGFloat = 6
     static let insets = EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
@@ -30,6 +30,7 @@ struct WorkOrderCard<Destination: View>: View {
     @ViewBuilder let destination: () -> Destination
     @State private var expanded = false
     @State private var opening = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Status retains its meaning colour; card titles use the normal text colour.
     private var emphasis: Color { FaultState.allCases.first { $0.rawValue == status }?.color ?? color }
     /// Suppress only fields already visible in the compact header, keeping all other details.
@@ -46,19 +47,24 @@ struct WorkOrderCard<Destination: View>: View {
     /// In selection mode the card never navigates: tapping it shows the order in a sheet instead.
     private func open() { if let selecting { selecting.peek() } else { opening = true } }
     var body: some View {
-        // DisclosureGroup owns expansion and accessibility; no parallel layout animation.
+        // One uniform 8pt rhythm for every line, with no system disclosure padding. Expanding grows the
+        // row downward with a short smooth animation while the extra lines fade in; collapsing reverses it.
         HStack(alignment: .top, spacing: 0) {
             if let selecting {
-                Toggle(isOn: Binding(get: { selecting.selected }, set: { _ in selecting.toggle() })) {
-                    Label("选择工单", systemImage: "checkmark")
+                Button(action: selecting.toggle) {
+                    Image(systemName: selecting.selected ? "checkmark.circle.fill" : "circle")
+                        .font(AppFont.title2).foregroundStyle(selecting.selected ? Color.accentColor : Color.secondary)
+                        .frame(width: 44, height: 44).contentShape(.rect)
                 }
-                .toggleStyle(.button).labelStyle(.iconOnly)
-                .disabled(!selecting.enabled)
+                .buttonStyle(.borderless)
+                .opacity(selecting.enabled ? 1 : 0.35)
                 .accessibilityLabel(selecting.selected ? "已选择" : "未选择")
                 .accessibilityIdentifier("order-select-" + reference)
+                .transition(.opacity)
             }
             cardBody
         }
+        .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: selecting != nil)
         .listRowInsets(EdgeInsets())
         .navigationDestination(isPresented: $opening) {
             destination().environment(\.closeWorkOrder, { opening = false })
@@ -70,42 +76,70 @@ struct WorkOrderCard<Destination: View>: View {
             Button { open() } label: {
                 // The status word sits on the first line of the title, on the same baseline.
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    WrappingContent { Text(title).font(AppFont.headline).foregroundStyle(Color.primary) }
-                    if !status.isEmpty { Text(status).font(AppFont.subheadline.weight(.semibold)).foregroundStyle(emphasis).frame(maxWidth: 96, alignment: .trailing).fixedSize(horizontal: false, vertical: true) }
+                    WrappingContent { Text(title).animatedTextValue(title).font(AppFont.headline).foregroundStyle(Color.primary) }
+                    if !status.isEmpty { Text(status).animatedTextValue(status).font(AppFont.subheadline.weight(.semibold)).foregroundStyle(emphasis).frame(maxWidth: 96, alignment: .trailing).fixedSize(horizontal: false, vertical: true) }
                 }
                 .contentShape(.rect)
             }.buttonStyle(.plain).navigationLinkIndicatorVisibility(.hidden)
                 .accessibilityIdentifier("order-title-" + reference)
-            WrappingContent { Text((reference.isEmpty ? "—" : reference) + (machine.isEmpty ? "" : " · " + machine)).font(AppFont.subheadline).foregroundStyle(.secondary) }
+            WrappingContent { Text((reference.isEmpty ? "—" : reference) + (machine.isEmpty ? "" : " · " + machine)).animatedTextValue((reference.isEmpty ? "—" : reference) + (machine.isEmpty ? "" : " · " + machine)).font(AppFont.subheadline).foregroundStyle(.secondary) }
                 .accessibilityLabel(referenceTitle + "：" + reference + (machine.isEmpty ? "" : "，机台号：" + machine))
                 .accessibilityIdentifier("order-reference-" + reference)
             ForEach(Array(summaryFacts.enumerated()), id: \.offset) { _, fact in
-                WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(AppFont.subheadline).foregroundStyle(.secondary) }
+                WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).animatedTextValue(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(AppFont.subheadline).foregroundStyle(.secondary) }
             }
             ForEach(Array(statusNote.enumerated()), id: \.offset) { _, fact in
-                WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(AppFont.subheadline).foregroundStyle(.orange) }
+                WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).animatedTextValue(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(AppFont.subheadline).foregroundStyle(.orange) }
                     .accessibilityIdentifier("order-note-" + reference)
             }
-            Text(time).font(AppFont.subheadline).foregroundStyle(.secondary)
-                .accessibilityIdentifier("order-time-" + reference)
-            DisclosureGroup(isExpanded: $expanded) {
-                ForEach(Array(expandedFacts.enumerated()), id: \.offset) { _, fact in
-                    ReadableFact(title: fact.0, value: fact.1)
+            VStack(spacing: 0) {
+            ViewThatFits(in: .horizontal) {
+                footer
+                VStack(alignment: .trailing, spacing: 6) {
+                    Text(time).animatedTextValue(time).font(AppFont.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("order-time-" + reference)
+                    expandButton
                 }
-                Button { open() } label: {
-                    Label(selecting == nil ? "打开工单" : "查看工单", systemImage: "arrow.up.right.square")
-                }
-                .buttonStyle(.borderedProminent)
-                .accessibilityIdentifier("order-open-" + reference)
-                if selecting == nil, let reportAsset { AssetReportButton(asset: reportAsset) }
-            } label: {
-                Text(expanded ? "收起详情" : "展开详情")
             }
-            .disclosureGroupStyle(.automatic)
-            .accessibilityIdentifier("order-expand-" + reference)
+            if expanded {
+                VStack(spacing: 10) {
+                    ForEach(Array(expandedFacts.enumerated()), id: \.offset) { _, fact in
+                        ReadableFact(title: fact.0, value: fact.1)
+                    }
+                    Button { open() } label: {
+                        Label(selecting == nil ? "打开工单" : "查看工单", systemImage: "arrow.up.right.square").animatedTextValue(selecting == nil ? "打开工单" : "查看工单").font(AppFont.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }.buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.regular)
+                        .accessibilityIdentifier("order-open-" + reference)
+                    if selecting == nil, let reportAsset { AssetReportButton(asset: reportAsset) }
+                }
+                .padding(.top, RowMetrics.spacing)
+                .transition(.opacity)
+            }
+            }
         }
         .padding(selecting == nil ? RowMetrics.insets : EdgeInsets(top: RowMetrics.insets.top, leading: 0, bottom: RowMetrics.insets.bottom, trailing: RowMetrics.insets.trailing))
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    private var footer: some View {
+        HStack(alignment: .center, spacing: 12) {
+                Text(time).animatedTextValue(time).font(AppFont.subheadline).foregroundStyle(.secondary).fixedSize()
+                    .accessibilityIdentifier("order-time-" + reference)
+                Spacer(minLength: 0)
+                expandButton
+        }
+    }
+    private var expandButton: some View {
+        Button { withAnimation(reduceMotion ? nil : .smooth(duration: 0.5)) { expanded.toggle() } } label: {
+            HStack(alignment: .center, spacing: 6) {
+                Text(expanded ? "收起详情" : "展开详情").animatedTextValue(expanded ? "收起详情" : "展开详情").font(AppFont.subheadline.weight(.medium))
+                Image(systemName: "chevron.down").font(.system(size: 12, weight: .semibold)).frame(width: 14, height: 20).rotationEffect(.degrees(expanded ? 180 : 0))
+            }
+            .foregroundStyle(.white).padding(.horizontal, 12)
+            .frame(minHeight: 44).background(Color.accentColor, in: .capsule)
+        }.buttonStyle(.plain).fixedSize()
+            .accessibilityLabel(expanded ? "收起详情" : "展开详情")
+            .accessibilityIdentifier("order-expand-" + reference)
     }
 }
 
@@ -116,8 +150,8 @@ struct ReadableFact: View {
     var body: some View {
         // Fixed title column, left-aligned values: every row of every card lines up the same way.
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(title).foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
-            WrappingContent(alignment: .leading) { Text(value.isEmpty ? "—" : value) }
+            Text(title).animatedTextValue(title).foregroundStyle(.secondary).frame(width: 100, alignment: .leading)
+            WrappingContent(alignment: .leading) { Text(value.isEmpty ? "—" : value).animatedTextValue(value.isEmpty ? "—" : value) }
         }.font(AppFont.subheadline).contentShape(.rect)
             .accessibilityElement(children: .contain)
             .onTapGesture { shown = true }
@@ -143,7 +177,7 @@ struct FullTextSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                Text(text).textSelection(.enabled)
+                Text(text).animatedTextValue(text).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(20)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
             }
@@ -170,11 +204,23 @@ struct CopyButton: View {
             copied = true
             Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
         } label: {
-            Label(copied ? "已复制" : title, systemImage: copied ? "checkmark" : "doc.on.doc")
+            Label(copied ? "已复制" : title, systemImage: copied ? "checkmark" : "doc.on.doc").animatedTextValue(copied ? "已复制" : title)
         }
         .disabled(text.isEmpty)
         .sensoryFeedback(.success, trigger: copied) { _, new in new }
         .accessibilityIdentifier("copy-button")
+    }
+}
+
+struct SafeFactsStyle: LabeledContentStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        // The label keeps its natural width on one line ("维修故障类型", "请选择" never break);
+        // only long values wrap, in the space that is left.
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            configuration.label.lineLimit(1).fixedSize(horizontal: true, vertical: false).layoutPriority(1)
+            configuration.content.lineLimit(nil).fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.trailing).frame(maxWidth: .infinity, alignment: .trailing)
+        }
     }
 }
 
@@ -191,7 +237,7 @@ func limitedText(_ value: String, limit: Int) -> String {
 struct CharacterCount: View {
     let text: String
     let limit: Int
-    var body: some View { Text("\(text.utf16.count)/\(limit) 字符").font(AppFont.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing) }
+    var body: some View { Text("\(text.utf16.count)/\(limit) 字符").animatedTextValue("\(text.utf16.count)/\(limit) 字符").font(AppFont.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing) }
 }
 
 /// A detail screen always wants the tab bar hidden, whatever the screens around it do.
@@ -202,7 +248,7 @@ struct DetailTabVisibility: ViewModifier {
     func body(content: Content) -> some View {
         if peeking { content }
         else {
-            content.toolbar(.hidden, for: .tabBar)
+            content.background { NativeTabVisibility(hidden: true).frame(width: 0, height: 0) }
                 .onAppear { navigation.hideTabs = true }
         }
     }
@@ -213,7 +259,7 @@ struct DetailTabVisibility: ViewModifier {
 struct ListTabVisibility: ViewModifier {
     @EnvironmentObject private var navigation: BottomNavigationModel
     func body(content: Content) -> some View {
-        content.toolbar(.visible, for: .tabBar)
+        content.background { NativeTabVisibility(hidden: false).frame(width: 0, height: 0) }
             .onAppear { navigation.hideTabs = false }
     }
 }

@@ -7,18 +7,25 @@ import SwiftUI
 final class ReloadGate: ObservableObject {
     /// Changes on every manual refresh; pages put it into their task id and scroll trigger.
     @Published private(set) var token = UUID()
-    /// Reflect actual request work without artificial animation delays.
+    /// True while a load runs and for at least `minimumBusy` after it started, so a load that finishes
+    /// in a blink still shows its loading animation for a calm, readable moment instead of flashing.
     @Published private(set) var busy = false
+    static let minimumBusy: Duration = .milliseconds(600)
     private var running = 0
     private var loaded: [String: String] = [:]
+    private var manualPending = false
     private var incomplete: Set<String> = []
 
     /// The refresh button.
     func request() {
+        manualPending = true
         token = UUID()
     }
 
-    /// Runs an uncached request. Interrupted loads may resume when the page returns.
+    /// Runs `load` unless this exact request was already loaded. After a manual refresh the main
+    /// load waits for the list to finish scrolling to the top so the loading row can open there. A
+    /// load that was interrupted (the page was left mid-load) is not remembered, so it runs again on
+    /// return: that is finishing the load, not refreshing it.
     func run(_ slot: String = "main", key: String, debounce: Duration? = nil, load: () async -> Void) async {
         let full = key + "|" + token.uuidString
         guard loaded[slot] != full else { return }
@@ -27,11 +34,19 @@ final class ReloadGate: ObservableObject {
             try? await Task.sleep(for: debounce)
             if Task.isCancelled { return }
         }
+        if slot == "main" && manualPending {
+            manualPending = false
+            try? await Task.sleep(for: .milliseconds(450))
+            if Task.isCancelled { return }
+        }
+        let started = ContinuousClock.now
         running += 1; busy = true
         await load()
         if !Task.isCancelled {
             // A load that got nothing useful is not remembered, so the page tries again when it reappears.
             if incomplete.remove(slot) == nil { loaded[slot] = full }
+            let remaining = Self.minimumBusy - (ContinuousClock.now - started)
+            if remaining > .zero { try? await Task.sleep(for: remaining) }
         }
         running -= 1
         if running == 0 { busy = false }

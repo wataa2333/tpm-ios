@@ -1,5 +1,3 @@
-2026-11-01 最新本地 iOS 0.7.42/build48：移除键盘附件注入/重载、键盘通知联动和附加 UI 动画；统一系统键盘/底部工具栏、List/Section、DisclosureGroup、Picker、alert 与 Tab 底部附件。移除自写控件样式、强制滚动归顶和加载固定延迟。54 个 Swift 文件共 108 条语法路径及原生 UI 源码审计通过；新增键盘回归用例未运行，未 Xcode 编译、真机验收或上传。详见 [iOS原生控件与键盘动画清理](docs/handoff/iOS原生控件与键盘动画清理-2026-11-01.md)。
-
 最新iOS源码：0.7.26/build32。报修入口原生玻璃与位置修复、精密度上次数据缓存、共用键盘布局简化、开发者档位保留及查询账号状态说明。见 docs/handoff/iOS报修按钮与精密度缓存键盘-2026-10-23.md。未编译或运行测试，Android不变。
 
 最新iOS：0.7.25/build31，精密度曲线点选值、原生搜索和移除外置箭头，已上传GitHub main 55dd591bd916c15413be9ca3626bb77a8be02a7d。见 docs/handoff/iOS精密度点选与原生搜索-2026-10-23.md。源码检查通过，未Xcode构建或运行测试，未启动Codemagic。Android仍1.78.0/code78。
