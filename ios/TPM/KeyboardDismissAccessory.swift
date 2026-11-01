@@ -43,7 +43,7 @@ import SwiftUI
         let dismiss = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(closeKeyboard))
         dismiss.accessibilityIdentifier = "keyboard-dismiss"
         dismiss.accessibilityLabel = "收起键盘"
-        toolbar.items = [UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil), dismiss]
+        toolbar.items = [UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil), dismiss, UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil)]
         if let field = editor as? UITextField { field.inputAccessoryView = toolbar }
         else if let text = editor as? UITextView { text.inputAccessoryView = toolbar }
         editor.reloadInputViews()
