@@ -700,7 +700,7 @@ struct OriginalFaultForm: View {
             }
             draftCount = DraftStore.shared.drafts(scope: session.draftScope, for: draftTarget).count
         }
-        .keyboardManaged()
+        .keyboardManaged(showsToolbar: false)
         .errorDialog($model.error, title: model.ready ? "提示" : "加载失败", clearsOnClose: true, retry: model.ready ? nil : { Task { await model.load(session, existing: existing) } })
     }
     private func prepare(_ committed: Bool) {
@@ -855,7 +855,7 @@ struct OriginalERPForm: View {
                 if model.ready { applyDraft() }
             }
         }
-        .keyboardManaged()
+        .keyboardManaged(showsToolbar: false)
         .errorDialog($model.error, title: model.ready ? "提示" : "加载失败", clearsOnClose: true, retry: model.ready ? nil : { Task { await model.load(session, existing: existing, referenceSn: referenceSn) } })
     }
     private func prepare(_ value: Bool) {
@@ -899,6 +899,7 @@ struct OriginalERPForm: View {
 }
 
 struct DocumentActions: View {
+    @State private var keyboardPresented = false
     let busy: Bool
     let submitting: Bool
     let disabled: Bool
@@ -912,9 +913,25 @@ struct DocumentActions: View {
             BottomAction(title: submitTitle, symbol: "checkmark.circle", color: .blue, busy: busy && submitting, action: submit)
         }
         .disabled(busy || disabled)
+        .overlay {
+            // Only opacity changes. The footer's height and both action buttons remain
+            // stable; a second keyboard toolbar must not overlap this action row.
+            Button("收起键盘", action: endEditing)
+                .buttonStyle(.glass).buttonBorderShape(.capsule)
+                .accessibilityIdentifier("keyboard-dismiss")
+                .opacity(keyboardPresented ? 1 : 0)
+                .allowsHitTesting(keyboardPresented)
+                .accessibilityHidden(!keyboardPresented)
+        }
         // Keep the action row alive while SwiftUI moves the keyboard safe area.
         // Fixed spacing avoids a second keyboard-driven padding animation.
         .padding(.horizontal, 20).padding(.vertical, 8)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
+            keyboardPresented = KeyboardMotionChange(notification).visible
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardPresented = false
+        }
     }
 }
 

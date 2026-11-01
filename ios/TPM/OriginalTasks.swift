@@ -109,7 +109,7 @@ struct OriginalRepairForm: View {
                 })
             }
         }
-        .keyboardManaged()
+        .keyboardManaged(showsToolbar: false)
         .errorDialog($error, title: failedOnServer ? "保存未完成" : "请检查表单", clearsOnClose: true, retry: data.isEmpty ? { Task { await load() } } : nil)
     }
     /// `silent`: a refresh behind a closed sheet, with no spinner and no dimming of the form.
@@ -313,7 +313,7 @@ struct WorkflowTaskView: View {
             assignmentsReady = false
             Task { await loadAssignments() }
         }
-        .keyboardManaged()
+        .keyboardManaged(showsToolbar: false)
         .noticeDialog("提交未完成", message: failure ?? "", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } }))
         .errorDialog($error, title: "提交未完成", retry: ready ? nil : { Task { await load() } })
         .sheet(isPresented: Binding(get: { handoff != nil }, set: { if !$0 { handoff = nil } })) {
@@ -462,7 +462,7 @@ struct TaskHandoffView: View {
             DocumentActions(busy: saving, submitting: true, disabled: reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (operation != "resolve" && user["userName"].text.isEmpty), submit: { Task { await save() } })
         }
         .overlay { AnimatedLoadingOverlay(isPresented: saving, title: "正在提交…") }
-        .keyboardManaged()
+        .keyboardManaged(showsToolbar: false)
         .errorDialog($error, title: "提交未完成", clearsOnClose: true)
     }
     private func save() async {

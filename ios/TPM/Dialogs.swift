@@ -81,8 +81,8 @@ extension View {
 
     /// Dismissing the keyboard by dragging the content, and a "收起键盘" button above the keyboard
     /// for fields that have no return key (numbers, phone numbers).
-    func keyboardManaged() -> some View {
-        scrollDismissesKeyboard(.interactively).keyboardDismissToolbar()
+    func keyboardManaged(showsToolbar: Bool = true) -> some View {
+        scrollDismissesKeyboard(.interactively).keyboardDismissToolbar(enabled: showsToolbar)
     }
 }
 

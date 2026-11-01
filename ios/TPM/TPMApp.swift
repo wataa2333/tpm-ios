@@ -586,6 +586,9 @@ struct PreviewScreen: View {
         case "draft-detail": NavigationStack { FaultDetailView(id: "BX-20261016-001") }
         case "confirm-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("确认完成"), "category": .string("VERIFIED")]), kind: .fault, preview: true) }
         case "repair-commit": NavigationStack { WorkflowTaskView(task: .object(["name": .string("完成任务"), "category": .string("REPAIRED")]), kind: .fault, preview: true) }
+        case "repair-keyboard": Color.clear.sheet(isPresented: .constant(true)) {
+            NavigationStack { OriginalRepairForm(faultID: "DEMO", task: .object(["name": .string("完成任务")]), preview: true) }
+        }
         case "reject-confirm": NavigationStack { WorkflowTaskView(task: .object(["name": .string("确认完成"), "category": .string("VERIFIED")]), kind: .fault, preview: true, previewCondition: "reject") }
         case "resolve-order": NavigationStack { WorkflowTaskView(task: .object(["name": .string("复线确认"), "category": .string("RESOLVED")]), kind: .fault, preview: true) }
         case "reject-resolve": NavigationStack { WorkflowTaskView(task: .object(["name": .string("复线确认"), "category": .string("RESOLVED")]), kind: .fault, preview: true, previewCondition: "reject") }

@@ -162,6 +162,8 @@ final class PreviewTests: XCTestCase {
 
     private func repeatKeyboardDismissal(_ app: XCUIApplication, field: XCUIElement, typedText: String? = nil) {
         let save = app.buttons["保存"], submit = app.buttons["提交"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        let restingSave = save.frame, restingSubmit = submit.frame
         for cycle in 0..<12 {
             field.tap()
             if cycle == 0, let typedText { field.typeText(typedText) }
@@ -179,15 +181,41 @@ final class PreviewTests: XCTestCase {
             XCTAssertTrue(submit.exists, "键盘展开时提交按钮仍保留")
             XCTAssertTrue(save.isHittable)
             XCTAssertTrue(submit.isHittable)
+            XCTAssertLessThanOrEqual(save.frame.maxY, keyboard.frame.minY + 2, "保存按钮必须完整处于键盘上方")
+            XCTAssertLessThanOrEqual(submit.frame.maxY, keyboard.frame.minY + 2, "提交按钮必须完整处于键盘上方")
+            XCTAssertLessThanOrEqual(save.frame.maxX, dismiss.frame.minX, "保存和收起不能重叠")
+            XCTAssertLessThanOrEqual(dismiss.frame.maxX, submit.frame.minX, "收起和提交不能重叠")
+            XCTAssertEqual(save.frame.midY, submit.frame.midY, accuracy: 2)
+            XCTAssertEqual(save.frame.midY, dismiss.frame.midY, accuracy: 2)
             dismiss.tap()
             let closed = expectation(for: NSPredicate { _, _ in app.keyboards.count == 0 }, evaluatedWith: nil)
             wait(for: [closed], timeout: 5)
             XCTAssertTrue(save.waitForExistence(timeout: 5))
             XCTAssertTrue(save.isHittable)
             XCTAssertTrue(submit.isHittable)
+            let settled = expectation(for: NSPredicate { _, _ in
+                abs(save.frame.minY - restingSave.minY) <= 2 &&
+                abs(submit.frame.minY - restingSubmit.minY) <= 2
+            }, evaluatedWith: nil)
+            wait(for: [settled], timeout: 5)
+            XCTAssertFalse(app.buttons["keyboard-dismiss"].isHittable)
             XCTAssertEqual(app.state, .runningForeground)
             if let typedText { XCTAssertEqual(field.value as? String, typedText) }
         }
+    }
+
+    func testRepairNotesSheetKeepsAllThreeButtonsAboveKeyboard() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--screen", "repair-keyboard", "--skip-biometrics"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["完成任务"].waitForExistence(timeout: 10))
+        let notes = app.descendants(matching: .any).matching(NSPredicate(format:
+            "(elementType == %d OR elementType == %d) AND (placeholderValue == %@ OR label == %@)",
+            XCUIElement.ElementType.textField.rawValue, XCUIElement.ElementType.textView.rawValue,
+            "请输入说明", "请输入说明")).firstMatch
+        for _ in 0..<6 where !notes.isHittable { app.swipeUp() }
+        XCTAssertTrue(notes.isHittable)
+        repeatKeyboardDismissal(app, field: notes, typedText: "检修")
     }
 
     func testSearchKeyboardCanDismissTwelveTimesWithoutDuplicateControls() {
