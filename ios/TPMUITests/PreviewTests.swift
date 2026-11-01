@@ -152,19 +152,28 @@ final class PreviewTests: XCTestCase {
         app.buttons["完成"].tap()
         let name = app.textFields["请输入报修名称"]
         XCTAssertTrue(name.waitForExistence(timeout: 10))
-        name.tap()
-        let dismiss = app.buttons["keyboard-dismiss"]
-        XCTAssertTrue(dismiss.waitForExistence(timeout: 10))
         let save = app.buttons["保存"], submit = app.buttons["提交"]
-        XCTAssertFalse(dismiss.frame.isEmpty, "键盘附件栏中的收起键盘按钮必须可见")
-        XCTAssertFalse(save.exists, "输入时不叠加保存按钮")
-        XCTAssertFalse(submit.exists, "输入时不叠加提交按钮")
-        dismiss.tap()
-        let closed = NSPredicate { _, _ in app.keyboards.count == 0 }
-        expectation(for: closed, evaluatedWith: nil)
-        waitForExpectations(timeout: 5)
-        XCTAssertTrue(save.waitForExistence(timeout: 5))
-        XCTAssertTrue(submit.exists)
+        for _ in 0..<3 {
+            name.tap()
+            let dismiss = app.buttons["keyboard-dismiss"]
+            XCTAssertTrue(dismiss.waitForExistence(timeout: 10))
+            XCTAssertTrue(dismiss.isHittable)
+            XCTAssertEqual(dismiss.label, "收起键盘")
+            XCTAssertEqual(app.buttons.matching(identifier: "keyboard-dismiss").count, 1)
+            let keyboard = app.keyboards.firstMatch
+            XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+            XCTAssertEqual(dismiss.frame.midX, keyboard.frame.midX, accuracy: 3)
+            XCTAssertLessThan(dismiss.frame.midY, keyboard.frame.midY)
+            XCTAssertGreaterThan(dismiss.frame.width, dismiss.frame.height)
+            XCTAssertFalse(save.exists, "输入时不叠加保存按钮")
+            XCTAssertFalse(submit.exists, "输入时不叠加提交按钮")
+            dismiss.tap()
+            let closed = expectation(for: NSPredicate { _, _ in app.keyboards.count == 0 }, evaluatedWith: nil)
+            wait(for: [closed], timeout: 5)
+            XCTAssertTrue(save.waitForExistence(timeout: 5))
+            XCTAssertTrue(save.isHittable)
+            XCTAssertTrue(submit.isHittable)
+        }
     }
 
     func testSwipeMenuPinsAnOptionToTheTopOfThePicker() {
