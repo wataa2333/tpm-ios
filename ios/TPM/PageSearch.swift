@@ -16,6 +16,8 @@ private struct PageSearch: ViewModifier {
         let active = presented ?? $localActive
         content
             .searchable(text: $text, isPresented: active, placement: .navigationBarDrawer(displayMode: .always), prompt: prompt)
+            .nativeKeyboardToolbar()
+            .scrollDismissesKeyboard(.interactively)
             .onSubmit(of: .search) {
                 if text != lastSubmitted { lastSubmitted = text; submit() }
                 // Confirming a search (Return) puts the search field away and the keyboard with it.
@@ -24,8 +26,10 @@ private struct PageSearch: ViewModifier {
             // Closing the search box runs `submit` only if the text differs from what was last submitted.
             // Pages that load by their query on their own pass nothing, so closing the box reloads nothing.
             .onChange(of: active.wrappedValue) { _, isActive in
+                navigation.searchActive = isActive
                 if !isActive && text != lastSubmitted { lastSubmitted = text; submit() }
             }
+            .onDisappear { navigation.searchActive = false }
             .onChange(of: navigation.searchReset) { active.wrappedValue = false }
     }
 }

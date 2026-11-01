@@ -215,12 +215,12 @@ private struct ReferenceMenu: ViewModifier {
     /// The same two choices for the swipe and for the long press.
     @ViewBuilder private var actions: some View {
         Button { menu.togglePin(value) } label: {
-            Label(menu.isPinned(value) ? "取消置顶" : "置顶", systemImage: menu.isPinned(value) ? "pin.slash" : "pin").animatedTextValue(menu.isPinned(value) ? "取消置顶" : "置顶")
+            Label(menu.isPinned(value) ? "取消置顶" : "置顶", systemImage: menu.isPinned(value) ? "pin.slash" : "pin")
         }
         .tint(.blue).accessibilityIdentifier("menu-pin")
         if menu.supportsDefault {
             Button { menu.toggleDefault(value) } label: {
-                Label(menu.isDefault(value) ? "取消默认" : "设为默认", systemImage: menu.isDefault(value) ? "star.slash" : "star").animatedTextValue(menu.isDefault(value) ? "取消默认" : "设为默认")
+                Label(menu.isDefault(value) ? "取消默认" : "设为默认", systemImage: menu.isDefault(value) ? "star.slash" : "star")
             }
             .tint(.orange).accessibilityIdentifier("menu-default")
         }

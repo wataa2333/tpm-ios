@@ -16,7 +16,7 @@ struct FaultTypeTree: View {
     var body: some View {
         ForEach(nodes.map { PickerEntry(key: referenceKey(.faultTypes, $0), label: $0.object.label, value: $0) }) { entry in
             FaultTypeNode(node: entry.value, choose: choose)
-        }.interfaceMotion(nodes.map { referenceKey(.faultTypes, $0) })
+        }
     }
 }
 
@@ -29,12 +29,12 @@ struct FaultTypeNode: View {
             if !node["children"].array.isEmpty {
                 DisclosureGroup(isExpanded: $expanded) {
                     FaultTypeTree(nodes: node["children"].array, choose: choose)
-                } label: { WrappingContent { Text(node.object.label).animatedTextValue(node.object.label) } }
+                } label: { WrappingContent { Text(node.object.label) } }
             } else if node["type"].text == "FaultType" && !node["disabled"].bool {
-                Button { choose(node) } label: { HStack(spacing: 8) { WrappingContent { Text(node.object.label).animatedTextValue(node.object.label).foregroundStyle(Color.primary) }; ReferenceBadges(value: node) }.frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect) }.buttonStyle(.plain)
+                Button { choose(node) } label: { HStack(spacing: 8) { WrappingContent { Text(node.object.label).foregroundStyle(Color.primary) }; ReferenceBadges(value: node) }.frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect) }.buttonStyle(.plain)
                     .referenceMenu(for: node)
             }
-        }.interfaceMotion(expanded)
+        }
     }
 }
 
@@ -44,7 +44,7 @@ struct DepartmentTree: View {
     var body: some View {
         ForEach(nodes.map { PickerEntry(key: referenceKey(.departments, $0), label: $0.object.label, value: $0) }) { entry in
             DepartmentNode(node: entry.value, choose: choose)
-        }.interfaceMotion(nodes.map { referenceKey(.departments, $0) })
+        }
     }
 }
 
@@ -55,11 +55,11 @@ struct DepartmentNode: View {
     var body: some View {
         Group {
             if !node["children"].array.isEmpty {
-                DisclosureGroup(isExpanded: $expanded) { DepartmentTree(nodes: node["children"].array, choose: choose) } label: { WrappingContent { Text(node.object.label).animatedTextValue(node.object.label) } }
+                DisclosureGroup(isExpanded: $expanded) { DepartmentTree(nodes: node["children"].array, choose: choose) } label: { WrappingContent { Text(node.object.label) } }
             } else if !node["disabled"].bool && node["value"].text != "root" {
-                Button { choose(node) } label: { HStack(spacing: 8) { WrappingContent { Text(node.object.label).animatedTextValue(node.object.label).foregroundStyle(Color.primary) }; ReferenceBadges(value: node) }.frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect) }.buttonStyle(.plain)
+                Button { choose(node) } label: { HStack(spacing: 8) { WrappingContent { Text(node.object.label).foregroundStyle(Color.primary) }; ReferenceBadges(value: node) }.frame(maxWidth: .infinity, alignment: .leading).contentShape(.rect) }.buttonStyle(.plain)
                     .referenceMenu(for: node)
             }
-        }.interfaceMotion(expanded)
+        }
     }
 }

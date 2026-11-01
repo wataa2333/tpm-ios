@@ -117,7 +117,7 @@ struct ManagementTrendScreen: View {
             ForEach(seriesNames.indices, id: \.self) { index in
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Circle().fill(seriesColors[index]).frame(width: 8, height: 8)
-                    Text(seriesNames[index]).animatedTextValue(seriesNames[index]).font(AppFont.caption).fixedSize(horizontal: false, vertical: true)
+                    Text(seriesNames[index]).font(AppFont.caption).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -138,7 +138,6 @@ struct ManagementTrendScreen: View {
             .background(Color(uiColor: .systemGroupedBackground))
             // A single toolbar material bridges landscape panes; portrait keeps its native edge effect.
             .scrollEdgeEffectHidden(landscape, for: .top)
-            .interfaceMotion(landscape)
         }
         .navigationTitle("维修处理趋势").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .toolbarBackground(.regularMaterial, for: .navigationBar)
@@ -171,8 +170,8 @@ struct ManagementTrendScreen: View {
             if model.showingPrevious {
                 PreviousDataNotice(date: model.cachedAt, message: "请返回分析页重新查询获取最新数据。")
             }
-            if let window = model.window { Text(window.from + " 至 " + window.to).animatedTextValue(window.from + " 至 " + window.to).font(AppFont.subheadline.weight(.medium)) }
-            Text(model.status).animatedTextValue(model.status).font(AppFont.caption).foregroundStyle(.secondary)
+            if let window = model.window { Text(window.from + " 至 " + window.to).font(AppFont.subheadline.weight(.medium)) }
+            Text(model.status).font(AppFont.caption).foregroundStyle(.secondary)
             Text("待确认／待复线／已完结 · 故障发现日期").font(AppFont.caption).foregroundStyle(.secondary)
             HStack {
                 ForEach(ManagedGrain.allCases) { option in
@@ -180,12 +179,12 @@ struct ManagementTrendScreen: View {
                 }
             }
             Button { choosingPeople = true } label: {
-                Label("选择对比人员 · 已选\(selected.count)人", systemImage: "person.2").animatedTextValue("选择对比人员 · 已选\(selected.count)人")
+                Label("选择对比人员 · 已选\(selected.count)人", systemImage: "person.2")
                     .frame(maxWidth: .infinity, minHeight: 44)
             }.buttonStyle(.bordered).accessibilityIdentifier("trend-people-picker")
             Text("全部合计含身份未明确工单；选择人员不会改变全部合计。单指横向查看日期，双指缩放；纵向滚动页面。").font(AppFont.caption).foregroundStyle(.secondary)
             if model.incomplete { Text("读取未完整，空白值用 —；图表仅绘制已知数量。").font(AppFont.caption).foregroundStyle(.secondary) }
-        }.interfaceMotion(selected).interfaceMotion(showTotal)
+        }
     }
     private var results: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -198,15 +197,15 @@ struct ManagementTrendScreen: View {
                     trendChart
                     if let index = selectedIndex, buckets.indices.contains(index) {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(buckets[index].label).animatedTextValue(buckets[index].label).font(AppFont.subheadline.weight(.semibold))
+                            Text(buckets[index].label).font(AppFont.subheadline.weight(.semibold))
                             ForEach(seriesNames.indices, id: \.self) { series in
                                 let name = seriesNames[series]
                                 let point = points.first { $0.index == index && $0.series == name }
                                 HStack {
                                     Circle().fill(seriesColors[series]).frame(width: 8, height: 8)
-                                    Text(name).animatedTextValue(name)
+                                    Text(name)
                                     Spacer()
-                                    Text(point.map { "\($0.value) 单" } ?? "—").animatedTextValue(point.map { "\($0.value) 单" } ?? "—").monospacedDigit()
+                                    Text(point.map { "\($0.value) 单" } ?? "—").monospacedDigit()
                                 }.font(AppFont.caption)
                                     .padding(4)
                                     .background(focusedSeries == name ? Color.gray.opacity(0.18) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
@@ -223,12 +222,12 @@ struct ManagementTrendScreen: View {
             HStack {
                 Text("统计表").font(AppFont.headline)
                 Spacer()
-                Button(swapped ? "日期为行" : "人员为行", systemImage: "arrow.triangle.swap") { swapped.toggle() }.animatedTextValue(swapped ? "日期为行" : "人员为行").font(AppFont.subheadline).buttonStyle(.bordered)
+                Button(swapped ? "日期为行" : "人员为行", systemImage: "arrow.triangle.swap") { swapped.toggle() }.font(AppFont.subheadline).buttonStyle(.bordered)
             }
             ManagementTrendTable(buckets: buckets, people: people.filter { selected.contains($0.id) }, swapped: swapped, complete: !model.incomplete,
                                  selectedIndex: $selectedIndex, focusedSeries: $focusedSeries)
                 .id(swapped)
-        }.interfaceMotion(swapped).interfaceMotion(grain).interfaceMotion(selected).interfaceMotion(showTotal)
+        }
     }
     private var trendChart: some View {
         let buckets = self.buckets
@@ -256,13 +255,13 @@ struct ManagementTrendScreen: View {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine(); AxisTick()
                 AxisValueLabel {
-                    if let index = value.as(Int.self), buckets.indices.contains(index) { Text(buckets[index].label).animatedTextValue(buckets[index].label).font(AppFont.caption2) }
+                    if let index = value.as(Int.self), buckets.indices.contains(index) { Text(buckets[index].label).font(AppFont.caption2) }
                 }
             }
         }
         .chartYAxis { AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
             AxisGridLine(); AxisTick()
-            AxisValueLabel { if let count = value.as(Int.self) { Text(String(count)).animatedTextValue(String(count)).font(AppFont.caption2) } }
+            AxisValueLabel { if let count = value.as(Int.self) { Text(String(count)).font(AppFont.caption2) } }
         } }
         .chartForegroundStyleScale(domain: seriesNames, range: seriesColors)
         .chartLegend(.hidden)
@@ -411,14 +410,14 @@ private struct ManagementTrendTable: View {
     }
     private func fixedRow(_ title: String, _ total: String, header: Bool) -> some View {
         HStack(spacing: 0) {
-            Text(title).animatedTextValue(title).font(header ? AppFont.caption.weight(.semibold) : AppFont.caption).frame(width: 78, alignment: .leading)
-            Text(total).animatedTextValue(total).font(AppFont.caption.monospacedDigit()).frame(width: 40)
+            Text(title).font(header ? AppFont.caption.weight(.semibold) : AppFont.caption).frame(width: 78, alignment: .leading)
+            Text(total).font(AppFont.caption.monospacedDigit()).frame(width: 40)
         }.padding(.horizontal, 6).frame(height: rowHeight)
             .background(header ? Color.accentColor.opacity(0.1) : Color.clear)
 
     }
     private func cell(_ title: String, header: Bool) -> some View {
-        Text(title).animatedTextValue(title).font(header ? AppFont.caption.weight(.semibold) : AppFont.caption.monospacedDigit())
+        Text(title).font(header ? AppFont.caption.weight(.semibold) : AppFont.caption.monospacedDigit())
             .frame(width: columnWidth, height: rowHeight).padding(.horizontal, 4)
             .background(header ? Color.accentColor.opacity(0.1) : Color(uiColor: .secondarySystemGroupedBackground))
 
@@ -438,7 +437,6 @@ private struct ManagementTrendTable: View {
     }
     private func text(_ value: Int?) -> String { value.map(String.init) ?? "—" }
 }
-
 
 #if DEBUG
 /// Offline layout fixtures. These routes never read or modify production business data.

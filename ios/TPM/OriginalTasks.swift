@@ -37,25 +37,25 @@ struct OriginalRepairForm: View {
                 HStack { Text("维修花费"); Spacer(); TextField("0", value: Binding(get: { data["spend"]?.number ?? 0 }, set: { data["spend"] = .number($0) }), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing) }
                 ServerDateField(title: "维修开始时间", value: field("startTime"), required: true)
                 ServerDateField(title: "维修结束时间", value: field("endTime"), required: true)
-                Button { choosingAssistants = true } label: { LabeledContent("辅助维修人") { Text((data["repairUsers"]?.array ?? []).map { $0["realName"].text }.joined(separator: "、")).animatedTextValue((data["repairUsers"]?.array ?? []).map { $0["realName"].text }.joined(separator: "、")) } }
+                Button { choosingAssistants = true } label: { LabeledContent("辅助维修人") { Text((data["repairUsers"]?.array ?? []).map { $0["realName"].text }.joined(separator: "、")) } }
             } header: { RequiredFormHeader(title: "维修任务信息") }
             Section("ERP 出库") {
                 FullRowButton("新建出库单", systemImage: "plus") { creatingERP = true }
                 FullRowButton("添加出库物料", systemImage: "shippingbox") { choosing = true }.disabled(preview)
                 ForEach(Array((data["erpRepairMaterials"]?.array ?? []).enumerated()), id: \.offset) { index, row in
                     DisclosureGroup {
-                        LabeledContent("出库单号") { Text(row["outbound"]["outNumber"].text).animatedTextValue(row["outbound"]["outNumber"].text) }
-                        LabeledContent("领用人") { Text(row["outbound"]["recipientUser"]["realName"].text).animatedTextValue(row["outbound"]["recipientUser"]["realName"].text) }
-                        LabeledContent("申请数量") { Text(materialQuantity(row["materialOutbound"]["entryQuantity"].text, material: row["material"])).animatedTextValue(materialQuantity(row["materialOutbound"]["entryQuantity"].text, material: row["material"])) }
-                        LabeledContent("实发数量") { Text(materialQuantity(row["materialOutbound"]["actualQuantity"].text, material: row["material"])).animatedTextValue(materialQuantity(row["materialOutbound"]["actualQuantity"].text, material: row["material"])) }
-                        LabeledContent("剩余数量") { Text(materialQuantity(String(row["materialOutbound"]["actualQuantity"].number - row["materialOutbound"]["usedQuantity"].number), material: row["material"])).animatedTextValue(materialQuantity(String(row["materialOutbound"]["actualQuantity"].number - row["materialOutbound"]["usedQuantity"].number), material: row["material"])) }
-                        HStack { RequiredLabel(title: "使用数量"); Spacer(); TextField("数量", value: useQuantity(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text(materialUnit(row["material"])).animatedTextValue(materialUnit(row["material"])).foregroundStyle(.secondary) }
+                        LabeledContent("出库单号") { Text(row["outbound"]["outNumber"].text) }
+                        LabeledContent("领用人") { Text(row["outbound"]["recipientUser"]["realName"].text) }
+                        LabeledContent("申请数量") { Text(materialQuantity(row["materialOutbound"]["entryQuantity"].text, material: row["material"])) }
+                        LabeledContent("实发数量") { Text(materialQuantity(row["materialOutbound"]["actualQuantity"].text, material: row["material"])) }
+                        LabeledContent("剩余数量") { Text(materialQuantity(String(row["materialOutbound"]["actualQuantity"].number - row["materialOutbound"]["usedQuantity"].number), material: row["material"])) }
+                        HStack { RequiredLabel(title: "使用数量"); Spacer(); TextField("数量", value: useQuantity(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text(materialUnit(row["material"])).foregroundStyle(.secondary) }
                         Button("删除明细", role: .destructive) { var rows = data["erpRepairMaterials"]?.array ?? []; rows.remove(at: index); data["erpRepairMaterials"] = .array(rows) }
                     } label: {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(row["material"]["materialDesc"].text).animatedTextValue(row["material"]["materialDesc"].text)
-                            Text("料号：" + repairMaterialCode(row)).animatedTextValue("料号：" + repairMaterialCode(row)).font(AppFont.subheadline).foregroundStyle(.secondary)
-                            Text("使用数量：\(materialQuantity(row["useNum"].text, material: row["material"]))").animatedTextValue("使用数量：\(materialQuantity(row["useNum"].text, material: row["material"]))").font(AppFont.subheadline).foregroundStyle(.secondary)
+                            Text(row["material"]["materialDesc"].text)
+                            Text("料号：" + repairMaterialCode(row)).font(AppFont.subheadline).foregroundStyle(.secondary)
+                            Text("使用数量：\(materialQuantity(row["useNum"].text, material: row["material"]))").font(AppFont.subheadline).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -71,14 +71,13 @@ struct OriginalRepairForm: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving || photoUploading) }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .toolbar {
+            if !workflowCompleted {
             DocumentActions(busy: saving, submitting: submitAfterSave,
                             disabled: loading || photoUploading || data.isEmpty,
                             // "保存" keeps what is typed on this phone: nothing is sent and nothing is required.
                             save: { keepDraft() }, submit: { prepare(true) })
-                .opacity(workflowCompleted ? 0 : 1)
-                .allowsHitTesting(!workflowCompleted)
-                .accessibilityHidden(workflowCompleted)
+            }
         }
         .toast($toast)
         .task { if data.isEmpty { await load(); applyDraft() } }
@@ -241,20 +240,20 @@ struct WorkflowTaskView: View {
         Form {
             if kind == .fault && task["category"].text == "SIGNED" {
                 Section("签到设备") {
-                    LabeledContent("资产名称") { Text(taskData.text("asset.assetName")).animatedTextValue(taskData.text("asset.assetName")) }
-                    LabeledContent("资产编码") { Text(taskData.text("asset.assetCode")).animatedTextValue(taskData.text("asset.assetCode")) }
-                    LabeledContent("地址") { Text(taskData.text("asset.address")).animatedTextValue(taskData.text("asset.address")) }
-                    LabeledContent("签到状态") { Text("待签到").animatedTextValue("待签到") }
+                    LabeledContent("资产名称") { Text(taskData.text("asset.assetName")) }
+                    LabeledContent("资产编码") { Text(taskData.text("asset.assetCode")) }
+                    LabeledContent("地址") { Text(taskData.text("asset.address")) }
+                    LabeledContent("签到状态") { Text("待签到") }
                 }
             }
             Section {
-                Picker(selection: $condition) { ForEach(Array(conditions.enumerated()), id: \.offset) { _, value in Text(value["name"].text).animatedTextValue(value["name"].text).tag(value["value"].text) } } label: { RequiredLabel(title: "操作类型") }
+                Picker(selection: $condition) { ForEach(Array(conditions.enumerated()), id: \.offset) { _, value in Text(value["name"].text).tag(value["value"].text) } } label: { RequiredLabel(title: "操作类型") }
             } header: { RequiredFieldsNotice() }
             if needsFaultData && ["agree", "assign", "appoint"].contains(condition) {
                 Section("维修安排") {
                     if ["assign", "appoint"].contains(condition) { ReferenceField(title: "维修人员", source: .users, value: field("assignUser"), required: true) }
                     if task["category"].text == "REPORTED" {
-                        LabeledContent("维修途径") { Text("自修").animatedTextValue("自修") }
+                        LabeledContent("维修途径") { Text("自修") }
                         ReferenceField(title: "维修班组", source: .groups, value: field("userGroup"), required: true) { group in taskData["groupId"] = group["groupId"] }
                         ServerDateField(title: "预计完成时间", value: field("estimatedCompleteTime"), required: true)
                     }
@@ -265,8 +264,8 @@ struct WorkflowTaskView: View {
                     ForEach(Array(materials.enumerated()), id: \.offset) { index, line in
                         DisclosureGroup(line["material"]["materialDesc"].text) {
                             MaterialFacts(material: line["material"])
-                            LabeledContent("申请数量") { Text(materialQuantity(line["entryQuantity"].text, material: line["material"])).animatedTextValue(materialQuantity(line["entryQuantity"].text, material: line["material"])) }
-                            HStack { RequiredLabel(title: "实发数量"); Spacer(); TextField("数量", value: actual(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text(materialUnit(line["material"])).animatedTextValue(materialUnit(line["material"])).foregroundStyle(.secondary) }
+                            LabeledContent("申请数量") { Text(materialQuantity(line["entryQuantity"].text, material: line["material"])) }
+                            HStack { RequiredLabel(title: "实发数量"); Spacer(); TextField("数量", value: actual(index), format: .number).keyboardType(.decimalPad).multilineTextAlignment(.trailing); Text(materialUnit(line["material"])).foregroundStyle(.secondary) }
                         }
                     }
                 }
@@ -275,11 +274,9 @@ struct WorkflowTaskView: View {
                 if assignmentsLoading { ProgressView("正在加载审批人…") }
                 AssigneesFields(elements: assignments.assignees, selections: $assignments.selections, defaultPrefix: approverDefaultPrefix)
             } }
-            Section(isReturning ? "退单原因" : isRejecting ? "驳回意见" : "意见") { EntryField(placeholder: isReturning ? "请输入退单原因" : isRejecting ? "请输入驳回意见" : "请输入意见", text: $comment, limit: 255, axis: .vertical, lines: 3...8) }.animatedTextValue(isReturning ? "退单原因" : isRejecting ? "驳回意见" : "意见")
+            Section(isReturning ? "退单原因" : isRejecting ? "驳回意见" : "意见") { EntryField(placeholder: isReturning ? "请输入退单原因" : isRejecting ? "请输入驳回意见" : "请输入意见", text: $comment, limit: 255, axis: .vertical, lines: 3...8) }
             if preview { Section { Text("流程页面预览，使用示例数据，不执行真实提交。").font(AppFont.footnote).foregroundStyle(.secondary) } }
         }
-        .interfaceMotion(condition)
-        .interfaceMotion(assignmentsLoading)
         .disabled(loading || submitting)
         .initialLoadingContent((preparingDefault && !preview && !previewReturn) || (loading && state == .null))
         .overlay { AnimatedLoadingOverlay(isPresented: loading || submitting || (preparingDefault && !preview && !previewReturn), title: submitting ? "正在提交…" : "正在准备提交…") }
@@ -295,7 +292,7 @@ struct WorkflowTaskView: View {
                 }
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .toolbar {
             if !(preparingDefault && !preview && !previewReturn) {
             DocumentActions(busy: submitting, submitting: true,
                             disabled: !state["canSubmit"].bool || !ready || !assignmentsReady || assignmentsLoading || loading || condition.isEmpty,
@@ -452,13 +449,13 @@ struct TaskHandoffView: View {
     var body: some View {
         Form {
             if operation != "resolve" { ReferenceField(title: operation == "transfer" ? "转办人" : "委派给", source: .workflowUsers, value: $user) }
-            Section(operation == "resolve" ? "处理说明" : "原因") { EntryField(placeholder: "请输入", text: $reason, axis: .vertical, lines: 3...8) }.animatedTextValue(operation == "resolve" ? "处理说明" : "原因")
+            Section(operation == "resolve" ? "处理说明" : "原因") { EntryField(placeholder: "请输入", text: $reason, axis: .vertical, lines: 3...8) }
         }
         .navigationTitle(title).navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving) }
         }
-        .safeAreaInset(edge: .bottom) {
+        .toolbar {
             DocumentActions(busy: saving, submitting: true, disabled: reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (operation != "resolve" && user["userName"].text.isEmpty), submit: { Task { await save() } })
         }
         .overlay { AnimatedLoadingOverlay(isPresented: saving, title: "正在提交…") }

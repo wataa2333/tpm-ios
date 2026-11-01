@@ -48,7 +48,7 @@ struct DateRangeChip: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "calendar")
-            Text("故障时间 " + range.summary).animatedTextValue("故障时间 " + range.summary).lineLimit(2)
+            Text("故障时间 " + range.summary).lineLimit(2)
             Spacer(minLength: 0)
             Button { clear() } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary).frame(minWidth: 44, minHeight: 32) }
                 .buttonStyle(.plain).accessibilityLabel("清除日期筛选").accessibilityIdentifier("date-range-clear")

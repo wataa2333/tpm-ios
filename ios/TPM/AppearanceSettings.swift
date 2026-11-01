@@ -73,7 +73,7 @@ struct AppearanceSettings: View {
                     Button { if selected != accent.rawValue { selected = accent.rawValue } } label: {
                         HStack {
                             Circle().fill(accent.color).frame(width: 22, height: 22)
-                            Text(accent.title).animatedTextValue(accent.title).foregroundStyle(.primary)
+                            Text(accent.title).foregroundStyle(.primary)
                             Spacer()
                             Image(systemName: "checkmark").foregroundStyle(accent.color)
                                 .frame(width: 22).opacity(selected == accent.rawValue ? 1 : 0)
@@ -113,8 +113,8 @@ struct DeveloperAccessSheet: View {
                         Text("默认每页 500、详情并发 8。档位仅对下次新查询生效；服务端最大每页数量未实测。").font(AppFont.caption).foregroundStyle(.secondary)
                     }
                     Section("应用信息") {
-                        LabeledContent("版本") { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—").animatedTextValue(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—") }
-                        LabeledContent("构建") { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—").animatedTextValue(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—") }
+                        LabeledContent("版本") { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—") }
+                        LabeledContent("构建") { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—") }
                     }
                 } else {
                     Section("开发者验证") {
@@ -125,24 +125,24 @@ struct DeveloperAccessSheet: View {
                     }
                 }
             }
-            .interfaceMotion(unlocked).interfaceMotion(experimental).interfaceMotion(incorrect)
+            .keyboardManaged()
             .navigationTitle(unlocked ? "开发者选项" : "开发者验证").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("完成") { dismiss() } } }
         }
     }
     private func settingToggle(_ title: String, isOn: Binding<Bool>) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            Text(title).animatedTextValue(title)
+            Text(title)
             Spacer(minLength: 12)
             Toggle(title, isOn: isOn).labelsHidden().fixedSize()
         }.frame(maxWidth: .infinity, minHeight: 44)
     }
     private func settingPicker(_ title: String, selection: Binding<Int>, options: [Int]) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            Text(title).animatedTextValue(title)
+            Text(title)
             Spacer(minLength: 12)
             Picker(title, selection: selection) {
-                ForEach(options, id: \.self) { Text("\($0) 单").animatedTextValue("\($0) 单").tag($0) }
+                ForEach(options, id: \.self) { Text("\($0) 单").tag($0) }
             }.labelsHidden().pickerStyle(.menu).fixedSize()
         }.frame(maxWidth: .infinity, minHeight: 44)
     }

@@ -35,7 +35,7 @@ struct TodoInboxView: View {
                                     selectable: entry.map { batch.isSelectable($0) } ?? false, batch: batch).equatable()
                     }
                     if rows.isEmpty && !loading && error == nil { CompactEmptyState(title: "暂无待办") }
-                }.opacity((loading || gate.busy) && !loadingMore ? 0.4 : 1).interfaceMotion(loading || gate.busy, duration: 0.4)
+                }
                 LoadMoreFooter(hasMore: !last, failed: error != nil, loading: loading || loadingMore, loaded: rows.count, total: total) { await load(more: true) }
             }
         }
@@ -43,8 +43,6 @@ struct TodoInboxView: View {
         .modifier(ListTabVisibility())
         .searchPageChrome(largeTitle: true)
         .nativeSearchable(text: $query, prompt: "搜索待办名称")
-        .reloadsToTop(on: gate.id("\(navigation.refresh)-\(query)"))
-        .interfaceMotion(loading || gate.busy, duration: 0.45)
         .rootTopBar(preview: preview, busy: loading || loadingMore || gate.busy) { gate.request() }
         .modifier(TodoBatchHost(enabled: !preview, batch: batch) { rows.compactMap { batchItem(todo: $0) } })
         .errorDialog($error, retry: { Task { await load() } })
@@ -119,8 +117,8 @@ struct TodoCardRow: View, Equatable {
                 LiveWorkflowDetail(kind: kind, id: task["businessKey"].text)
             } else {
                 List {
-                    LabeledContent("流程类型") { Text("其他流程").animatedTextValue("其他流程") }
-                    LabeledContent("当前节点") { Text(task["name"].text).animatedTextValue(task["name"].text) }
+                    LabeledContent("流程类型") { Text("其他流程") }
+                    LabeledContent("当前节点") { Text(task["name"].text) }
                     Text("此类流程暂未开放处理").foregroundStyle(.secondary)
                 }.navigationTitle("待办详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
             }

@@ -7,18 +7,15 @@ struct TPMApp: App {
     @StateObject private var session = LiveSession()
     @StateObject private var navigation = BottomNavigationModel()
     @StateObject private var queryAccounts = QueryAccountModel()
-    init() { DeveloperPreferences.start(); AppFont.configureNativeControls(); KeyboardDismissAccessory.shared.start() }
+    init() { DeveloperPreferences.start(); AppFont.configureNativeControls() }
     var body: some Scene {
         WindowGroup {
-            GeometryReader { geometry in
-                PreviewRouter()
-                    .environment(\.bottomSafeArea, geometry.safeAreaInsets.bottom)
-                    .environmentObject(store).environmentObject(session).environmentObject(navigation).environmentObject(queryAccounts)
-                    .onChange(of: session.scopeRevision) { queryAccounts.invalidate() }
-                    .labeledContentStyle(SafeFactsStyle())
-                    .modifier(AppTheme())
-                    .font(AppFont.body)
-            }
+            PreviewRouter()
+                .environmentObject(store).environmentObject(session).environmentObject(navigation).environmentObject(queryAccounts)
+                .onChange(of: session.scopeRevision) { queryAccounts.invalidate() }
+                .labeledContentStyle(.automatic)
+                .modifier(AppTheme())
+                .font(AppFont.body)
         }
     }
 }
@@ -131,7 +128,7 @@ struct DemoNotice: View {
 struct StatusLabel: View {
     let state: FaultState
     var body: some View {
-        HStack(spacing: 5) { Image(systemName: state.symbol); Text(state.rawValue).animatedTextValue(state.rawValue) }
+        HStack(spacing: 5) { Image(systemName: state.symbol); Text(state.rawValue) }
             .font(AppFont.subheadline.weight(.medium)).foregroundStyle(state.color).fixedSize()
     }
 }
@@ -167,8 +164,8 @@ struct PoolEntry: View {
     var body: some View {
         Label {
             VStack(alignment: .leading, spacing: 5) {
-                Text(title).animatedTextValue(title)
-                Text(subtitle).animatedTextValue(subtitle).font(AppFont.subheadline).foregroundStyle(.secondary)
+                Text(title)
+                Text(subtitle).font(AppFont.subheadline).foregroundStyle(.secondary)
             }.padding(.vertical, 6)
         } icon: { Image(systemName: symbol).foregroundStyle(.tint).frame(width: 26) }
     }
@@ -210,7 +207,7 @@ struct FaultListView: View {
                 (stage.code, store.faults.filter { $0.state == stage }.count)
             }))
             if searching {
-                CardGroup { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).animatedTextValue($0.rawValue).tag($0) } }.padding(.horizontal, 16).padding(.vertical, 6) }
+                CardGroup { Picker("搜索分类", selection: $searchField) { ForEach(FaultSearchField.allCases) { Text($0.rawValue).tag($0) } }.padding(.horizontal, 16).padding(.vertical, 6) }
             }
             CardGroup {
                 ForEach(rows) { fault in FaultRow(fault: fault) }
@@ -287,25 +284,25 @@ struct FaultDetailView: View {
                 List {
                     Section {
                         HStack { Text("当前状态"); Spacer(); StatusLabel(state: fault.state) }
-                        LabeledContent("报修编号") { Text(fault.id).animatedTextValue(fault.id) }
-                        LabeledContent("报修人") { Text(fault.reporter).animatedTextValue(fault.reporter) }
-                        LabeledContent("报修时间") { Text(fault.time).animatedTextValue(fault.time) }
+                        LabeledContent("报修编号") { Text(fault.id) }
+                        LabeledContent("报修人") { Text(fault.reporter) }
+                        LabeledContent("报修时间") { Text(fault.time) }
                     }
                     Section("设备") {
                         NavigationLink { AssetDetailView(asset: fault.asset) } label: {
                             VStack(alignment: .leading, spacing: 5) {
-                                Text(fault.name).animatedTextValue(fault.name).font(AppFont.headline)
-                                Text("\(fault.asset.id) · \(fault.asset.location)").animatedTextValue("\(fault.asset.id) · \(fault.asset.location)").font(AppFont.subheadline).foregroundStyle(.secondary)
+                                Text(fault.name).font(AppFont.headline)
+                                Text("\(fault.asset.id) · \(fault.asset.location)").font(AppFont.subheadline).foregroundStyle(.secondary)
                             }
                         }
                     }
-                    Section("故障描述") { Text(fault.description).animatedTextValue(fault.description).textSelection(.enabled) }
-                    if !fault.result.isEmpty { Section("维修结果") { Text(fault.result).animatedTextValue(fault.result) } }
-                    Section("附件") { Text(fault.photoCount == 0 ? "暂无附件" : "已选择 \(fault.photoCount) 张照片（演示，不上传）").animatedTextValue(fault.photoCount == 0 ? "暂无附件" : "已选择 \(fault.photoCount) 张照片（演示，不上传）").foregroundStyle(.secondary) }
+                    Section("故障描述") { Text(fault.description).textSelection(.enabled) }
+                    if !fault.result.isEmpty { Section("维修结果") { Text(fault.result) } }
+                    Section("附件") { Text(fault.photoCount == 0 ? "暂无附件" : "已选择 \(fault.photoCount) 张照片（演示，不上传）").foregroundStyle(.secondary) }
                     Section { NavigationLink { WorkflowNodesView(processID: "", preview: true) } label: { Label("处理流程", systemImage: "point.3.connected.trianglepath.dotted") } }
                     Section("处理记录") {
                         ForEach(Array(fault.records.enumerated()), id: \.offset) { index, record in
-                            Label(record, systemImage: index == fault.records.count - 1 ? "circle.inset.filled" : "circle").animatedTextValue(record).font(AppFont.subheadline)
+                            Label(record, systemImage: index == fault.records.count - 1 ? "circle.inset.filled" : "circle").font(AppFont.subheadline)
                         }
                     }
                     Section { DemoNotice() }
@@ -366,9 +363,9 @@ struct AssetRow: View {
     let asset: Asset
     var body: some View {
         VStack(alignment: .leading, spacing: RowMetrics.spacing) {
-            WrappingContent { Text(asset.name).animatedTextValue(asset.name).font(AppFont.headline) }
-            WrappingContent { Text("\(asset.id) · \(asset.model)").animatedTextValue("\(asset.id) · \(asset.model)").font(AppFont.subheadline).foregroundStyle(.secondary) }
-            WrappingContent { Text(asset.location).animatedTextValue(asset.location).font(AppFont.subheadline).foregroundStyle(.secondary) }
+            WrappingContent { Text(asset.name).font(AppFont.headline) }
+            WrappingContent { Text("\(asset.id) · \(asset.model)").font(AppFont.subheadline).foregroundStyle(.secondary) }
+            WrappingContent { Text(asset.location).font(AppFont.subheadline).foregroundStyle(.secondary) }
         }
     }
 }
@@ -425,13 +422,13 @@ struct OrderDetailView: View {
     var body: some View {
         List {
             Section {
-                LabeledContent("任务类型") { Text(kind).animatedTextValue(kind) }
-                LabeledContent("状态") { Text(claimed ? "已领取（模拟）" : "待接单").animatedTextValue(claimed ? "已领取（模拟）" : "待接单") }
-                LabeledContent("计划日期") { Text("2026-10-15").animatedTextValue("2026-10-15") }
-                NavigationLink { AssetDetailView(asset: asset) } label: { LabeledContent("设备") { Text(asset.name).animatedTextValue(asset.name) } }
+                LabeledContent("任务类型") { Text(kind) }
+                LabeledContent("状态") { Text(claimed ? "已领取（模拟）" : "待接单") }
+                LabeledContent("计划日期") { Text("2026-10-15") }
+                NavigationLink { AssetDetailView(asset: asset) } label: { LabeledContent("设备") { Text(asset.name) } }
             }
             Section("任务内容") {
-                Text(kind == "维修" ? "检查设备异常振动和运行异响，记录故障原因与处理结果。" : kind == "保养" ? "检查润滑状态、清洁过滤部件，并记录试运行情况。" : "检查定位精度、重复定位精度，记录测量结果。").animatedTextValue(kind == "维修" ? "检查设备异常振动和运行异响，记录故障原因与处理结果。" : kind == "保养" ? "检查润滑状态、清洁过滤部件，并记录试运行情况。" : "检查定位精度、重复定位精度，记录测量结果。")
+                Text(kind == "维修" ? "检查设备异常振动和运行异响，记录故障原因与处理结果。" : kind == "保养" ? "检查润滑状态、清洁过滤部件，并记录试运行情况。" : "检查定位精度、重复定位精度，记录测量结果。")
             }
             Section { DemoNotice() }
         }
@@ -451,12 +448,12 @@ struct StockListView: View {
                     NavigationLink { MaterialDetailView(material: material) } label: {
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: RowMetrics.spacing) {
-                                Text(material.name).animatedTextValue(material.name).font(AppFont.headline)
-                                Text(material.specification).animatedTextValue(material.specification).font(AppFont.subheadline).foregroundStyle(.secondary)
-                                Text(material.shelf).animatedTextValue(material.shelf).font(AppFont.subheadline).foregroundStyle(.secondary)
+                                Text(material.name).font(AppFont.headline)
+                                Text(material.specification).font(AppFont.subheadline).foregroundStyle(.secondary)
+                                Text(material.shelf).font(AppFont.subheadline).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Text("\(material.quantity) \(material.unit)").animatedTextValue("\(material.quantity) \(material.unit)").font(AppFont.subheadline.monospacedDigit())
+                            Text("\(material.quantity) \(material.unit)").font(AppFont.subheadline.monospacedDigit())
                         }
                     }.uniformRow()
                 }
@@ -474,14 +471,14 @@ struct MaterialDetailView: View {
     var body: some View {
         List {
             Section {
-                Text(material.name).animatedTextValue(material.name).font(AppFont.title2.bold())
-                LabeledContent("物料编号") { Text(material.id).animatedTextValue(material.id) }
-                LabeledContent("规格型号") { Text(material.specification).animatedTextValue(material.specification) }
+                Text(material.name).font(AppFont.title2.bold())
+                LabeledContent("物料编号") { Text(material.id) }
+                LabeledContent("规格型号") { Text(material.specification) }
             }
             Section("库存信息") {
-                LabeledContent("库存数量") { Text("\(material.quantity) \(material.unit)").animatedTextValue("\(material.quantity) \(material.unit)") }
-                LabeledContent("库位") { Text(material.shelf).animatedTextValue(material.shelf) }
-                LabeledContent("计量单位") { Text(material.unit).animatedTextValue(material.unit) }
+                LabeledContent("库存数量") { Text("\(material.quantity) \(material.unit)") }
+                LabeledContent("库位") { Text(material.shelf) }
+                LabeledContent("计量单位") { Text(material.unit) }
             }
             Section { DemoNotice() }
         }
@@ -521,18 +518,18 @@ struct OutboundDetailView: View {
         if let item = store.outbounds.first(where: { $0.id == id }) {
             List {
                 Section {
-                    LabeledContent("出库单号") { Text(item.id).animatedTextValue(item.id) }
-                    LabeledContent("状态") { Text(item.completed ? "已出库" : "待出库").animatedTextValue(item.completed ? "已出库" : "待出库") }
-                    LabeledContent("领用部门") { Text(item.department).animatedTextValue(item.department) }
-                    LabeledContent("领用人") { Text(item.applicant).animatedTextValue(item.applicant) }
-                    LabeledContent("申请时间") { Text(item.date).animatedTextValue(item.date) }
+                    LabeledContent("出库单号") { Text(item.id) }
+                    LabeledContent("状态") { Text(item.completed ? "已出库" : "待出库") }
+                    LabeledContent("领用部门") { Text(item.department) }
+                    LabeledContent("领用人") { Text(item.applicant) }
+                    LabeledContent("申请时间") { Text(item.date) }
                 }
                 Section("出库明细") {
                     NavigationLink { MaterialDetailView(material: item.material) } label: {
-                        VStack(alignment: .leading, spacing: 5) { Text(item.material.name).animatedTextValue(item.material.name).font(AppFont.headline); Text(item.material.specification).animatedTextValue(item.material.specification).font(AppFont.subheadline).foregroundStyle(.secondary) }
+                        VStack(alignment: .leading, spacing: 5) { Text(item.material.name).font(AppFont.headline); Text(item.material.specification).font(AppFont.subheadline).foregroundStyle(.secondary) }
                     }
-                    LabeledContent("申请数量") { Text("\(item.quantity) \(item.material.unit)").animatedTextValue("\(item.quantity) \(item.material.unit)") }
-                    LabeledContent("出库库位") { Text(item.material.shelf).animatedTextValue(item.material.shelf) }
+                    LabeledContent("申请数量") { Text("\(item.quantity) \(item.material.unit)") }
+                    LabeledContent("出库库位") { Text(item.material.shelf) }
                 }
                 Section { DemoNotice() }
             }
@@ -548,9 +545,9 @@ struct OutboundDetailView: View {
 struct ProfileView: View {
     var body: some View {
         List {
-            Section { Label("个人演示", systemImage: "person.crop.circle"); LabeledContent("当前环境") { Text("界面预览").animatedTextValue("界面预览") } }
-            Section { LabeledContent("当前厂区") { Text("示例一厂").animatedTextValue("示例一厂") } }
-            Section("应用") { LabeledContent("版本") { Text("0.5.0").animatedTextValue("0.5.0") }; LabeledContent("数据来源") { Text("模拟数据").animatedTextValue("模拟数据") } }
+            Section { Label("个人演示", systemImage: "person.crop.circle"); LabeledContent("当前环境") { Text("界面预览") } }
+            Section { LabeledContent("当前厂区") { Text("示例一厂") } }
+            Section("应用") { LabeledContent("版本") { Text("0.5.0") }; LabeledContent("数据来源") { Text("模拟数据") } }
             Section { Text("账号、工厂和业务权限将在对接原服务器后显示。").foregroundStyle(.secondary) }
         }
         .navigationTitle("我的").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()

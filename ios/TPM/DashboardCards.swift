@@ -1,15 +1,5 @@
 import SwiftUI
 
-private struct DashboardPressStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
-            .opacity(configuration.isPressed ? 0.9 : 1)
-            .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.2), value: configuration.isPressed)
-    }
-}
-
 /// A fresh, abstract dashboard card: a soft wash of one hue over the system card colour, with a few
 /// translucent shapes. The hue is a system colour, so the card adapts to light and dark mode by itself.
 /// Count top-left, icon top-right, title bottom-left.
@@ -35,15 +25,14 @@ struct DashboardCard: View {
                     .lineLimit(1).minimumScaleFactor(0.45).layoutPriority(1)
                     .foregroundStyle(.primary)
                     .opacity(count == nil ? 0 : 1)
-                    .contentTransition(.numericText()).interfaceMotion(count, duration: 0.55)
                     .accessibilityHidden(count == nil)
                     .accessibilityIdentifier("dashboard-count-" + title)
                 Spacer(minLength: 8)
                 Image(systemName: symbol).font(AppFont.title2.weight(.semibold)).foregroundStyle(tint)
             }
             Spacer(minLength: 6)
-            Text(title).animatedTextValue(title).font(largeTitle ? AppFont.title2.weight(.bold) : AppFont.headline).foregroundStyle(.primary).multilineTextAlignment(.leading)
-            if !subtitle.isEmpty { Text(subtitle).animatedTextValue(subtitle).font(AppFont.caption).foregroundStyle(.secondary).multilineTextAlignment(.leading) }
+            Text(title).font(largeTitle ? AppFont.title2.weight(.bold) : AppFont.headline).foregroundStyle(.primary).multilineTextAlignment(.leading)
+            if !subtitle.isEmpty { Text(subtitle).font(AppFont.caption).foregroundStyle(.secondary).multilineTextAlignment(.leading) }
         }
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: wide ? wideHeight : smallHeight, alignment: .leading)
@@ -62,8 +51,6 @@ struct DashboardBackground: View {
             ZStack {
                 Color(uiColor: .secondarySystemGroupedBackground)
                 LinearGradient(colors: [tint.opacity(0.38), tint.opacity(0.22), tint.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                DashboardWave(offset: 0.15 + CGFloat(seed % 3) * 0.1, mirrored: seed % 2 == 0).fill(tint.opacity(0.10))
-                DashboardWave(offset: 0.40, mirrored: seed % 2 == 1).fill(tint.opacity(0.07))
                 Circle().fill(tint.opacity(0.22)).frame(width: proxy.size.height * 1.1)
                     .offset(x: proxy.size.width * (seed % 2 == 0 ? 0.42 : 0.30), y: -proxy.size.height * 0.45)
             }
@@ -89,7 +76,7 @@ struct QuickQueryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center) {
-                Text(title).animatedTextValue(title).font(AppFont.headline).foregroundStyle(.primary)
+                Text(title).font(AppFont.headline).foregroundStyle(.primary)
                 Spacer(minLength: 8)
                 Image(systemName: symbol).font(AppFont.title2.weight(.semibold)).foregroundStyle(tint)
             }
@@ -98,8 +85,7 @@ struct QuickQueryCard: View {
                     .focused($focused)
                     .textInputAutocapitalization(.characters).autocorrectionDisabled()
                     .submitLabel(.search).onSubmit(go)
-                    .padding(.horizontal, 14).padding(.vertical, 11)
-                    .background(.background.opacity(0.75), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .textFieldStyle(.roundedBorder)
                     .accessibilityLabel(title)
                 Button("查询", action: go)
                     .buttonStyle(.glassProminent).controlSize(.large)
@@ -121,28 +107,11 @@ struct QuickQuery: Identifiable, Hashable {
     let text: String
 }
 
-private struct DashboardWave: Shape {
-    var offset: CGFloat
-    var mirrored: Bool
-    func path(in rect: CGRect) -> Path {
-        let w = rect.width, h = rect.height
-        return Path { path in
-            path.move(to: CGPoint(x: 0, y: h * (0.25 + offset)))
-            path.addCurve(to: CGPoint(x: w, y: h * (0.6 + offset)),
-                control1: CGPoint(x: w * 0.3, y: h * (mirrored ? 1.1 : -0.2)),
-                control2: CGPoint(x: w * 0.7, y: h * (mirrored ? -0.1 : 1.1)))
-            path.addLine(to: CGPoint(x: w, y: h))
-            path.addLine(to: CGPoint(x: 0, y: h))
-            path.closeSubpath()
-        }
-    }
-}
-
 /// A plain text heading between groups of cards.
 private struct DashboardHeading: View {
     let title: String
     var body: some View {
-        Text(title).animatedTextValue(title).font(AppFont.title3.weight(.semibold)).foregroundStyle(.primary)
+        Text(title).font(AppFont.title3.weight(.semibold)).foregroundStyle(.primary)
             .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8).accessibilityAddTraits(.isHeader)
     }
 }
@@ -195,7 +164,7 @@ struct DashboardHome: View {
                 }
                 if preview { DemoNotice() }
             }
-            .buttonStyle(DashboardPressStyle())
+            .buttonStyle(.plain)
             // Room under the last card for the floating "+" button.
             .padding(.horizontal, 16).padding(.bottom, 80)
         }
@@ -204,11 +173,9 @@ struct DashboardHome: View {
         // Pulling down shows the system spinner only and changes nothing on this page until the numbers arrive.
         .overlay(alignment: .top) {
             ProgressView().padding(.top, 6).opacity(loadingCounts || gate.busy ? 1 : 0).allowsHitTesting(false)
-                .interfaceMotion(loadingCounts || gate.busy)
         }
         .navigationTitle("主页").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
         .modifier(ListTabVisibility())
-        .reloadsToTop(on: gate.id("\(navigation.refresh)"))
         .task(id: gate.id("\(navigation.refresh)")) { await gate.run(key: "\(navigation.refresh)") { loadingCounts = true; await loadCounts(); loadingCounts = false } }
         .refreshable { await loadCounts() }
         .rootTopBar(preview: preview, busy: loadingCounts || gate.busy) { gate.request() }
@@ -293,11 +260,11 @@ struct DashboardWorkspace: View {
                 }
                 if preview { DemoNotice() }
             }
-            .buttonStyle(DashboardPressStyle())
+            .buttonStyle(.plain)
             // Room under the last card for the floating "+" button.
             .padding(.horizontal, 16).padding(.bottom, 80)
         }
-        .scrollDismissesKeyboard(.interactively)
+        .keyboardManaged()
         .navigationDestination(item: $route) { query in
             if preview { FaultListView(initialState: .received) }
             // A new identity per query: every query opens a fresh page (own list, search, filters, scroll),
@@ -309,14 +276,10 @@ struct DashboardWorkspace: View {
         // Pulling down shows the system spinner only and changes nothing on this page until the numbers arrive.
         .overlay(alignment: .top) {
             ProgressView().padding(.top, 6).opacity(loadingCounts || gate.busy ? 1 : 0).allowsHitTesting(false)
-                .interfaceMotion(loadingCounts || gate.busy)
         }
         .onChange(of: queries.revision) { counts = [:]; gate.request() }
         .navigationTitle("看板").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
         .modifier(ListTabVisibility())
-        // Loads by itself only the first time, when nothing is shown yet. After that it is manual only:
-        // the refresh button or pulling the page down.
-        .reloadsToTop(on: gate.id("workspace"))
         .task(id: gate.id("workspace")) { await gate.run(key: "workspace") { loadingCounts = true; await loadCounts(); loadingCounts = false } }
         .refreshable { await loadCounts() }
         .rootTopBar(preview: preview, busy: loadingCounts || gate.busy) { gate.request() }

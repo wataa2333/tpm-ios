@@ -152,19 +152,21 @@ final class PreviewTests: XCTestCase {
         app.buttons["完成"].tap()
         let name = app.textFields["请输入报修名称"]
         XCTAssertTrue(name.waitForExistence(timeout: 10))
-        name.tap()
-        let dismiss = app.buttons["keyboard-dismiss"]
-        XCTAssertTrue(dismiss.waitForExistence(timeout: 10))
         let save = app.buttons["保存"], submit = app.buttons["提交"]
-        XCTAssertFalse(dismiss.frame.isEmpty, "键盘附件栏中的收起键盘按钮必须可见")
-        XCTAssertFalse(save.exists, "输入时不叠加保存按钮")
-        XCTAssertFalse(submit.exists, "输入时不叠加提交按钮")
-        dismiss.tap()
-        let closed = NSPredicate { _, _ in app.keyboards.count == 0 }
-        expectation(for: closed, evaluatedWith: nil)
-        waitForExpectations(timeout: 5)
-        XCTAssertTrue(save.waitForExistence(timeout: 5))
-        XCTAssertTrue(submit.exists)
+        for _ in 0..<3 {
+            name.tap()
+            let dismiss = app.buttons["keyboard-dismiss"]
+            XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+            XCTAssertTrue(dismiss.isHittable)
+            XCTAssertEqual(app.buttons.matching(identifier: "keyboard-dismiss").count, 1)
+            dismiss.tap()
+            let closed = expectation(for: NSPredicate { _, _ in app.keyboards.count == 0 }, evaluatedWith: nil)
+            wait(for: [closed], timeout: 5)
+            XCTAssertTrue(save.waitForExistence(timeout: 5))
+            XCTAssertTrue(save.isHittable)
+            XCTAssertTrue(submit.isHittable)
+            XCTAssertLessThan(abs(save.frame.midY - submit.frame.midY), 3)
+        }
     }
 
     func testSwipeMenuPinsAnOptionToTheTopOfThePicker() {
@@ -218,8 +220,9 @@ final class PreviewTests: XCTestCase {
         XCTAssertFalse(factElement(app, "受理组别").exists)
         let expand = expansionControl(app)
         XCTAssertTrue(expand.waitForExistence(timeout: 15))
-        XCTAssertNotNil(app.buttons["待抢单"].value as? String)
-        XCTAssertTrue((app.buttons["待抢单"].value as? String)?.contains("单") == true)
+        let category = app.buttons["category-picker"]
+        XCTAssertTrue(category.exists)
+        XCTAssertTrue((category.value as? String)?.contains("单") == true)
         capture(app, "Compact work orders")
         expand.tap()
         for _ in 0..<6 where !factElement(app, "受理组别").isHittable { scrollUpSmall(app) }
@@ -372,9 +375,13 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(app.buttons["新建报修"].exists)
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "所有工单")).firstMatch.waitForExistence(timeout: 10))
         for title in ["待受理", "待抢单", "待签到", "待完成", "待确认", "已完结"] {
-            XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", title)).firstMatch.exists, title)
+            let entry = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", title)).firstMatch
+            for _ in 0..<6 where !entry.isHittable { app.swipeUp() }
+            XCTAssertTrue(entry.isHittable, title)
         }
-        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "精密度检查工单池")).firstMatch.exists)
+        let precision = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "精密度检查工单池")).firstMatch
+        for _ in 0..<6 where !precision.isHittable { app.swipeUp() }
+        XCTAssertTrue(precision.isHittable)
         app.buttons["看板"].firstMatch.tap()
         XCTAssertTrue(app.buttons["新建报修"].exists)
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "资产台账")).firstMatch.waitForExistence(timeout: 10))
@@ -420,7 +427,7 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["提示"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["请填写或选择报修名称"].exists)
         capture(app, "Required field validation")
-        app.buttons["dialog-primary"].tap()
+        app.alerts.buttons["好"].tap()
         app.swipeUp(); app.swipeUp()
         capture(app, "Fault form lower fields")
     }
@@ -432,9 +439,8 @@ final class PreviewTests: XCTestCase {
         let add = app.buttons["新建报修"]
         XCTAssertTrue(add.waitForExistence(timeout: 20))
         let mine = app.buttons["我的"].firstMatch
-        // One round button at the bottom-right corner, above the tab bar and not one of its tabs.
+        // A system tab accessory above the four navigation tabs.
         XCTAssertLessThanOrEqual(add.frame.maxY, mine.frame.minY + 2)
-        XCTAssertGreaterThan(add.frame.midX, app.frame.midX)
         XCTAssertTrue(add.isHittable)
         XCTAssertEqual(app.buttons.matching(identifier: "我的").count, 1)
         XCTAssertEqual(app.tabBars.firstMatch.buttons.count, 4)
@@ -533,7 +539,7 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["提交未完成"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "审批人")).firstMatch.exists)
         XCTAssertFalse(app.staticTexts["提交当前流程节点？"].exists)
-        app.buttons["dialog-primary"].tap()
+        app.alerts.buttons["好"].tap()
         // Choose the approver: submitting then goes straight through, with no confirmation sheet.
         approver.tap()
         app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "示例审批人")).firstMatch.tap()

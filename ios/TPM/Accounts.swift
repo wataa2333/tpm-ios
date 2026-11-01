@@ -136,10 +136,10 @@ struct ProfileTab: View {
     var body: some View {
         List {
             Section {
-                LabeledContent("账号") { Text(current).animatedTextValue(current) }
-                LabeledContent("姓名") { Text(session.authentication.text("fullName")).animatedTextValue(session.authentication.text("fullName")) }
+                LabeledContent("账号") { Text(current) }
+                LabeledContent("姓名") { Text(session.authentication.text("fullName")) }
             }
-            Section { LabeledContent("当前厂区") { Text(session.currentFactoryName).animatedTextValue(session.currentFactoryName) } }
+            Section { LabeledContent("当前厂区") { Text(session.currentFactoryName) } }
             Section {
                 NavigationLink {
                     DraftBoxView { draft in
@@ -149,7 +149,7 @@ struct ProfileTab: View {
                         else { resuming = draft }
                     }
                 } label: {
-                    HStack { Label("草稿箱", systemImage: "tray.full"); Spacer(); if draftCount > 0 { Text("\(draftCount)").animatedTextValue("\(draftCount)").foregroundStyle(.secondary) } }
+                    HStack { Label("草稿箱", systemImage: "tray.full"); Spacer(); if draftCount > 0 { Text("\(draftCount)").foregroundStyle(.secondary) } }
                 }.accessibilityIdentifier("draft-box")
             }
             Section {
@@ -163,8 +163,8 @@ struct ProfileTab: View {
                         } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(account.displayName.isEmpty ? account.username : account.displayName).animatedTextValue(account.displayName.isEmpty ? account.username : account.displayName).foregroundStyle(Color.primary)
-                                    Text(account.username).animatedTextValue(account.username).font(AppFont.footnote).foregroundStyle(Color.secondary)
+                                    Text(account.displayName.isEmpty ? account.username : account.displayName).foregroundStyle(Color.primary)
+                                    Text(account.username).font(AppFont.footnote).foregroundStyle(Color.secondary)
                                 }
                                 Spacer()
                                 if account.username == current { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }

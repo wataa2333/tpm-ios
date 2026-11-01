@@ -10,6 +10,7 @@ final class BottomNavigationModel: ObservableObject {
     @Published var hideTabs = false
     @Published var refresh = UUID()
     @Published var searchReset = UUID()
+    @Published var searchActive = false
     @Published var presentingDocument = false
     /// A list is in selection mode: the "new" button steps aside for the batch bar.
     @Published var selectingBatch = false

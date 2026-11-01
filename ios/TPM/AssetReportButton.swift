@@ -17,22 +17,7 @@ struct AssetReportButton: View {
                     NavigationStack { OriginalFaultForm(initialAsset: reference) }
                         .environment(\.queryReading, false)
                 }
-            if screenEdge {
-                button.buttonStyle(AssetReportDockStyle())
-            } else {
-                button.buttonStyle(.bordered)
-            }
+            button.buttonStyle(.bordered)
         }
-    }
-}
-
-/// Resolves the corner radius from the enclosing screen rather than using a fixed button radius.
-private struct AssetReportDockStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(.horizontal, 12).padding(.vertical, 4)
-            .foregroundStyle(.tint)
-            .glassEffect(.regular.interactive(), in: ConcentricRectangle(corners: .concentric(minimum: 16), isUniform: true))
-            .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }

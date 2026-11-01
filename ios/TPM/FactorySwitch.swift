@@ -9,7 +9,7 @@ struct PreviewFactoryButton: View {
         Menu {
             ForEach(factories, id: \.self) { name in
                 Button { current = name } label: {
-                    if name == current { Label(name, systemImage: "checkmark").animatedTextValue(name) } else { Text(name).animatedTextValue(name) }
+                    if name == current { Label(name, systemImage: "checkmark") } else { Text(name) }
                 }.disabled(name == current)
             }
         } label: { FactoryNameLabel(name: current) }
@@ -26,7 +26,7 @@ struct FactorySwitcherButton: View {
             ForEach(Array(session.factories.enumerated()), id: \.offset) { _, factory in
                 let id = factory["factoryId"].text, name = factory["factoryName"].text
                 Button { Task { await change(to: id) } } label: {
-                    if id == session.currentFactoryID { Label(name, systemImage: "checkmark").animatedTextValue(name) } else { Text(name).animatedTextValue(name) }
+                    if id == session.currentFactoryID { Label(name, systemImage: "checkmark") } else { Text(name) }
                 }.disabled(id == session.currentFactoryID)
             }
         } label: { FactoryNameLabel(name: session.currentFactoryName) }
@@ -51,7 +51,7 @@ private struct FactoryNameLabel: View {
     let name: String
     var body: some View {
         HStack(spacing: 4) {
-            Text(name).animatedTextValue(name).lineLimit(2).multilineTextAlignment(.trailing).fixedSize(horizontal: false, vertical: true)
+            Text(name).lineLimit(2).multilineTextAlignment(.trailing).fixedSize(horizontal: false, vertical: true)
             Image(systemName: "chevron.up.chevron.down").font(AppFont.caption2)
         }.font(AppFont.subheadline).frame(maxWidth: 200, alignment: .trailing)
     }
