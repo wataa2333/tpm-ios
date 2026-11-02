@@ -111,7 +111,7 @@ fun LoginScreen(session: Session, vault: AccountVault) {
             Spacer(Modifier.height(32.dp))
             androidx.compose.material3.TextField(colors = blockFieldColors(), shape = MaterialTheme.shapes.medium, 
                 value = username, onValueChange = { username = it }, label = { Text("账号") }, singleLine = true, enabled = !busy,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth().glassSearchSurface(MaterialTheme.shapes.medium),
             )
             Spacer(Modifier.height(12.dp))
             androidx.compose.material3.TextField(colors = blockFieldColors(), shape = MaterialTheme.shapes.medium, 
@@ -124,7 +124,7 @@ fun LoginScreen(session: Session, vault: AccountVault) {
                         Icon(if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, contentDescription = if (showPassword) "隐藏密码" else "显示密码")
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().glassSearchSurface(MaterialTheme.shapes.medium),
             )
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {

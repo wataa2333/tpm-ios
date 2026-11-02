@@ -51,9 +51,9 @@ fun LazyListScope.repairPendingSummary(vm: RepairPendingViewModel, openPeople: (
             }
             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 GlassActionButton(enabled=!vm.loading && (!vm.processed || vm.selectedSpan!=null),onClick=vm::prepare) { Text(if(vm.started) "重新查询" else "查询") }
-                if(vm.loading) TextButton(onClick=vm::pause) { Text("暂停") }
-                else if(vm.started && !vm.showingPrevious && (!snapshot.exhausted || vm.uncheckedExecutors>0)) TextButton(onClick={vm.load()}) { Text("继续") }
-                if(!vm.loading && !vm.showingPrevious && vm.executorFailures>0) TextButton(onClick={vm.load(retryFailures=true)}) { Text("重试失败项") }
+                if(vm.loading) GlassTextButton(onClick=vm::pause) { Text("暂停") }
+                else if(vm.started && !vm.showingPrevious && (!snapshot.exhausted || vm.uncheckedExecutors>0)) GlassTextButton(onClick={vm.load()}) { Text("继续") }
+                if(!vm.loading && !vm.showingPrevious && vm.executorFailures>0) GlassTextButton(onClick={vm.load(retryFailures=true)}) { Text("重试失败项") }
             }
             if(vm.checking) { StatisticsProgressIndicator(Modifier.fillMaxWidth()); Text("正在预估工单数量，尚未逐单读取",style=MaterialTheme.typography.bodySmall) }
             if(vm.started && !vm.showingPrevious) {

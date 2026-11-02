@@ -50,7 +50,10 @@ fun GlassMainFrame(
         }
         CompositionLocalProvider(LocalGlassBackdrop provides backdrop) {
             Box(Modifier.align(Alignment.TopCenter).onSizeChanged { topHeight = it.height }) { topBar() }
-            Box(Modifier.align(Alignment.BottomCenter).onSizeChanged { bottomHeight = it.height }) { bottomBar() }
+            Box(Modifier.align(Alignment.BottomCenter).onSizeChanged { bottomHeight = it.height }) {
+                if (bottomHeight > 0) GlassFooterBackground(Modifier.matchParentSize())
+                bottomBar()
+            }
             Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = bottomInset + 16.dp)) { floatingActionButton() }
             Box(Modifier.align(Alignment.BottomCenter).padding(bottom = bottomInset + 80.dp)) { snackbarHost() }
         }

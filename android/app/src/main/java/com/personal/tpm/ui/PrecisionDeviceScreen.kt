@@ -85,7 +85,7 @@ fun PrecisionDeviceScreen(assetId: String, onBack: () -> Unit) {
                     AnimatedLabel(asset["assetCode"].text, style = MaterialTheme.typography.bodySmall)
                     AnimatedLabel("查询：${queries.label(owner)} · ${owner.currentFactoryName}", style = MaterialTheme.typography.bodySmall)
                     if (pageError.isNotEmpty()) AnimatedLabel(pageError, color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = { retry++ }, enabled = !loadingPage) { Text("重新读取") }
+                    GlassTextButton(onClick = { retry++ }, enabled = !loadingPage) { Text("重新读取") }
                     if (!loadingPage && workOrders.isEmpty() && pageError.isEmpty()) Text("当前查询账号未返回此设备的检查工单，无法从汇总等级还原逐项数据。")
                     if (workOrders.size > 1) SectionTitle("选择检测工单")
                 }
@@ -98,9 +98,9 @@ fun PrecisionDeviceScreen(assetId: String, onBack: () -> Unit) {
                 }
                 item {
                     if ((total ?: 0) > 20) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        TextButton(enabled = page > 0 && !loadingPage, onClick = { page-- }) { Text("上一页") }
+                        GlassTextButton(enabled = page > 0 && !loadingPage, onClick = { page-- }) { Text("上一页") }
                         AnimatedLabel("${page + 1}页 · 共${total ?: "—"}单", style = MaterialTheme.typography.bodySmall)
-                        TextButton(enabled = total != null && (page + 1) * 20 < total!! && !loadingPage, onClick = { page++ }) { Text("下一页") }
+                        GlassTextButton(enabled = total != null && (page + 1) * 20 < total!! && !loadingPage, onClick = { page++ }) { Text("下一页") }
                     }
                     executions.forEach { execution ->
                         if (executions.size == 1) AnimatedLabel("检测时间：${execution["endTime"].dateText.ifEmpty { execution["createTime"].dateText }}\n检测人：${execution["user"].label.ifEmpty { "未记录" }}", style = MaterialTheme.typography.bodyMedium)

@@ -103,7 +103,7 @@ fun ErpFormScreen(existingId: String?, referenceSn: String?, onClose: () -> Unit
     ) {
         if (form.error != null && !form.ready) {
             AnimatedLabel(form.error ?: "", color = MaterialTheme.colorScheme.error)
-            TextButton(onClick = { scope.launch { form.load(session, existingId, referenceSn) } }) { Text("重试") }
+            GlassTextButton(onClick = { scope.launch { form.load(session, existingId, referenceSn) } }) { Text("重试") }
             return@FormPage
         }
         FormTitle("领料申请")

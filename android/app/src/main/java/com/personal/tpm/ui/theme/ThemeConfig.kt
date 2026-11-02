@@ -262,14 +262,14 @@ object ThemeConfig {
             displayLarge = it.displayLarge.withFont(), displayMedium = it.displayMedium.withFont(), displaySmall = it.displaySmall.withFont(),
             headlineLarge = it.headlineLarge.withFont(), headlineMedium = it.headlineMedium.withFont(), headlineSmall = it.headlineSmall.withFont(),
             titleLarge = it.titleLarge.withFont(), titleMedium = it.titleMedium.withFont(), titleSmall = it.titleSmall.withFont(),
-            bodyLarge = it.bodyLarge.withFont(), bodyMedium = it.bodyMedium.withFont(), bodySmall = it.bodySmall.withFont(),
+            bodyLarge = it.bodyLarge.withFont().copy(lineHeight = 24.sp), bodyMedium = it.bodyMedium.withFont().copy(lineHeight = 22.sp), bodySmall = it.bodySmall.withFont().copy(lineHeight = 20.sp),
             labelLarge = it.labelLarge.withFont(), labelMedium = it.labelMedium.withFont(), labelSmall = it.labelSmall.withFont(),
         )
     }
 
     /** The type of the form and process pages: a step smaller than the lists, one size for text across them, and a tighter line. */
     val compactTypography: Typography = typography.let { t ->
-        fun TextStyle.sized(size: Float) = copy(fontSize = size.sp, lineHeight = (size * 1.4f).sp)
+        fun TextStyle.sized(size: Float) = copy(fontSize = size.sp, lineHeight = (size * 1.5f).sp)
         t.copy(
             bodyLarge = t.bodyLarge.sized(14f), bodyMedium = t.bodyMedium.sized(13f), bodySmall = t.bodySmall.sized(11.5f),
             titleMedium = t.titleMedium.sized(15f), titleSmall = t.titleSmall.sized(13.5f),

@@ -46,7 +46,7 @@ fun ErrorDialog(title: String, message: String, onClose: () -> Unit) {
         onDismissRequest = onClose,
         title = { AnimatedLabel(title) },
         text = { AnimatedLabel(message) },
-        confirmButton = { TextButton(onClick = onClose) { Text("好") } },
+        confirmButton = { GlassTextButton(onClick = onClose) { Text("好") } },
 
     )
 }
@@ -69,8 +69,8 @@ fun GroupCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
 @Composable
 fun FactRow(label: String, value: String, modifier: Modifier = Modifier, inset: Dp = 16.dp) {
     Row(modifier.fillMaxWidth().padding(horizontal = inset, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
-        AnimatedLabel(label, Modifier.width(96.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        AnimatedLabel(value.ifEmpty { "—" }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Text(label, Modifier.width(112.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value.ifEmpty { "—" }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -91,7 +91,7 @@ fun GroupDivider() = HorizontalDivider(Modifier.padding(horizontal = 16.dp), col
 @Composable
 fun SearchField(value: String, onValueChange: (String) -> Unit, placeholder: String, onSearch: () -> Unit, modifier: Modifier = Modifier) {
     androidx.compose.material3.TextField(
-        value = value, onValueChange = onValueChange, singleLine = true, modifier = modifier.fillMaxWidth(),
+        value = value, onValueChange = onValueChange, singleLine = true, modifier = modifier.fillMaxWidth().glassSearchSurface(),
         placeholder = { AnimatedLabel(placeholder) },
         leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Search, contentDescription = null) },
         trailingIcon = {
@@ -100,10 +100,7 @@ fun SearchField(value: String, onValueChange: (String) -> Unit, placeholder: Str
             }
         },
         shape = androidx.compose.foundation.shape.CircleShape,
-        colors = androidx.compose.material3.TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh, unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent, unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-        ),
+        colors = searchFieldColors(),
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
         keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { onSearch() }),
     )
@@ -141,6 +138,15 @@ fun AssetReportButton(onClick: () -> Unit, modifier: Modifier = Modifier, enable
 @Composable
 fun BlockChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, selected: Boolean = false, trailing: (@Composable () -> Unit)? = null) {
     val fill = if (selected) androidx.compose.ui.graphics.lerp(MaterialTheme.colorScheme.surfaceContainerLowest, MaterialTheme.colorScheme.primary, 0.2f) else MaterialTheme.colorScheme.surfaceContainerHigh
+    if (AppPreferences.liquidGlass) {
+        GlassTonalButton(onClick = onClick, modifier = modifier, shape = androidx.compose.foundation.shape.CircleShape,
+            colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(containerColor = fill, contentColor = MaterialTheme.colorScheme.onSurface),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp)) {
+            Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            trailing?.invoke()
+        }
+        return
+    }
     androidx.compose.foundation.layout.Row(
         modifier.clip(androidx.compose.foundation.shape.CircleShape).then(if (AppPreferences.liquidGlass) Modifier.glassSurface(backdrop = null, shape = androidx.compose.foundation.shape.CircleShape, tint = fill, prominent = selected) else Modifier.background(fill)).clickable(onClick = onClick).padding(start = 14.dp, end = if (trailing != null) 8.dp else 14.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
@@ -157,6 +163,22 @@ fun BlockChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier,
 /** A row of equal blocks to choose one from (was the outlined segmented row): the chosen one is filled with the theme colour. */
 @Composable
 fun BlockSegmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    if (AppPreferences.liquidGlass) {
+        Row(modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            options.forEachIndexed { index, label ->
+                GlassTonalButton(onClick = { onSelect(index) }, modifier = Modifier.weight(1f),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                        containerColor = if (index == selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+                        contentColor = MaterialTheme.colorScheme.onSurface),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 10.dp)) {
+                    Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                }
+            }
+        }
+        return
+    }
+
     androidx.compose.foundation.layout.Row(modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
         options.forEachIndexed { index, name ->
             val on = index == selected
@@ -176,6 +198,8 @@ fun BlockSegmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit
  */
 @Composable
 fun blockFieldColors(onCard: Boolean = false): androidx.compose.material3.TextFieldColors {
+    if (AppPreferences.liquidGlass) return searchFieldColors(onCard)
+
     val fill = if (onCard) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surfaceContainerLowest
     return androidx.compose.material3.TextFieldDefaults.colors(
         focusedContainerColor = fill, unfocusedContainerColor = fill, disabledContainerColor = fill, errorContainerColor = fill,

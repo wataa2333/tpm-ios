@@ -18,13 +18,10 @@ fun GlassEffectSettings() {
     val supportsLens = rendering == GlassRendering.Liquid
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("模糊档位", style = MaterialTheme.typography.titleSmall)
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            GlassBlur.entries.forEachIndexed { index, level ->
-                SegmentedButton(selected = effects.blur == level,
-                    onClick = { AppPreferences.updateGlassEffects(effects.copy(blur = level)) },
-                    shape = SegmentedButtonDefaults.itemShape(index, GlassBlur.entries.size), enabled = supportsBlur) {
-                    Text(level.label)
-                }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            GlassBlur.entries.forEach { level ->
+                GlassFilterChip(effects.blur == level, { AppPreferences.updateGlassEffects(effects.copy(blur = level)) },
+                    label = { Text(level.label) }, enabled = supportsBlur, modifier = Modifier.weight(1f))
             }
         }
         Text("立即生效，重启后保留。默认低模糊，色散和阴影关闭；关闭模糊仍可保留高光和折射。",
@@ -47,7 +44,7 @@ fun GlassEffectSettings() {
         if (!supportsLens) Text(if (supportsBlur) "当前设备支持模糊；折射与色散需要 Android 13 或更高版本。"
             else "当前设备使用半透明材质；模糊、高光和折射在支持的设备上生效。",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = { AppPreferences.updateGlassEffects(GlassEffects()) }) { Text("恢复玻璃效果默认值") }
+        GlassTextButton(onClick = { AppPreferences.updateGlassEffects(GlassEffects()) }) { Text("恢复玻璃效果默认值") }
     }
 }
 
@@ -60,6 +57,6 @@ private fun GlassEffectToggle(title: String, description: String, checked: Boole
             Text(title, style = MaterialTheme.typography.titleSmall)
             Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked, onCheckedChange, enabled = enabled, modifier = Modifier.semantics { contentDescription = title })
+        GlassSwitch(checked, onCheckedChange, enabled = enabled, modifier = Modifier.semantics { contentDescription = title })
     }
 }

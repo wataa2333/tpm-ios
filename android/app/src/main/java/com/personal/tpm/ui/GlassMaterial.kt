@@ -200,6 +200,27 @@ fun GlassHeaderBackground(modifier: Modifier = Modifier) {
     }
 }
 
+/** One unoutlined, edge-to-edge footer material. Individual buttons own their capsule edges. */
+@Composable
+fun GlassFooterBackground(modifier: Modifier = Modifier) {
+    val backdrop = LocalGlassBackdrop.current
+    val color = MaterialTheme.colorScheme.background
+    val radius = AppPreferences.glassEffects.blur.radiusDp.dp
+    val rendering = currentGlassRendering()
+    val fade = Brush.verticalGradient(listOf(Color.Transparent, color.copy(alpha = .5f), color.copy(alpha = .8f)))
+    if (backdrop == null || rendering == GlassRendering.Translucent || rendering == GlassRendering.Solid) {
+        Box(modifier.background(fade))
+    } else {
+        Box(modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.White, Color.White)), blendMode = BlendMode.DstIn)
+            }
+            .drawPlainBackdrop(backdrop, shape = { RectangleShape }, effects = { if (radius > 0.dp) blur(radius.toPx()) },
+                onDrawSurface = { drawRect(fade) }))
+    }
+}
+
 /** Transparent Material buttons keep click semantics, ripple, focus and minimum touch targets. */
 @Composable
 fun GlassButton(

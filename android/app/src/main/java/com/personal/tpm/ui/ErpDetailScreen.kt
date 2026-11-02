@@ -106,7 +106,7 @@ fun ErpDetailScreen(id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit
                     if (order == null) Box(Modifier.fillMaxSize(), Alignment.Center) {
                         if (error != null) Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             AnimatedLabel(error ?: "", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
-                            TextButton(onClick = { load() }) { Text("重试") }
+                            GlassTextButton(onClick = { load() }) { Text("重试") }
                         }
                     } else SelectionContainer { Column(Modifier.fillMaxSize().fadeInOnShow().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         SectionTitle("ERP出库详情")

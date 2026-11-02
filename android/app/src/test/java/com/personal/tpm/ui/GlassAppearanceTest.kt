@@ -9,7 +9,8 @@ import org.junit.Test
 
 class GlassAppearanceTest {
     @Test fun changesSurvivePreferencesReloadAndResetOnlyAffectsGlassOptions() {
-        val values = mutableMapOf<String, Any>("repairPageSize" to 100, "liquidGlass" to true)
+        val values = mutableMapOf<String, Any>("repairPageSize" to 100, "liquidGlass" to true,
+            "glassBlur" to "High", "glassDispersion" to true, "glassShadow" to true)
         val editor = Proxy.newProxyInstance(javaClass.classLoader, arrayOf(SharedPreferences.Editor::class.java)) { proxy, method, args ->
             when {
                 method.name.startsWith("put") -> { values[args!![0] as String] = args[1]; proxy }
@@ -30,6 +31,9 @@ class GlassAppearanceTest {
         }
         try {
             AppPreferences.load(context)
+            assertEquals(GlassBlur.Low, AppPreferences.glassEffects.blur)
+            assertFalse(AppPreferences.glassEffects.dispersion)
+            assertTrue(AppPreferences.glassEffects.shadow)
             val chosen = GlassEffects(GlassBlur.High, highlight = false, refraction = false, dispersion = true, shadow = true, motion = false)
             AppPreferences.updateGlassEffects(chosen)
             AppPreferences.load(context)

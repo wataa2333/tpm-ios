@@ -31,8 +31,8 @@ fun RepairDateControls(vm:RepairPendingViewModel) {
         Column {
             DateRangePicker(state,Modifier.weight(1f,fill=false).heightIn(max=440.dp),title={Text("选择故障发现日期",Modifier.padding(16.dp))})
             Row(Modifier.fillMaxWidth().padding(8.dp),horizontalArrangement=Arrangement.End) {
-                TextButton(onClick={choosing=false}){Text("取消")}
-                TextButton(enabled=state.selectedStartDateMillis!=null,onClick={
+                GlassTextButton(onClick={choosing=false}){Text("取消")}
+                GlassTextButton(enabled=state.selectedStartDateMillis!=null,onClick={
             val from=day(state.selectedStartDateMillis!!); val to=day(state.selectedEndDateMillis ?: state.selectedStartDateMillis!!)
             vm.selectSpan(DateSpan(from,to));choosing=false
         }){Text("确定")}

@@ -131,6 +131,7 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
     GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
+        floatingOverlay = { if (onNew != null) NewButton(visible = !batch.active, label = "新建报修", onClick = onNew) },
         bottomBar = { BatchBarHost(batch.active) { BatchBar(batch) { vm.rows.map { batchItem(com.personal.tpm.data.OrderKind.Fault, it) } } } },
         topBar = {
             AppTopBar(
@@ -208,7 +209,6 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
     }
     // The "+" button is laid over the screen, not placed by the Scaffold: the Scaffold put it above the bottom bar, so when the batch bar slid away
     // the button dropped with it. Here it stays where it is, and shows itself once the bar is on its way out.
-    if (onNew != null) NewButton(visible = !batch.active, label = "新建报修", onClick = onNew)
     BatchOverlays(batch)
     if (choosingDates) DateRangeDialog(vm.span, onDismiss = { choosingDates = false }) { choosingDates = false; vm.changeSpan(it) }
 }
@@ -218,15 +218,12 @@ private fun SearchRow(vm: OrderListViewModel, input: String, onInput: (String) -
     var fieldMenu by remember { mutableStateOf(false) }
     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextField(
-            value = input, onValueChange = onInput, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            value = input, onValueChange = onInput, singleLine = true, modifier = Modifier.fillMaxWidth().glassSearchSurface(),
             placeholder = { AnimatedLabel("搜索" + vm.field.label) },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             trailingIcon = { if (input.isNotEmpty()) GlassIconButton(onClick = { onInput(""); if (vm.searchMode) vm.search("") }) { Icon(Icons.Filled.Close, contentDescription = "清空") } },
             shape = CircleShape,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh, unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-            ),
+            colors = searchFieldColors(),
             // Return (the keyboard's search key) searches at once and puts the keyboard away.
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { vm.search(input); focus.clearFocus() }),
@@ -257,14 +254,20 @@ private fun StatusStrip(vm: OrderListViewModel) {
         scroll.animateScrollTo((left - 48).coerceAtLeast(0))
     }
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(scroll).padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 4.dp).glassHorizontalScroll(scroll).padding(horizontal = 12.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
         states.forEachIndexed { index, st ->
             val on = index == selected
             val background by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.Normal, easing = Motion.Change), label = "capsule")
             val content by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, tween(Motion.Normal, easing = Motion.Change), label = "capsuleText")
-            Row(
+            if (AppPreferences.liquidGlass) GlassFilterChip(selected = on, onClick = { vm.select(st.code) },
+                modifier = Modifier.onGloballyPositioned { lefts[index] = it.positionInParent().x.toInt() }, label = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(st.title, style = MaterialTheme.typography.labelLarge)
+                        if (st.hasCount) AnimatedCount(vm.counts[st.code], MaterialTheme.typography.labelLarge, MaterialTheme.colorScheme.onSurface)
+                    }
+                }) else Row(
                 Modifier.onGloballyPositioned { lefts[index] = it.positionInParent().x.toInt() }.clip(CircleShape).background(background)
                     .clickable { vm.select(st.code) }.padding(horizontal = 14.dp, vertical = 7.dp),
                 horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically,
@@ -287,11 +290,11 @@ private fun DateRangeDialog(current: DateSpan?, onDismiss: () -> Unit, onPick: (
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(
+            GlassTextButton(
                 enabled = state.selectedStartDateMillis != null,
                 onClick = { val from = day(state.selectedStartDateMillis)!!; onPick(DateSpan(from, day(state.selectedEndDateMillis) ?: from)) },
             ) { Text("确定") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { GlassTextButton(onClick = onDismiss) { Text("取消") } },
     ) { DateRangePicker(state, Modifier.height(500.dp), title = { Text("按故障时间筛选", Modifier.padding(start = 24.dp, top = 16.dp)) }) }
 }

@@ -52,6 +52,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -95,7 +97,7 @@ fun approvalColor(code: String): Color = ThemeConfig.approvalColor(code, Materia
 /** Row metrics shared by every card: the same inner padding, the same gap between lines, the same footer height. */
 object CardMetrics {
     val padding = 16.dp
-    val lineGap = 6.dp
+    val lineGap = 8.dp
     val footerHeight = 48.dp
 }
 
@@ -196,7 +198,7 @@ fun OrderCard(model: CardModel, expanded: Boolean, onToggle: () -> Unit, modifie
             // the cards below move exactly as much as the space does, no earlier and no later (their own placement is not animated a second
             // time). The rows are plain text inside a single selection area: dozens of separate selection containers made opening stutter.
             Reveal(visible = expanded) {
-                Column(Modifier.padding(top = 8.dp)) {
+                Column(Modifier.padding(top = 8.dp, bottom = 8.dp)) {
                     val facts: @Composable () -> Unit = {
                         FactsGrid(shownModel.facts, model.cardType)
                     }
@@ -213,50 +215,16 @@ fun OrderCard(model: CardModel, expanded: Boolean, onToggle: () -> Unit, modifie
 
 @Composable
 private fun CompactCardGrid(cells: List<CompactCell>, type: CardType, button: @Composable () -> Unit) {
-    val accent = MaterialTheme.colorScheme.primary
-    val rows = (cells.maxOfOrNull { it.slot / 2 } ?: -1) + 1
-    Column(Modifier.fillMaxWidth()) {
-        repeat(rows) { row ->
-            val content = cells.filter { it.slot / 2 == row }.sortedBy { it.slot }
-            val rowHeight = if (content.any { it.field == DETAIL_BUTTON }) CardMetrics.footerHeight else 32.dp
-            Box(Modifier.fillMaxWidth().height(rowHeight + CardMetrics.lineGap)) {
-                val parts = buildList<CompactCell?> {
-                    content.forEachIndexed { index, cell ->
-                        if (index > 0 && cell.field != DETAIL_BUTTON && content[index - 1].field != DETAIL_BUTTON) add(null)
-                        add(cell)
-                    }
-                }
-                androidx.compose.ui.layout.Layout(modifier = Modifier.fillMaxWidth().height(rowHeight), content = {
-                    parts.forEach { cell ->
-                        if (cell == null) Text("·", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        else if (cell.field == DETAIL_BUTTON) button()
-                        else AnimatedLabel((if (FixedCardLayout.showLabel(type, cell.field)) cell.field + " " else "") + cell.value,
-                            modifier = Modifier,
-                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                    }
-                }) { measurables, constraints ->
-                    val gap = 6.dp.roundToPx()
-                    val natural = measurables.map { it.maxIntrinsicWidth(constraints.maxHeight).coerceAtMost(constraints.maxWidth) }
-                    val textIndices = parts.indices.filter { parts[it] != null && parts[it]?.field != DETAIL_BUTTON }
-                    val fixed = parts.indices.filter { it !in textIndices }
-                    val room = (constraints.maxWidth - gap * (parts.size - 1).coerceAtLeast(0) - fixed.sumOf { natural[it] }).coerceAtLeast(0)
-                    val textWidths = inlineCardWidths(textIndices.map { natural[it] }, room)
-                    val widths = natural.toMutableList()
-                    textIndices.forEachIndexed { index, at -> widths[at] = textWidths[index] }
-                    val placed = measurables.mapIndexed { index, measurable -> measurable.measure(Constraints(maxWidth = widths[index], maxHeight = constraints.maxHeight)) }
-                    layout(constraints.maxWidth, constraints.maxHeight) {
-                        var x = 0
-                        placed.forEachIndexed { index, item ->
-                            if (parts[index]?.field == DETAIL_BUTTON && parts[index]!!.slot % 2 == 1) x = maxOf(x, constraints.maxWidth - item.width)
-                            item.placeRelative(x, (constraints.maxHeight - item.height) / 2)
-                            x += item.width + gap
-                        }
-                    }
-                }
-
+    val text = cells.filter { it.field != DETAIL_BUTTON }.sortedBy { it.slot }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(CardMetrics.lineGap)) {
+            text.forEach { cell ->
+                Text((if (FixedCardLayout.showLabel(type, cell.field)) cell.field + " " else "") + cell.value,
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
         }
+        if (cells.any { it.field == DETAIL_BUTTON }) button()
     }
 }
 
@@ -288,7 +256,9 @@ fun Reveal(visible: Boolean, content: @Composable () -> Unit) {
     if (visible || present) {
         Box(
             Modifier
-                .clipToBounds()
+                .drawWithContent {
+                    if (progress.value < 1f) clipRect { this@drawWithContent.drawContent() } else drawContent()
+                }
                 .layout { measurable, constraints ->
                     val placeable = measurable.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
                     val height = (placeable.height * progress.value).roundToInt()
@@ -363,8 +333,8 @@ private fun FactsGrid(items: List<Pair<String, String>>, type: CardType) {
 @Composable
 private fun PlainFact(label: String, value: String, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
-        AnimatedLabel(label, Modifier.width(88.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        AnimatedLabel(value.ifEmpty { "—" }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Text(label, Modifier.width(112.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value.ifEmpty { "—" }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -376,7 +346,7 @@ fun SkeletonCard(modifier: Modifier = Modifier, cardType: CardType = CardType.Fa
     val body = listOfNotNull(preview.reference.takeIf { it.isNotEmpty() }?.let { "编号" to it }) + preview.summary +
         listOfNotNull(preview.time.takeIf { it.isNotEmpty() }?.let { "时间" to it })
     val grid = compactLayout(body, preview.facts.isNotEmpty(), FixedCardLayout.detailButtonSlot(cardType), { FixedCardLayout.slot(cardType, it) }, { FixedCardLayout.position(cardType, it) })
-    val bodyRows = (grid.cells.maxOfOrNull { it.slot / 2 } ?: -1) + 1
+    val bodyRows = grid.cells.count { it.field != DETAIL_BUTTON }
     val base = MaterialTheme.colorScheme.surfaceContainerHigh
     // Everything is measured like the real card: the height of a line is the line height of the text it stands for (so it follows the interface
     // size and the font size), and the sweep of light is measured in dp, not pixels.
@@ -392,10 +362,11 @@ fun SkeletonCard(modifier: Modifier = Modifier, cardType: CardType = CardType.Fa
                 if (plan.status) Box(Modifier.weight(1f).height(titleLine).clip(RoundedCornerShape(6.dp)).background(base))
             }
             if (plan.reference || plan.summaryLines > 0 || plan.footer || plan.topButton) {
-                Column {
-                    repeat(bodyRows) { row -> val rowHeight = if (grid.cells.any { it.slot / 2 == row && it.field == DETAIL_BUTTON }) CardMetrics.footerHeight else 32.dp; Box(Modifier.fillMaxWidth().height(rowHeight + CardMetrics.lineGap)) {
-                        Box(bar(if (row == 0) .8f else .55f, bodyLine))
-                    } }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(CardMetrics.lineGap)) {
+                        repeat(bodyRows) { row -> Box(bar(if (row == 0) .8f else .55f, bodyLine)) }
+                    }
+                    if (grid.cells.any { it.field == DETAIL_BUTTON }) Box(Modifier.width(104.dp).height(CardMetrics.footerHeight).clip(CircleShape).background(base))
                 }
             }
         }

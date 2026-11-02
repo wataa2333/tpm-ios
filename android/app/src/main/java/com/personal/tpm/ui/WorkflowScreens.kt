@@ -132,7 +132,7 @@ fun WorkflowScreen(processId: String, onBack: () -> Unit) {
                     SelectionContainer { Column(Modifier.fillMaxSize().fadeInOnShow().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         error?.let { message ->
                             AnimatedLabel(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { load() }) { Text("重试") }
+                            GlassTextButton(onClick = { load() }) { Text("重试") }
                         }
                         if (history.isNotEmpty()) {
                             SectionTitle("处理记录")

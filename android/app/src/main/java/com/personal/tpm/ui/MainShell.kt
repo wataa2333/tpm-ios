@@ -163,7 +163,7 @@ fun MainShell(
                 actions = {
                     if (selected == 1) SelectButton(todoVm.batch.active) { if (todoVm.batch.active) todoVm.batch.end() else todoVm.batch.begin() }
                     // The factory: its name, and a tap to change it. Only on 主页 and 我的; the other pages work in the factory chosen there.
-                    if (selected == 0 || selected == 3) TextButton(onClick = { choosingFactory = true }, colors = ButtonDefaults.textButtonColors(contentColor = LocalContentColor.current)) {
+                    if (selected == 0 || selected == 3) GlassTextButton(onClick = { choosingFactory = true }, colors = ButtonDefaults.textButtonColors(contentColor = LocalContentColor.current)) {
                         AnimatedLabel(session.currentFactoryName, Modifier.widthIn(max = 140.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
                         Icon(Icons.Filled.ArrowDropDown, contentDescription = "切换厂区")
                     }
@@ -418,7 +418,7 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
             }
             GroupCard {
                 ListItem(
-                    modifier = Modifier.clickable(onClick = onChooseFactory),
+                    modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable(onClick = onChooseFactory),
                     colors = transparentRow,
                     overlineContent = { Text("当前厂区") },
                     headlineContent = { AnimatedLabel(session.currentFactoryName) },
@@ -432,7 +432,7 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
                 var draftCount by remember { mutableStateOf(0) }
                 LaunchedEffect(Unit) { draftCount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { drafts.drafts(session.draftScope).size } }
                 ListItem(
-                    modifier = Modifier.clickable(onClick = openDrafts),
+                    modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable(onClick = openDrafts),
                     colors = transparentRow,
                     headlineContent = { AnimatedLabel(if (draftCount > 0) "草稿箱（$draftCount）" else "草稿箱") },
                     supportingContent = { Text("没填完的报修，保存在这台手机上") },
@@ -446,7 +446,7 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
                 accounts.forEach { account ->
                     val isCurrent = account.username == current
                     ListItem(
-                        modifier = Modifier.clickable(enabled = !isCurrent && signingInAs == null) { switchTo(account) },
+                        modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable(enabled = !isCurrent && signingInAs == null) { switchTo(account) },
                         colors = transparentRow,
                         headlineContent = { AnimatedLabel(account.displayName.ifEmpty { account.username }) },
                         supportingContent = { AnimatedLabel(account.username) },
@@ -465,7 +465,7 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
                     GroupDivider()
                 }
                 ListItem(
-                    modifier = Modifier.clickable { session.signOut() },
+                    modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable { session.signOut() },
                     colors = transparentRow,
                     headlineContent = { Text("添加其他账号") },
                     leadingContent = { Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
@@ -484,7 +484,7 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
 
             GroupCard {
                 ListItem(
-                    modifier = Modifier.clickable { pickingAccent = true },
+                    modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable { pickingAccent = true },
                     colors = transparentRow,
                     headlineContent = { Text("主题色") },
                     supportingContent = { AnimatedLabel(if (ThemeConfig.randomOnLaunch) "每次打开随机；只用于重要信息" else (ThemeConfig.presets.firstOrNull { it.color == ThemeConfig.accent }?.name ?: "自定义") + "；只用于重要信息") },
@@ -499,7 +499,7 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
 
             GroupCard {
                 ListItem(
-                    modifier = Modifier.clickable { adjustingArea = true },
+                    modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable { adjustingArea = true },
                     colors = transparentRow,
                     headlineContent = { Text("显示区域") },
                     supportingContent = { AnimatedLabel(if (ThemeConfig.hasCustomArea) "已自定义：上 ${ThemeConfig.displayTop}  下 ${ThemeConfig.displayBottom}  左 ${ThemeConfig.displayStart}  右 ${ThemeConfig.displayEnd}（dp）" else "屏幕边缘有损坏或被遮挡时，手动留出不用的部分") },
@@ -521,28 +521,23 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
                 }
             }
 
-            GroupCard {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("加载动画", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    NativeLoadingPreview()
-                }
-            }
+
 
             SectionTitle("其他")
             GroupCard {
-                ListItem(modifier = Modifier.clickable(onClick = openDev), colors = transparentRow,
+                ListItem(modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable(onClick = openDev), colors = transparentRow,
                     headlineContent = { Text("开发者选项") },
                     leadingContent = { Icon(Icons.Filled.VerifiedUser, contentDescription = null) },
                     trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) })
                 GroupDivider()
-                ListItem(modifier = Modifier.clickable(onClick = openQuerySettings), colors = transparentRow,
+                ListItem(modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable(onClick = openQuerySettings), colors = transparentRow,
                     headlineContent = { Text("独立查询账号") },
                     leadingContent = { Icon(Icons.Filled.AccountCircle, contentDescription = null) },
                     trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) })
             }
             GroupCard {
                 ListItem(
-                    modifier = Modifier.clickable { session.signOut() },
+                    modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable { session.signOut() },
                     colors = transparentRow,
                     headlineContent = { Text("退出登录", color = MaterialTheme.colorScheme.error) },
                     leadingContent = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
@@ -594,7 +589,7 @@ private fun AccentSheet(onDismiss: () -> Unit) {
             SoftButton(onClick = { ThemeConfig.shuffleAccent() }, Modifier.fillMaxWidth()) { Text("随机换一个") }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 androidx.compose.material3.TextField(colors = blockFieldColors(), shape = MaterialTheme.shapes.medium, 
-                    value = hex, onValueChange = { hex = it.take(7) }, singleLine = true, modifier = Modifier.weight(1f),
+                    value = hex, onValueChange = { hex = it.take(7) }, singleLine = true, modifier = Modifier.weight(1f).glassSearchSurface(MaterialTheme.shapes.medium),
                     label = { Text("自定义颜色（#RRGGBB）") }, prefix = { Text("#") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                 )

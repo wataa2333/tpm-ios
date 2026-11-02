@@ -120,7 +120,7 @@ fun FaultFormScreen(existingId: String?, startDraftId: String?, onClose: () -> U
     ) {
         if (form.error != null && !form.ready) {
             AnimatedLabel(form.error ?: "", color = MaterialTheme.colorScheme.error)
-            androidx.compose.material3.TextButton(onClick = { scope.launch { initialize() } }) { Text("重试") }
+            GlassTextButton(onClick = { scope.launch { initialize() } }) { Text("重试") }
             return@FormPage
         }
         FormTitle("故障报修")

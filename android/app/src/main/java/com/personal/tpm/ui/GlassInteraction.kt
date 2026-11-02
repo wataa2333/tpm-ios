@@ -9,6 +9,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -36,6 +37,12 @@ fun glassContentColor(requested: Color, tint: Color, surface: Color, fallback: C
     val light = maxOf(foreground.luminance(), background.luminance())
     val dark = minOf(foreground.luminance(), background.luminance())
     return if ((light + .05f) / (dark + .05f) >= 4.5f) requested else fallback.copy(alpha = requested.alpha)
+}
+
+fun glassScale(size: Size, inflation: Float, drag: Offset): Offset {
+    if (!size.width.isFinite() || !size.height.isFinite() || size.width <= 0f || size.height <= 0f || !inflation.isFinite()) return Offset(1f, 1f)
+    return Offset(1f + (inflation + abs(drag.x) * .35f) / size.width,
+        1f + (inflation + abs(drag.y) * .35f) / size.height)
 }
 
 internal data class GlassFeedback(
@@ -78,12 +85,11 @@ internal fun rememberGlassFeedback(source: MutableInteractionSource, enabled: Bo
         layer = {
             if (effects.motion) {
                 // Four dp of inflation, plus directional stretch. It follows the finger without changing layout.
-                val scale = 1f + (4.dp.toPx() / size.height.coerceAtLeast(1f)).coerceAtMost(.12f) * progress.coerceIn(0f, 1f)
-                val stretchX = (abs(x) / limit.coerceAtLeast(1f)).coerceIn(0f, 1f) * .045f
-                val stretchY = (abs(y) / limit.coerceAtLeast(1f)).coerceIn(0f, 1f) * .045f
-                scaleX = scale + stretchX - stretchY * .35f
-                scaleY = scale + stretchY - stretchX * .35f
-                translationX = x; translationY = y
+                // Keep inflation in dp on each axis: full-width buttons must not grow by a percentage of their width.
+                val inflation = 4.dp.toPx() * progress.coerceIn(0f, 1f)
+                val scale = glassScale(size, inflation, Offset(x, y))
+                scaleX = scale.x; scaleY = scale.y
+                translationX = x * .35f; translationY = y * .35f
             }
         },
         illumination = {

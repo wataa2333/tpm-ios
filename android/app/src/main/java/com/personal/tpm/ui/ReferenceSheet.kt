@@ -299,9 +299,9 @@ fun ReferenceSheet(
     AppSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MaterialTheme.colorScheme.surfaceContainerLowest) { CompactTheme {
         // Not the whole screen: a strip of the page stays above the sheet, so it never reaches into the status bar and swiping down is clear.
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.9f)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 AnimatedLabel(source.title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                TextButton(onClick = onDismiss) { AnimatedLabel(if (multiple) "完成（${picked.size}）" else "关闭") }
+                GlassTextButton(onClick = onDismiss) { AnimatedLabel(if (multiple) "完成（${picked.size}）" else "关闭") }
             }
             SearchField(
                 query, { query = it }, if (modes.isEmpty()) "搜索" else "搜索" + searchMode.label(source),
@@ -309,7 +309,7 @@ fun ReferenceSheet(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
             // The ways of searching: a row of chips (it scrolls sideways if the screen is narrow), each on one line.
-            if (modes.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (modes.isNotEmpty()) Row(Modifier.fillMaxWidth().glassHorizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 modes.forEach { mode -> ChoiceChip(searchMode == mode, { searchMode = mode }, mode.label(source)) }
             }
             if (source == RefSource.Users) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -323,13 +323,13 @@ fun ReferenceSheet(
             error?.let {
                 Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     AnimatedLabel(it, Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = { scope.launch { load(false) } }) { Text("重试") }
+                    GlassTextButton(onClick = { scope.launch { load(false) } }) { Text("重试") }
                 }
             }
             // Open or close every branch at once.
             if (hasBranches && !searching) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { flatten(treeValues, source, emptySet(), true).filter { it.opens }.forEach { if (it.path !in opened) opened.add(it.path) } }) { Text("全部展开") }
-                TextButton(onClick = { opened.clear() }) { Text("全部收起") }
+                GlassTextButton(onClick = { flatten(treeValues, source, emptySet(), true).filter { it.opens }.forEach { if (it.path !in opened) opened.add(it.path) } }) { Text("全部展开") }
+                GlassTextButton(onClick = { opened.clear() }) { Text("全部收起") }
             }
             if (source == RefSource.OutboundMaterials) Row(
                 Modifier.fillMaxWidth().padding(horizontal = 24.dp),
@@ -404,7 +404,7 @@ fun ReferenceSheet(
                 GlassActionButton(onClick = { finish() }, modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) { AnimatedLabel(if (picked.isEmpty()) "完成" else "完成（已选 ${picked.size} 项）") }
             }
             notice?.let {
-                Snackbar(Modifier.padding(16.dp), action = { TextButton(onClick = { notice = null }) { Text("好") } }) { AnimatedLabel(it) }
+                Snackbar(Modifier.padding(16.dp), action = { GlassTextButton(onClick = { notice = null }) { Text("好") } }) { AnimatedLabel(it) }
             }
         }
     }

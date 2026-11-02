@@ -28,10 +28,10 @@ internal fun QueryAccountSettings() {
             queries.fallbackNotice?.let { AnimatedLabel(it) }
             Text("用于查询和看板的数据读取；工单操作仍使用当前登录账号。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedTextField(name, { name = it }, label = { Text("查询账号") }, singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(name, { name = it }, label = { Text("查询账号") }, singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth().glassSearchSurface(MaterialTheme.shapes.medium), colors = glassOutlinedFieldColors(), shape = MaterialTheme.shapes.medium)
             OutlinedTextField(password, { password = it }, label = { Text("密码") }, singleLine = true, enabled = !busy,
                 placeholder = { if (queries.hasCredential(name)) Text("已配置，留空沿用") },
-                visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth().glassSearchSurface(MaterialTheme.shapes.medium), colors = glassOutlinedFieldColors(), shape = MaterialTheme.shapes.medium)
             SoftButton(enabled = !busy && name.isNotBlank() && (password.isNotEmpty() || queries.hasCredential(name)), onClick = {
                 busy = true; message = ""
                 tasks.launch {
@@ -41,7 +41,7 @@ internal fun QueryAccountSettings() {
                     finally { busy = false }
                 }
             }) { AnimatedLabel(if (busy) "正在验证…" else "验证并保存") }
-            TextButton(enabled = !busy && queries.username.isNotEmpty(), onClick = {
+            GlassTextButton(enabled = !busy && queries.username.isNotEmpty(), onClick = {
                 try { queries.useOperator(); password = ""; message = "已删除独立查询凭据，改用当前登录账号" }
                 catch (e: Exception) { message = e.message ?: "无法删除查询凭据" }
             }) { Text("使用当前登录账号并删除查询凭据") }

@@ -1,11 +1,28 @@
 package com.personal.tpm.ui
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import org.junit.Assert.*
 import org.junit.Test
 
 class GlassInteractionTest {
+    @Test fun fullWidthButtonsInflateByTheSameDistanceAsNarrowButtons() {
+        val narrow = glassScale(Size(100f, 48f), 4f, Offset.Zero)
+        val wide = glassScale(Size(1000f, 48f), 4f, Offset.Zero)
+        assertEquals(4f, (narrow.x - 1f) * 100f, .001f)
+        assertEquals(4f, (wide.x - 1f) * 1000f, .001f)
+        assertEquals(narrow.y, wide.y, .001f)
+        assertEquals(Offset(1f, 1f), glassScale(Size.Zero, 4f, Offset.Zero))
+    }
+
+    @Test fun pressAndDragStayInsideEightDpOfReservedSpace() {
+        val drag = glassDragOffset(Offset(10000f, -10000f), 10f)
+        val scale = glassScale(Size(320f, 48f), 4f, drag)
+        assertTrue((scale.x - 1f) * 320f / 2f + kotlin.math.abs(drag.x) * .35f <= 8f)
+        assertTrue((scale.y - 1f) * 48f / 2f + kotlin.math.abs(drag.y) * .35f <= 8f)
+    }
+
     @Test fun transparentButtonUsesThemeInsteadOfBlackRgb() {
         val theme = Color(0xFFFFEAB6)
         assertEquals(theme, glassTintColor(Color.Transparent, theme))

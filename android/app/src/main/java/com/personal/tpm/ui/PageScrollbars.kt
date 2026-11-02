@@ -107,8 +107,9 @@ fun ScrollableLazyColumn(modifier:Modifier=Modifier,state:LazyListState=remember
     val glassPadding = LocalGlassContentPadding.current
     val listPadding = PaddingValues(start = contentPadding.calculateStartPadding(direction), end = contentPadding.calculateEndPadding(direction),
         top = contentPadding.calculateTopPadding() + glassPadding.calculateTopPadding(), bottom = contentPadding.calculateBottomPadding() + maxOf(sheetBottom, glassPadding.calculateBottomPadding()))
-    Box(modifier.scrollEdges(surface, before = { if (reverseLayout) state.canScrollForward else state.canScrollBackward },
-        after = { if (reverseLayout) state.canScrollBackward else state.canScrollForward }),propagateMinConstraints=true) {
+    Box(modifier.then(if (AppPreferences.liquidGlass) Modifier else Modifier.scrollEdges(surface,
+        before = { if (reverseLayout) state.canScrollForward else state.canScrollBackward },
+        after = { if (reverseLayout) state.canScrollBackward else state.canScrollForward })),propagateMinConstraints=true) {
         CompositionLocalProvider(LocalGlassContentPadding provides PaddingValues(0.dp)) {
             NativeLazyColumn(state=state,contentPadding=listPadding,reverseLayout=reverseLayout,
                 verticalArrangement=verticalArrangement,horizontalAlignment=horizontalAlignment,
@@ -142,8 +143,8 @@ fun ScrollableLazyColumn(modifier:Modifier=Modifier,state:LazyListState=remember
 fun Modifier.pageVerticalScroll(state:ScrollState,enabled:Boolean=true,flingBehavior:FlingBehavior?=null,
     reverseScrolling:Boolean=false):Modifier = composed {
     val surface = LocalScrollSurface.current ?: MaterialTheme.colorScheme.background
-    this.scrollEdges(surface, before = { if (reverseScrolling) state.canScrollForward else state.canScrollBackward },
-        after = { if (reverseScrolling) state.canScrollBackward else state.canScrollForward }).pageScrollbar(
+    this.then(if (AppPreferences.liquidGlass) Modifier else Modifier.scrollEdges(surface, before = { if (reverseScrolling) state.canScrollForward else state.canScrollBackward },
+        after = { if (reverseScrolling) state.canScrollBackward else state.canScrollForward })).pageScrollbar(
         position={val progress=state.value.toFloat()/state.maxValue.coerceAtLeast(1);if(reverseScrolling) 1-progress else progress},
         fraction={state.viewportSize.toFloat()/(state.viewportSize.toLong()+state.maxValue).coerceAtLeast(1)},
         canScroll={enabled && state.maxValue in 1 until Int.MAX_VALUE},

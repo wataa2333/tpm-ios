@@ -23,11 +23,15 @@ fun GlassScaffold(
     containerColor: Color = MaterialTheme.colorScheme.background,
     contentColor: Color = contentColorFor(containerColor),
     contentWindowInsets: WindowInsets = appContentInsets(),
+    floatingOverlay: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     if (!AppPreferences.liquidGlass) {
-        Scaffold(modifier, topBar, bottomBar, snackbarHost, floatingActionButton,
-            floatingActionButtonPosition, containerColor, contentColor, contentWindowInsets, content)
+        Box {
+            Scaffold(modifier, topBar, bottomBar, snackbarHost, floatingActionButton,
+                floatingActionButtonPosition, containerColor, contentColor, contentWindowInsets, content)
+            floatingOverlay()
+        }
         return
     }
     val density = LocalDensity.current
@@ -44,10 +48,14 @@ fun GlassScaffold(
         CompositionLocalProvider(LocalGlassBackdrop provides backdrop, LocalGlassContentPadding provides PaddingValues(0.dp),
             LocalContentColor provides contentColor) {
             Box(Modifier.align(Alignment.TopCenter).onSizeChanged { topHeight = it.height }) { topBar() }
-            Box(Modifier.align(Alignment.BottomCenter).onSizeChanged { bottomHeight = it.height }) { bottomBar() }
+            Box(Modifier.align(Alignment.BottomCenter).onSizeChanged { bottomHeight = it.height }) {
+                if (bottomHeight > 0) GlassFooterBackground(Modifier.matchParentSize())
+                bottomBar()
+            }
             Box(Modifier.align(if (floatingActionButtonPosition == FabPosition.Center) Alignment.BottomCenter else Alignment.BottomEnd)
                 .padding(end = 16.dp, bottom = insets.calculateBottomPadding() + 16.dp)) { floatingActionButton() }
             Box(Modifier.align(Alignment.BottomCenter).padding(bottom = insets.calculateBottomPadding() + 16.dp)) { snackbarHost() }
+            floatingOverlay()
         }
     }
 }
@@ -78,7 +86,7 @@ fun GlassBottomSurface(modifier: Modifier = Modifier, content: @Composable () ->
     if (!AppPreferences.liquidGlass) {
         Surface(modifier.fadeAbove(MaterialTheme.colorScheme.background), color = MaterialTheme.colorScheme.background, content = content)
     } else {
-        Box(modifier.fillMaxWidth().glassSurface(shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp), prominent = true)) {
+        Box(modifier.fillMaxWidth()) {
             content()
         }
     }

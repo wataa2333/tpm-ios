@@ -225,7 +225,7 @@ fun BatchBarHost(active: Boolean, content: @Composable () -> Unit) {
     // color, owns everything behind it while selection is entering, visible or leaving.
     // Draw before padding so the surface includes the navigation inset; buttons do not.
     Box(Modifier.fillMaxWidth()
-        .background(if (present) MaterialTheme.colorScheme.background else Color.Transparent)
+        .background(if (present && !AppPreferences.liquidGlass) MaterialTheme.colorScheme.background else Color.Transparent)
         .then(if (present) Modifier.navigationBarsPadding() else Modifier)) {
         androidx.compose.runtime.CompositionLocalProvider(LocalBarInsetsHandled provides true) {
             // Keep the content alive through the complete exit, including quick reversals.
@@ -234,7 +234,8 @@ fun BatchBarHost(active: Boolean, content: @Composable () -> Unit) {
                     // Preserve the top fade, but do not let exiting buttons slide into
                     // the gesture area, which belongs to the opaque host surface.
                     val contentScope = this
-                    clipRect(top = -22.dp.toPx(), bottom = size.height) { contentScope.drawContent() }
+                    if (progress < 1f) clipRect(top = -22.dp.toPx(), bottom = size.height) { contentScope.drawContent() }
+                    else drawContent()
                 }.layout { measurable, constraints ->
                     val child = measurable.measure(constraints.copy(minHeight = 0))
                     layout(child.width, (child.height * progress).roundToInt()) {

@@ -65,8 +65,8 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
             RepairDateControls(vm)
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                 GlassActionButton(enabled=!vm.loading && vm.selectedSpan!=null,onClick=vm::prepare){AnimatedLabel(if(vm.started) "重新查询" else "查询")}
-                if(vm.loading) TextButton(onClick=vm::pause){Text("暂停")}
-                else if(vm.started && !vm.showingPrevious && !vm.snapshot.exhausted) TextButton(onClick={vm.load()}){Text("继续")}
+                if(vm.loading) GlassTextButton(onClick=vm::pause){Text("暂停")}
+                else if(vm.started && !vm.showingPrevious && !vm.snapshot.exhausted) GlassTextButton(onClick={vm.load()}){Text("继续")}
             }
             if(vm.loading) {
                 AppProgressIndicator(Modifier.fillMaxWidth())
@@ -113,7 +113,7 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
         }
     }
     GlassScaffold(contentWindowInsets=WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),topBar={AppTopBar("${days}天处理趋势",onBack=onBack,loading=vm.loading,actions={
-        if(!landscape) TextButton(onClick={manualLandscape=true}){Text("横屏")}
+        if(!landscape) GlassTextButton(onClick={manualLandscape=true}){Text("横屏")}
     })}){padding->
         if(landscape) Row(Modifier.padding(padding).fillMaxSize()){
             LazyColumn(Modifier.width(sidebarWidth).fillMaxHeight(),contentPadding=PaddingValues(start=12.dp,end=12.dp,top=12.dp,bottom=12.dp+navigationBottom),verticalArrangement=Arrangement.spacedBy(10.dp)){
@@ -133,7 +133,7 @@ private fun LazyListScope.trendPersonItems(series:List<RepairTrend>,selected:Set
     item {
         GroupCard { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text("人员与全部汇总",style=MaterialTheme.typography.titleSmall)
-        Row { TextButton(onClick=if(series.all{it.key in selected}) clear else selectAll){AnimatedLabel(if(series.all{it.key in selected}) "取消全选" else "全选")};TextButton(onClick=clear){Text("清空")}}
+        Row { GlassTextButton(onClick=if(series.all{it.key in selected}) clear else selectAll){AnimatedLabel(if(series.all{it.key in selected}) "取消全选" else "全选")};GlassTextButton(onClick=clear){Text("清空")}}
         } }
     }
     series.firstOrNull{it.key==ALL_REPAIR_TREND}?.let{all->item{TrendPerson(all,all.key in selected,colors[all.key] ?: Color.Gray,{toggle(all.key)},Modifier.fillMaxWidth())}}
@@ -163,7 +163,7 @@ private fun TrendPerson(person:RepairTrend,selected:Boolean,color:Color,onClick:
 private fun TrendPeopleSheet(series:List<RepairTrend>,selected:Set<String?>,colors:Map<String?,Color>,toggle:(String?)->Unit,selectAll:()->Unit,clear:()->Unit,onDismiss:()->Unit) {
     AppSheet(onDismissRequest=onDismiss,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true)){
         Column(Modifier.fillMaxWidth().fillMaxHeight(.9f).padding(12.dp)){
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("选择对比人员",style=MaterialTheme.typography.titleMedium);TextButton(onClick=onDismiss){Text("完成")}}
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("选择对比人员",style=MaterialTheme.typography.titleMedium);GlassTextButton(onClick=onDismiss){Text("完成")}}
             LazyColumn(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(8.dp)){trendPersonItems(series,selected,colors,toggle,selectAll,clear)}
         }
     }

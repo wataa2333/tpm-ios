@@ -173,7 +173,7 @@ fun FaultDetailScreen(
             order == null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                 if (error != null) Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     AnimatedLabel(error ?: "", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
-                    TextButton(onClick = { load() }) { Text("重试") }
+                    GlassTextButton(onClick = { load() }) { Text("重试") }
                 }
             }
             else -> SelectionContainer { Column(
@@ -212,7 +212,7 @@ fun FaultDetailScreen(
                             repairLoading -> Box(Modifier.padding(16.dp)) { LoadingText("读取维修任务") }
                             repairError != null -> Column(Modifier.padding(16.dp)) {
                                 AnimatedLabel(repairError.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                                TextButton(onClick = { scope.launch { readRepair(loadGeneration) } }) { Text("重试读取任务") }
+                                GlassTextButton(onClick = { scope.launch { readRepair(loadGeneration) } }) { Text("重试读取任务") }
                             }
                             repair == null -> FactRow("执行人", "接口未返回维修任务记录")
                             else -> {
@@ -237,7 +237,7 @@ fun FaultDetailScreen(
                             Text("退单人", Modifier.width(96.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             LoadingText()
                         } else FactRow("退单人", returnPerson.ifEmpty { if (returnError) "获取失败" else "流程未提供退单人" })
-                        if (returnError) TextButton(onClick = { returnRetry++ }) { Text("重新获取退单人") }
+                        if (returnError) GlassTextButton(onClick = { returnRetry++ }) { Text("重新获取退单人") }
                         if (note != null) {
                             if (note["signTime"].dateText.isNotEmpty()) {
                                 FactRow("签到时间", note["signTime"].dateText)

@@ -165,11 +165,11 @@ private fun QuickQueryCard(title: String, icon: ImageVector, tint: Color, placeh
                 AnimatedLabel(title, style = MaterialTheme.typography.titleMedium)
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                androidx.compose.material3.TextField(colors = blockFieldColors(onCard = true), shape = MaterialTheme.shapes.medium, 
-                    value = text, onValueChange = { text = it }, singleLine = true, placeholder = { AnimatedLabel(placeholder) }, modifier = Modifier.weight(1f),
+                androidx.compose.material3.TextField(colors = searchFieldColors(onCard = true), shape = MaterialTheme.shapes.medium,
+                    value = text, onValueChange = { text = it }, singleLine = true, placeholder = { AnimatedLabel(placeholder) }, modifier = Modifier.weight(1f).glassSearchSurface(MaterialTheme.shapes.medium),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { go() }),
                 )
-                FilledIconButton(onClick = { go() }, enabled = text.isNotBlank()) { Icon(Icons.Filled.Search, contentDescription = "查询") }
+                GlassIconButton(onClick = { go() }, enabled = text.isNotBlank()) { Icon(Icons.Filled.Search, contentDescription = "查询") }
             }
         }
     }

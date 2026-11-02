@@ -164,6 +164,7 @@ fun PagedScreen(
     GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
+        floatingOverlay = { if (onNew != null) NewButton(visible = !batch.active, label = "新建领料单", onClick = onNew) },
         bottomBar = { if (batchKind != null) BatchBarHost(batch.active) { BatchBar(batch) { vm.rows.map { batchItem(batchKind, it) } } } },
         topBar = {
             AppTopBar(
@@ -228,12 +229,11 @@ fun PagedScreen(
     }
     // The "+" button is laid over the screen, not placed by the Scaffold: the Scaffold put it above the bottom bar, so when the batch bar slid away
     // the button dropped with it. Here it stays where it is, and shows itself once the bar is on its way out.
-    if (onNew != null) NewButton(visible = !batch.active, label = "新建领料单", onClick = onNew)
     BatchOverlays(batch)
     if (noticeShown) GlassAlertDialog(
         onDismissRequest = { noticeShown = false },
         title = { Text("提示") }, text = { AnimatedLabel(openNotice.orEmpty()) },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = { noticeShown = false }) { Text("确认") } },
+        confirmButton = { GlassTextButton(onClick = { noticeShown = false }) { Text("确认") } },
     )
 }
 

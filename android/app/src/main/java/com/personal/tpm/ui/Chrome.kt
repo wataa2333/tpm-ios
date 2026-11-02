@@ -172,14 +172,7 @@ fun BoxScope.TopLoadingBar(reveal: LoadingReveal, linear: Boolean = false) {
     }
 }
 
-@Composable
-fun NativeLoadingPreview(modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        androidx.compose.material3.CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-        Text("原生圆形旋转", style = MaterialTheme.typography.bodyMedium)
-    }
-}
+
 
 /**
  * The plain top bar of a screen that was opened from another (a list, an order): back arrow, title, a smaller line under it, actions.
@@ -193,7 +186,10 @@ fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = 
         Box {
             Row(Modifier.padding(bottom = loadingSpace).statusBarsPadding().height(64.dp)
                 .padding(start = if (AppPreferences.liquidGlass) 16.dp else 0.dp, end = if (AppPreferences.liquidGlass) 16.dp else 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (onBack != null) GlassIconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
+                if (onBack != null) {
+                    GlassIconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
+                    Spacer(Modifier.width(if (AppPreferences.liquidGlass) 12.dp else 0.dp))
+                }
                 else Spacer(Modifier.width(if (AppPreferences.liquidGlass) 4.dp else 20.dp))
                 // The title changes by sliding up out and in; the line under it (the number of orders) opens and closes with its own motion, and since the
                 // two are centred together the title glides up when the line appears and back down when it goes, instead of jumping.
@@ -219,7 +215,7 @@ fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = 
                         ) { text -> AnimatedLabel(text.orEmpty(), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = headerContent().copy(alpha = 0.75f)) }
                     }
                 }
-                if (AppPreferences.liquidGlass) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { actions() }
+                if (AppPreferences.liquidGlass) Row(Modifier.padding(start = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { actions() }
                 else actions()
             }
             TopLoadingBar(loadingReveal, linearLoading)
@@ -430,7 +426,8 @@ fun AppSheet(
         contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) }) {
         TransparentSystemBars()
         androidx.compose.runtime.CompositionLocalProvider(LocalScrollSurface provides containerColor, LocalGlassBackdrop provides null, LocalGlassContentPadding provides androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-            Column(Modifier.nestedScroll(scrollBoundary).then(if (AppPreferences.liquidGlass) Modifier.glassSurface(backdrop = null, shape = RoundedCornerShape(28.dp), tint = containerColor, prominent = true) else Modifier)) { EnsureScaled { content() } }
+            Column(Modifier.nestedScroll(scrollBoundary).background(containerColor)
+                .padding(top = if (AppPreferences.liquidGlass) 12.dp else 0.dp)) { EnsureScaled { content() } }
         }
     }
 }

@@ -90,6 +90,11 @@ import java.time.ZoneOffset
  */
 @Composable
 fun ChoiceChip(selected: Boolean, onClick: () -> Unit, label: String, enabled: Boolean = true) {
+    if (AppPreferences.liquidGlass) {
+        GlassFilterChip(selected, onClick, label = { Text(label, maxLines = 1) }, enabled = enabled)
+        return
+    }
+
     val background by androidx.compose.animation.animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "chipFill")
     val content by androidx.compose.animation.animateColorAsState(if (selected && !AppPreferences.liquidGlass) MaterialTheme.colorScheme.onPrimary else if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "chipText")
     Row(
@@ -130,7 +135,7 @@ fun PickRow(label: String, value: String, required: Boolean, onClick: () -> Unit
     // The label keeps its own width on one line (it used to share the row and wrap); what is chosen takes the rest and may take two lines.
     // The press feedback is a rounded shape inside the card (the clip comes before the click), not a rectangle that squares off the card's corners.
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer).clickable(onClick = onClick).padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).then(if (AppPreferences.liquidGlass) Modifier.glassSearchSurface(RoundedCornerShape(16.dp)) else Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer)).clickable(onClick = onClick).padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
         AnimatedLabel(requiredLabel(label, required), style = MaterialTheme.typography.bodyMedium, maxLines = 1, softWrap = false)
@@ -167,16 +172,12 @@ fun TextEntry(
             AnimatedLabel(requiredLabel(label, required), Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             androidx.compose.material3.TextField(
                 value = value, onValueChange = { onChange(it.take(limit)) },
-                modifier = Modifier.fillMaxWidth().animateContentSize(androidx.compose.animation.core.tween(Motion.Fast, easing = Motion.Change)),
+                modifier = Modifier.fillMaxWidth().animateContentSize(androidx.compose.animation.core.tween(Motion.Fast, easing = Motion.Change)).glassSearchSurface(RoundedCornerShape(8.dp)),
                 shape = RoundedCornerShape(8.dp),
                 placeholder = if (placeholder.isEmpty()) null else ({ AnimatedLabel(placeholder) }),
                 minLines = 1, maxLines = if (multiline) maxOf(maxLines, 8) else 1, singleLine = !multiline,
                 keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-                colors = androidx.compose.material3.TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer, unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                ),
+                colors = searchFieldColors(onCard = true),
             )
             if (multiline) Text(
                 "${value.length}/$limit 字符", Modifier.fillMaxWidth().padding(end = 4.dp),
@@ -199,12 +200,12 @@ fun DateTimeField(label: String, value: String, dateOnly: Boolean, required: Boo
         DatePickerDialog(
             onDismissRequest = { step = 0 },
             confirmButton = {
-                TextButton(enabled = state.selectedDateMillis != null, onClick = {
+                GlassTextButton(enabled = state.selectedDateMillis != null, onClick = {
                     val day = Instant.ofEpochMilli(state.selectedDateMillis!!).atZone(ZoneOffset.UTC).toLocalDate()
                     if (dateOnly) { onChange(day.toString()); step = 0 } else { pickedDate = day; step = 2 }
                 }) { AnimatedLabel(if (dateOnly) "确定" else "下一步") }
             },
-            dismissButton = { TextButton(onClick = { step = 0 }) { Text("取消") } },
+            dismissButton = { GlassTextButton(onClick = { step = 0 }) { Text("取消") } },
         ) { DatePicker(state) }
     }
     if (step == 2) {
@@ -214,12 +215,12 @@ fun DateTimeField(label: String, value: String, dateOnly: Boolean, required: Boo
             title = { Text("选择时间") },
             text = { TimePicker(time) },
             confirmButton = {
-                TextButton(onClick = {
+                GlassTextButton(onClick = {
                     val moment = LocalDateTime.of(pickedDate ?: LocalDate.now(), LocalTime.of(time.hour, time.minute))
                     onChange(serverDate(java.util.Date.from(moment.atZone(ZoneId.systemDefault()).toInstant()))); step = 0
                 }) { Text("确定") }
             },
-            dismissButton = { TextButton(onClick = { step = 0 }) { Text("取消") } },
+            dismissButton = { GlassTextButton(onClick = { step = 0 }) { Text("取消") } },
         )
     }
 }
@@ -435,7 +436,7 @@ fun InputRow(
         if (maximum != null && maximum.isFinite() && maximum >= 0 && number != null && number.isFinite() && number > maximum)
             onChange(com.personal.tpm.data.quantityText(maximum))
     }
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).then(if (AppPreferences.liquidGlass) Modifier.glassSearchSurface(RoundedCornerShape(16.dp)) else Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer)).padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         AnimatedLabel(requiredLabel(label, required), style = style, maxLines = 1, softWrap = false)
         androidx.compose.foundation.text.BasicTextField(
             value = value, onValueChange = { onChange(it.take(limit)) }, singleLine = true, modifier = Modifier.weight(1f).onFocusChanged {
