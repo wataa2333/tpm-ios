@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalLayoutDirection
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 
 /** Thumb is visible whenever the page has a scroll range. Only the rightmost 20dp captures dragging. */
 private fun Modifier.pageScrollbar(position:()->Float, fraction:()->Float, canScroll:()->Boolean,
@@ -102,6 +104,11 @@ fun ScrollableLazyColumn(modifier:Modifier=Modifier,state:LazyListState=remember
         return (viewport/(average*info.totalItemsCount)).toFloat().coerceIn(.04f,1f)
     }
     val surface = LocalScrollSurface.current ?: MaterialTheme.colorScheme.background
+    val sheetEdges = AppPreferences.liquidGlass && LocalScrollSurface.current != null
+    val captureEdges = sheetEdges && AppPreferences.glassEffects.blur != GlassBlur.Off &&
+        currentGlassRendering() in listOf(GlassRendering.Blur, GlassRendering.Liquid)
+    // Capture only the list. Edge readers are siblings, so they never sample their own output.
+    val edgeBackdrop = if (captureEdges) rememberLayerBackdrop { drawRect(surface); drawContent() } else null
     val direction = LocalLayoutDirection.current
     val sheetBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val glassPadding = LocalGlassContentPadding.current
@@ -111,11 +118,20 @@ fun ScrollableLazyColumn(modifier:Modifier=Modifier,state:LazyListState=remember
         before = { if (reverseLayout) state.canScrollForward else state.canScrollBackward },
         after = { if (reverseLayout) state.canScrollBackward else state.canScrollForward })),propagateMinConstraints=true) {
         CompositionLocalProvider(LocalGlassContentPadding provides PaddingValues(0.dp)) {
-            NativeLazyColumn(state=state,contentPadding=listPadding,reverseLayout=reverseLayout,
+            NativeLazyColumn(modifier=if (edgeBackdrop != null) Modifier.layerBackdrop(edgeBackdrop) else Modifier,
+                state=state,contentPadding=listPadding,reverseLayout=reverseLayout,
                 verticalArrangement=verticalArrangement,horizontalAlignment=horizontalAlignment,
                 flingBehavior=flingBehavior,userScrollEnabled=userScrollEnabled,content=content)
         }
         Box(Modifier.matchParentSize()) {
+            if (sheetEdges) {
+                SheetScrollEdge(edgeBackdrop, surface, top = true,
+                    visible = if (reverseLayout) state.canScrollForward else state.canScrollBackward,
+                    modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(24.dp))
+                SheetScrollEdge(edgeBackdrop, surface, top = false,
+                    visible = if (reverseLayout) state.canScrollBackward else state.canScrollForward,
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(24.dp))
+            }
             Box(Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(20.dp).pageScrollbar(
                 position={
                     val info=state.layoutInfo

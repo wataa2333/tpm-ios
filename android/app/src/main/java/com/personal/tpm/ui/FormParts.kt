@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import com.personal.tpm.ui.pageVerticalScroll as verticalScroll
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
@@ -41,6 +42,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.animation.animateContentSize
@@ -431,16 +434,21 @@ fun InputRow(
 ) {
     val style = MaterialTheme.typography.bodyMedium
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    val inputFocus = remember { FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val interactions = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     var wasFocused by remember { mutableStateOf(false) }
     fun confirmQuantity() {
         val number = value.toDoubleOrNull()
         if (maximum != null && maximum.isFinite() && maximum >= 0 && number != null && number.isFinite() && number > maximum)
             onChange(com.personal.tpm.data.quantityText(maximum))
     }
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).then(if (AppPreferences.liquidGlass) Modifier.glassSearchSurface(RoundedCornerShape(16.dp), quiet = true) else Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer)).padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).then(if (AppPreferences.liquidGlass) Modifier.glassSearchSurface(RoundedCornerShape(16.dp), quiet = true) else Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer))
+        .clickable(interactionSource = interactions, indication = null) { inputFocus.requestFocus(); keyboard?.show() }
+        .padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         AnimatedLabel(requiredLabel(label, required), style = style, maxLines = 1, softWrap = false)
         androidx.compose.foundation.text.BasicTextField(
-            value = value, onValueChange = { onChange(it.take(limit)) }, singleLine = true, modifier = Modifier.weight(1f).onFocusChanged {
+            value = value, onValueChange = { onChange(it.take(limit)) }, singleLine = true, modifier = Modifier.weight(1f).heightIn(min = 48.dp).focusRequester(inputFocus).onFocusChanged {
                 if (wasFocused && !it.isFocused) confirmQuantity()
                 wasFocused = it.isFocused
             },
@@ -449,7 +457,7 @@ fun InputRow(
             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { confirmQuantity(); focus.clearFocus() }),
             cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
             decorationBox = { inner ->
-                androidx.compose.foundation.layout.Box(contentAlignment = Alignment.CenterEnd) {
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = 12.dp), contentAlignment = Alignment.CenterEnd) {
                     if (value.isEmpty()) AnimatedLabel(placeholder, style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     inner()
                 }

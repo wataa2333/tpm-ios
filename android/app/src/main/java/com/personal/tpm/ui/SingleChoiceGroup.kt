@@ -55,7 +55,8 @@ fun SingleChoiceGroup(options: List<String>, selected: Int, onSelect: (Int) -> U
     val accent = MaterialTheme.colorScheme.primary
     val surface = MaterialTheme.colorScheme.surface
     val ink = glassContentColor(accent, accent, surface, MaterialTheme.colorScheme.onSurface)
-    Box(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .62f), RoundedCornerShape(22.dp))
+    val trayShape = if (scrollable || options.size <= columns.coerceAtLeast(1)) CircleShape else RoundedCornerShape(26.dp)
+    Box(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .62f), trayShape)
         .then(if (scrollable) Modifier.glassHorizontalScroll(scroll) else Modifier).padding(4.dp).selectableGroup()) {
         if (target != null) {
             val offset by animateIntOffsetAsState(target.first,

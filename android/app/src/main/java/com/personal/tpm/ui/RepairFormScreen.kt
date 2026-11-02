@@ -279,9 +279,9 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
 
     PickHost(request) { request = null }
     // The ERP form is laid over this page inside the same window (its own back key closes it).
-    if (creatingErp) SlideInOverlay {
+    SlideInOverlayFor(creatingErp.takeIf { it }) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            ErpFormScreen(existingId = null, referenceSn = jv["assetFault"]["sn"].text, onClose = { creatingErp = false }, onSaved = { result ->
+            ErpFormScreen(existingId = null, referenceSn = jv["assetFault"]["sn"].text, onClose = { creatingErp = false }, interceptBack = true, onSaved = { result ->
                 scope.launch {
                     try {
                         val created = session.request("erpOutbound/getErpMaterialOutboundsByOutboundId", mapOf("outboundId" to result["outboundId"].text))

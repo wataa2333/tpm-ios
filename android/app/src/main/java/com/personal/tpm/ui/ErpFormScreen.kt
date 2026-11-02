@@ -45,7 +45,7 @@ import org.json.JSONObject
  * [onSaved] gets the server's answer (the order's id).
  */
 @Composable
-fun ErpFormScreen(existingId: String?, referenceSn: String?, onClose: () -> Unit, onSaved: (Jv) -> Unit) {
+fun ErpFormScreen(existingId: String?, referenceSn: String?, onClose: () -> Unit, interceptBack: Boolean = false, onSaved: (Jv) -> Unit) {
     val session = LocalSession.current
     val prefs = LocalPickerPrefs.current
     val store = LocalDrafts.current
@@ -99,7 +99,7 @@ fun ErpFormScreen(existingId: String?, referenceSn: String?, onClose: () -> Unit
     }
 
     FormPage(
-        title = "ERP 出库", busy = form.loading || form.saving, onClose = { if (!form.saving) onClose() }, snackbar = snackbar, backEnabled = !form.saving,
+        title = "ERP 出库", busy = form.loading || form.saving, onClose = { if (!form.saving) onClose() }, snackbar = snackbar, backEnabled = !form.saving, interceptBack = interceptBack,
         bottomBar = { FormActionBar(busy = form.saving, enabled = form.ready, onSave = { keepDraft() }, onSubmit = { submit() }) },
     ) {
         if (form.error != null && !form.ready) {
