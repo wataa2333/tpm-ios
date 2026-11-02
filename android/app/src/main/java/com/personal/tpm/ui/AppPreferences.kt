@@ -36,13 +36,17 @@ object AppPreferences {
             highlight = prefs!!.getBoolean("glassHighlight", true),
             refraction = prefs!!.getBoolean("glassRefraction", true),
             dispersion = prefs!!.getBoolean("glassDispersion", false),
-            shadow = prefs!!.getBoolean("glassShadow", false),
+            shadow = prefs!!.getBoolean("glassShadow", true),
             motion = prefs!!.getBoolean("glassMotion", true),
         )
         // Apply the requested light preset once when upgrading; later user adjustments remain persistent.
         if (prefs!!.getInt("glassPresetRevision", 0) < 108) {
             updateGlassEffects(glassEffects.copy(blur = GlassBlur.Low, dispersion = false))
             prefs!!.edit().putInt("glassPresetRevision", 108).apply()
+        }
+        if (prefs!!.getInt("glassPresetRevision", 0) < 110) {
+            updateGlassEffects(glassEffects.copy(dispersion = false, shadow = true))
+            prefs!!.edit().putInt("glassPresetRevision", 110).apply()
         }
         repairReadExperiment = prefs!!.getBoolean("repairReadExperiment", false)
         repairPageSize = prefs!!.getInt("repairPageSize", 500).takeIf { it in repairPageSizes } ?: 500

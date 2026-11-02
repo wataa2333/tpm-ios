@@ -168,19 +168,7 @@ fun BlockChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier,
 /** A row of equal blocks to choose one from (was the outlined segmented row): the chosen one is filled with the theme colour. */
 @Composable
 fun BlockSegmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
-
-
-    androidx.compose.foundation.layout.Row(modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-        options.forEachIndexed { index, name ->
-            val on = index == selected
-            val fill by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "segFill")
-            val ink by androidx.compose.animation.animateColorAsState(if (on && !AppPreferences.liquidGlass) MaterialTheme.colorScheme.onPrimary else if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "segInk")
-            androidx.compose.foundation.layout.Box(
-                Modifier.weight(1f).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).then(if (AppPreferences.liquidGlass) Modifier.background(fill, androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) else Modifier.background(fill)).clickable { onSelect(index) }.padding(vertical = 10.dp),
-                androidx.compose.ui.Alignment.Center,
-            ) { AnimatedLabel(name, style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 1) }
-        }
-    }
+    SingleChoiceGroup(options, selected, onSelect, modifier)
 }
 
 /**

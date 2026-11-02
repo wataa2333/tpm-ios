@@ -13,6 +13,6 @@ data class GlassEffects(
     val highlight: Boolean = true,
     val refraction: Boolean = true,
     val dispersion: Boolean = false,
-    val shadow: Boolean = false,
+    val shadow: Boolean = true,
     val motion: Boolean = true,
 )

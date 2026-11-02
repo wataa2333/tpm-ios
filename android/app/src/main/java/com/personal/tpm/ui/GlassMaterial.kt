@@ -110,8 +110,8 @@ fun Modifier.glassSurface(
                 lens(10.dp.toPx(), 20.dp.toPx(), depthEffect = true, chromaticAberration = effects.dispersion)
             }
         },
-        highlight = if (effects.highlight) ({ Highlight(width = .7.dp, blurRadius = .35.dp,
-            style = HighlightStyle.Default(intensity = .6f, angle = highlightAngle(), falloff = 1.5f)) }) else null,
+        highlight = if (effects.highlight) ({ Highlight(width = .45.dp, blurRadius = .5.dp,
+            style = HighlightStyle.Default(intensity = .25f, angle = highlightAngle(), falloff = 1.5f)) }) else null,
         shadow = if (effects.shadow) ({ Shadow(radius = 8.dp, offset = DpOffset(0.dp, 2.dp), color = Color.Black.copy(alpha = .10f)) }) else null,
         layerBlock = layerBlock,
         onDrawSurface = {

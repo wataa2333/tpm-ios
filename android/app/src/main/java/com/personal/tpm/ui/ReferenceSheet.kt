@@ -321,12 +321,10 @@ fun ReferenceSheet(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
             // The ways of searching: a row of chips (it scrolls sideways if the screen is narrow), each on one line.
-            if (modes.isNotEmpty()) Row(Modifier.fillMaxWidth().glassHorizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                modes.forEach { mode -> ChoiceChip(searchMode == mode, { searchMode = mode }, mode.label(source)) }
-            }
-            if (source == RefSource.Users) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("按姓名", "按班组").forEachIndexed { index, title -> ChoiceChip(userMode == index, { userMode = index }, title) }
-            }
+            if (modes.isNotEmpty()) SingleChoiceGroup(modes.map { it.label(source) }, modes.indexOf(searchMode), { searchMode = modes[it] },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp), scrollable = modes.size > 3)
+            if (source == RefSource.Users) SingleChoiceGroup(listOf("按姓名", "按班组"), userMode, { userMode = it },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
             Box(Modifier.fillMaxWidth().padding(vertical = 2.dp)) { if (loading || selecting) AppProgressIndicator(Modifier.fillMaxWidth()) }
             if (source.hasMenu) Text(
                 if (defaultField != null) "长按某一项，可以置顶，或设为默认。" else "长按某一项，可以置顶。",
@@ -408,7 +406,7 @@ fun ReferenceSheet(
                 }
                 if (paged && values.isNotEmpty() && !last) item(key = "more") {
                     LaunchedEffect(values.size) { if (!loading && !loadingMore) load(true) }
-                    Text("正在加载更多…", Modifier.fillMaxWidth().padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                    LoadMoreFooter(loadingMore)
                 }
                 if (!loading && error == null && (if (treeSource) tree.isEmpty() else if (source == RefSource.Users && userMode == 1) userGroups.isEmpty() else shown.isEmpty())) item(key = "empty") { EmptyState("没有匹配的内容") }
             }

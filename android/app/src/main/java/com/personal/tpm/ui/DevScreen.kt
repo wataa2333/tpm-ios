@@ -85,13 +85,11 @@ fun DevScreen(onBack: () -> Unit) {
                                 Reveal(AppPreferences.repairReadExperiment) {
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Text("每页工单数量", style = MaterialTheme.typography.titleSmall)
-                                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            AppPreferences.repairPageSizes.forEach { size -> ChoiceChip(AppPreferences.repairPageSize == size, { AppPreferences.updateRepairPageSize(size) }, "$size 单") }
-                                        }
+                                        SingleChoiceGroup(AppPreferences.repairPageSizes.map { "$it 单" }, AppPreferences.repairPageSizes.indexOf(AppPreferences.repairPageSize),
+                                            { AppPreferences.updateRepairPageSize(AppPreferences.repairPageSizes[it]) })
                                         Text("详情核对并发", style = MaterialTheme.typography.titleSmall)
-                                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            AppPreferences.repairConcurrencyLevels.forEach { count -> ChoiceChip(AppPreferences.repairConcurrency == count, { AppPreferences.updateRepairConcurrency(count) }, "$count 单") }
-                                        }
+                                        SingleChoiceGroup(AppPreferences.repairConcurrencyLevels.map { "$it 单" }, AppPreferences.repairConcurrencyLevels.indexOf(AppPreferences.repairConcurrency),
+                                            { AppPreferences.updateRepairConcurrency(AppPreferences.repairConcurrencyLevels[it]) })
                                     }
                                 }
                                 AnimatedLabel("当前：每页${AppPreferences.effectiveRepairPageSize}单，详情同时核对${AppPreferences.effectiveRepairConcurrency}单。", style = MaterialTheme.typography.bodySmall)

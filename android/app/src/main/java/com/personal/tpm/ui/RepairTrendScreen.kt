@@ -75,10 +75,7 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
             } }
             GroupCard { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
             Text("统计粒度",style=MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
-                ChoiceChip(!monthly,{monthly=false},"按天")
-                ChoiceChip(monthly,{monthly=true},"按月")
-            }
+            SingleChoiceGroup(listOf("按天", "按月"), if(monthly) 1 else 0, { monthly = it == 1 })
             Text("按故障发现日期统计待确认、待复线及已完结的维修单。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(!complete) AnimatedLabel(if(vm.started) "数据未读完整，图表和表格仅为已加载数量。" else "选择日期后查询，再查看完整图表。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
             } }

@@ -154,7 +154,7 @@ fun MainShell(
     GlassMainFrame(
         topBar = {
             val working = switching || mineBusy ||
-                (selected == 0 && (homeVm.loading || homeVm.refreshing)) || (selected == 1 && (todoVm.loading || todoVm.refreshing || todoVm.loadingMore)) ||
+                (selected == 0 && (homeVm.loading || homeVm.refreshing)) || (selected == 1 && (todoVm.loading || todoVm.refreshing)) ||
                 (selected == 2 && (workspaceVm.loading || workspaceVm.refreshing))
             val pulling = if ((selected == 0 && homeVm.refreshing) || (selected == 1 && todoVm.refreshing) || (selected == 2 && workspaceVm.refreshing)) 0f else if (selected <= 2) pull.distanceFraction else 0f
             CollapsingTopBar(

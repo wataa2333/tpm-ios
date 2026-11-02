@@ -96,10 +96,7 @@ fun LazyListScope.repairPendingSummary(vm: RepairPendingViewModel, openPeople: (
         if(vm.processed) GlassActionButton(enabled=!vm.checking && !vm.legacyPrevious,onClick=openTrends) {
             Text("统计图与统计表")
         }
-        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            ChoiceChip(!vm.ascending,{vm.sort(false)},"数量降序")
-            ChoiceChip(vm.ascending,{vm.sort(true)},"数量升序")
-        }
+        SingleChoiceGroup(listOf("数量降序", "数量升序"), if(vm.ascending) 1 else 0, { vm.sort(it == 1) })
         if(!vm.processed && !vm.legacyPrevious) Text("点击人员查看工单",style=MaterialTheme.typography.bodySmall)
         }
     }

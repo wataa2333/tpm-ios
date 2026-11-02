@@ -95,7 +95,7 @@ internal fun rememberGlassFeedback(source: MutableInteractionSource, enabled: Bo
         illumination = {
             if (effects.highlight && progress > 0f) {
                 val lightCenter = if (touch.isSpecified) Offset(touch.x.coerceIn(0f, size.width), touch.y.coerceIn(0f, size.height)) else center
-                drawRect(Brush.radialGradient(listOf(Color.White.copy(alpha = .2f * progress.coerceIn(0f, 1f)), Color.Transparent),
+                drawRect(Brush.radialGradient(listOf(Color.White.copy(alpha = .10f * progress.coerceIn(0f, 1f)), Color.Transparent),
                     center = lightCenter, radius = size.maxDimension.coerceAtLeast(1f)), blendMode = BlendMode.Plus)
             }
         },

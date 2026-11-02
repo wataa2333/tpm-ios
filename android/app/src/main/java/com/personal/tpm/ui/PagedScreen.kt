@@ -169,7 +169,7 @@ fun PagedScreen(
         topBar = {
             AppTopBar(
                 title = title, subtitle = vm.total?.let { "共 $it 条" }, onBack = onBack,
-                loading = vm.loading || vm.refreshing || vm.loadingMore, pull = if (vm.refreshing) 0f else pull.distanceFraction,
+                loading = vm.loading || vm.refreshing, pull = if (vm.refreshing) 0f else pull.distanceFraction,
                 actions = {
                     if (batchKind != null) SelectButton(batch.active) { if (batch.active) batch.end() else batch.begin() }
                     RefreshButton(spinning = vm.loading || vm.refreshing) {
@@ -215,7 +215,7 @@ fun PagedScreen(
                                         when {
                                             !vm.loading && vm.rows.isEmpty() && vm.error == null -> EmptyState(emptyText)
                                             // More rows are read only when the list is pulled up past its end (the loading animation of the top bar runs then).
-                                            vm.rows.isNotEmpty() && !vm.last -> { Text("加载更多内容", Modifier.fillMaxWidth().padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center) }
+                                            vm.rows.isNotEmpty() && !vm.last -> { LoadMoreFooter(vm.loadingMore) }
                                             vm.rows.isNotEmpty() -> AnimatedLabel(vm.total?.let { "共 $it 条" } ?: "已显示全部 ${vm.rows.size} 条", Modifier.fillMaxWidth().padding(8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                                         }
                                     }

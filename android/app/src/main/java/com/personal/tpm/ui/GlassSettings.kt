@@ -18,13 +18,9 @@ fun GlassEffectSettings() {
     val supportsLens = rendering == GlassRendering.Liquid
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("模糊档位", style = MaterialTheme.typography.titleSmall)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            GlassBlur.entries.forEach { level ->
-                GlassFilterChip(effects.blur == level, { AppPreferences.updateGlassEffects(effects.copy(blur = level)) },
-                    label = { Text(level.label) }, enabled = supportsBlur, modifier = Modifier.weight(1f))
-            }
-        }
-        Text("立即生效，重启后保留。默认低模糊，色散和阴影关闭；关闭模糊仍可保留高光和折射。",
+        SingleChoiceGroup(GlassBlur.entries.map { it.label }, effects.blur.ordinal,
+            { AppPreferences.updateGlassEffects(effects.copy(blur = GlassBlur.entries[it])) }, enabled = supportsBlur)
+        Text("立即生效，重启后保留。默认低模糊、柔和阴影开启、边缘色散关闭；关闭模糊仍可保留高光和折射。",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         GlassEffectToggle("边缘高光", "细边缘与触摸光泽", effects.highlight, supportsBlur) {
             AppPreferences.updateGlassEffects(effects.copy(highlight = it))

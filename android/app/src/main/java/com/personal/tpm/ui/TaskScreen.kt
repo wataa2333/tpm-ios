@@ -300,9 +300,8 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
                         }
                         if (conditions.isNotEmpty()) {
                             FormTitle("操作类型")
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                conditions.forEach { c -> ChoiceChip(c["value"].text == condition, { condition = c["value"].text }, c["name"].text) }
-                            }
+                            SingleChoiceGroup(conditions.map { it["name"].text }, conditions.indexOfFirst { it["value"].text == condition },
+                                { condition = conditions[it]["value"].text }, scrollable = conditions.size > 3)
                         }
                         // Only when there is something to fill in: accepting (the group and the date) or assigning (who repairs). Claiming has nothing to ask.
                         val assigningNow = condition == "assign" || condition == "appoint"

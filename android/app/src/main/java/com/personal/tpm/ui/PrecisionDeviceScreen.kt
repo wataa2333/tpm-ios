@@ -89,12 +89,11 @@ fun PrecisionDeviceScreen(assetId: String, onBack: () -> Unit) {
                     if (!loadingPage && workOrders.isEmpty() && pageError.isEmpty()) Text("当前查询账号未返回此设备的检查工单，无法从汇总等级还原逐项数据。")
                     if (workOrders.size > 1) SectionTitle("选择检测工单")
                 }
-                workOrders.forEach { order ->
-                    item(key = "precise-${order["preciseId"].text}") {
-                        if (workOrders.size == 1) AnimatedLabel("工单：${order["sn"].text}", style = MaterialTheme.typography.bodySmall)
-                        else GlassFilterChip(selected = selectedPrecise == order["preciseId"].text, onClick = { selectedPrecise = order["preciseId"].text },
-                            label = { AnimatedLabel("${order["planStartDate"].dateText}\n${order["sn"].text}") })
-                    }
+                item {
+                    if (workOrders.size == 1) Text("工单：${workOrders.first()["sn"].text}", style = MaterialTheme.typography.bodySmall)
+                    else SingleChoiceGroup(workOrders.map { "${it["planStartDate"].dateText} · ${it["sn"].text}" },
+                        workOrders.indexOfFirst { it["preciseId"].text == selectedPrecise },
+                        { selectedPrecise = workOrders[it]["preciseId"].text }, columns = 1)
                 }
                 item {
                     if ((total ?: 0) > 20) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -102,11 +101,11 @@ fun PrecisionDeviceScreen(assetId: String, onBack: () -> Unit) {
                         AnimatedLabel("${page + 1}页 · 共${total ?: "—"}单", style = MaterialTheme.typography.bodySmall)
                         GlassTextButton(enabled = total != null && (page + 1) * 20 < total!! && !loadingPage, onClick = { page++ }) { Text("下一页") }
                     }
-                    executions.forEach { execution ->
-                        if (executions.size == 1) AnimatedLabel("检测时间：${execution["endTime"].dateText.ifEmpty { execution["createTime"].dateText }}\n检测人：${execution["user"].label.ifEmpty { "未记录" }}", style = MaterialTheme.typography.bodyMedium)
-                        else GlassFilterChip(selected = selectedExecution == execution["orderId"].text, onClick = { selectedExecution = execution["orderId"].text },
-                            label = { AnimatedLabel("${execution["endTime"].dateText.ifEmpty { execution["createTime"].dateText }} · ${execution["user"].label}") })
-                    }
+                    if (executions.size == 1) executions.first().let { execution ->
+                        Text("检测时间：${execution["endTime"].dateText.ifEmpty { execution["createTime"].dateText }}\n检测人：${execution["user"].label.ifEmpty { "未记录" }}", style = MaterialTheme.typography.bodyMedium)
+                    } else SingleChoiceGroup(executions.map { "${it["endTime"].dateText.ifEmpty { it["createTime"].dateText }} · ${it["user"].label}" },
+                        executions.indexOfFirst { it["orderId"].text == selectedExecution },
+                        { selectedExecution = executions[it]["orderId"].text }, columns = 1)
                     if (!loadingOrders && selectedPrecise.isNotEmpty() && executions.isEmpty() && detailError.isEmpty()) Text("该工单暂无检查执行记录。")
                     if (detailError.isNotEmpty()) AnimatedLabel(detailError, color = MaterialTheme.colorScheme.error)
                 }

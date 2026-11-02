@@ -135,7 +135,7 @@ fun TodoTab(vm: TodoViewModel, listState: LazyListState, pullState: PullToRefres
                         when {
                             vm.error != null -> AnimatedLabel(vm.error ?: "", Modifier.fillMaxWidth().padding(16.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                             !vm.loading && vm.rows.isEmpty() -> EmptyState("暂无待办")
-                            vm.rows.isNotEmpty() && !vm.last -> { Text("加载更多内容", Modifier.fillMaxWidth().padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+                            vm.rows.isNotEmpty() && !vm.last -> { LoadMoreFooter(vm.loadingMore) }
                             vm.rows.isNotEmpty() -> Text(
                                 vm.total?.let { "共 $it 个待办" } ?: "已显示全部 ${vm.rows.size} 条",
                                 Modifier.fillMaxWidth().padding(8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,

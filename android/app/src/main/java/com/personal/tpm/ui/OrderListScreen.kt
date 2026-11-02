@@ -137,7 +137,7 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
             AppTopBar(
                 title = title, onBack = onBack,
                 subtitle = vm.total?.let { "共 $it 单" },
-                loading = vm.loading || vm.refreshing || vm.loadingMore, pull = if (vm.refreshing) 0f else pull.distanceFraction,
+                loading = vm.loading || vm.refreshing, pull = if (vm.refreshing) 0f else pull.distanceFraction,
                 actions = {
                     SelectButton(batch.active) { if (batch.active) batch.end() else batch.begin() }
                     RefreshButton(spinning = vm.loading || vm.refreshing) { refreshFromTop() }
@@ -190,7 +190,7 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
                                         when {
                                             !vm.loading && vm.rows.isEmpty() && vm.error == null -> EmptyState()
                                             // More pages are read only when the list is pulled up past its end (the loading animation of the top bar runs then).
-                                            vm.rows.isNotEmpty() && !vm.last -> { Text("加载更多内容", Modifier.fillMaxWidth().padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+                                            vm.rows.isNotEmpty() && !vm.last -> { LoadMoreFooter(vm.loadingMore) }
                                             vm.rows.isNotEmpty() -> Text(
                                                 vm.total?.let { "共 $it 单" } ?: "已显示全部 ${vm.rows.size} 条",
                                                 Modifier.fillMaxWidth().padding(8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -251,37 +251,9 @@ private fun SearchRow(vm: OrderListViewModel, input: String, onInput: (String) -
 private fun StatusStrip(vm: OrderListViewModel) {
     val states = FaultState.entries
     val selected = states.indexOfFirst { it.code == vm.state }
-    val scroll = rememberScrollState()
-    val lefts = remember { androidx.compose.runtime.mutableStateMapOf<Int, Int>() }
-    LaunchedEffect(selected, lefts[selected]) {
-        val left = lefts[selected] ?: return@LaunchedEffect
-        scroll.animateScrollTo((left - 48).coerceAtLeast(0))
-    }
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 4.dp).glassHorizontalScroll(scroll).padding(horizontal = 12.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
-    ) {
-        states.forEachIndexed { index, st ->
-            val on = index == selected
-            val background by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.Normal, easing = Motion.Change), label = "capsule")
-            val content by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, tween(Motion.Normal, easing = Motion.Change), label = "capsuleText")
-            if (AppPreferences.liquidGlass) androidx.compose.material3.FilterChip(selected = on, onClick = { vm.select(st.code) },
-                border = null, colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(containerColor = Color.Transparent, selectedContainerColor = MaterialTheme.colorScheme.primaryContainer),
-                modifier = Modifier.onGloballyPositioned { lefts[index] = it.positionInParent().x.toInt() }, label = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Text(st.title, style = MaterialTheme.typography.labelLarge)
-                        if (st.hasCount) AnimatedCount(vm.counts[st.code], MaterialTheme.typography.labelLarge, MaterialTheme.colorScheme.onSurface)
-                    }
-                }) else Row(
-                Modifier.onGloballyPositioned { lefts[index] = it.positionInParent().x.toInt() }.clip(CircleShape).background(background)
-                    .clickable { vm.select(st.code) }.padding(horizontal = 14.dp, vertical = 7.dp),
-                horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AnimatedLabel(st.title, style = MaterialTheme.typography.labelLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = content, maxLines = 1, softWrap = false)
-                if (st.hasCount) AnimatedCount(vm.counts[st.code], MaterialTheme.typography.labelLarge, content, weight = if (on) FontWeight.SemiBold else FontWeight.Normal)
-            }
-        }
-    }
+    val labels = states.map { st -> st.title + if (st.hasCount) vm.counts[st.code]?.let { " $it" }.orEmpty() else "" }
+    SingleChoiceGroup(labels, selected, { vm.select(states[it].code) }, scrollable = true,
+        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

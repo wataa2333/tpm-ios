@@ -1,5 +1,6 @@
 package com.personal.tpm.ui
 
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -17,15 +18,17 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun GlassFilterChip(selected: Boolean, onClick: () -> Unit, label: @Composable () -> Unit,
     modifier: Modifier = Modifier, enabled: Boolean = true) {
-    // Dense selectors share the quiet content level; floating actions retain the optical material.
-    FilterChip(selected, onClick, label, modifier = modifier, enabled = enabled,
-        shape = CircleShape,
+    val accent = MaterialTheme.colorScheme.primary
+    val fill = if (selected) accent else MaterialTheme.colorScheme.surfaceContainerHigh
+    val ink = glassContentColor(accent, accent, MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.onSurface)
+    FilterChip(selected, onClick, label, modifier = if (AppPreferences.liquidGlass)
+        modifier.glassSurface(backdrop = null, shape = CircleShape, tint = fill, prominent = selected, quiet = !selected) else modifier,
+        enabled = enabled, shape = CircleShape,
+        leadingIcon = if (selected) ({ Icon(androidx.compose.material.icons.Icons.Default.Check, null, Modifier.size(16.dp)) }) else null,
         border = if (AppPreferences.liquidGlass) null else FilterChipDefaults.filterChipBorder(enabled, selected),
-        colors = if (AppPreferences.liquidGlass) FilterChipDefaults.filterChipColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .55f),
-            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ) else FilterChipDefaults.filterChipColors())
+        colors = if (AppPreferences.liquidGlass) FilterChipDefaults.filterChipColors(containerColor = Color.Transparent,
+            selectedContainerColor = Color.Transparent, selectedLabelColor = ink, selectedLeadingIconColor = ink,
+            disabledSelectedContainerColor = Color.Transparent) else FilterChipDefaults.filterChipColors())
 }
 
 @Composable

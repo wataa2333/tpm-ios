@@ -60,7 +60,7 @@ class GlassAppearanceTest {
         assertTrue(settings.refraction)
         assertTrue(settings.motion)
         assertFalse(settings.dispersion)
-        assertFalse(settings.shadow)
+        assertTrue(settings.shadow)
         assertEquals(listOf(0f, 2f, 6f, 12f), GlassBlur.entries.map { it.radiusDp })
     }
 

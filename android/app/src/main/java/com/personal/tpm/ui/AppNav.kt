@@ -73,13 +73,16 @@ fun AppNav() {
                     else -> null
                 }
             }.toSet()
-            operators.retainOrders(keys)
+            operators.retainOrders(keys + quick.operationKey)
         }
+    }
+    androidx.compose.runtime.LaunchedEffect(quick.completionAcknowledged, quick.busy) {
+        if (quick.completionAcknowledged && !quick.busy) operators.clear(quick.operationKey)
     }
     // A page change takes Motion.Page; what arrives decelerates, what leaves eases in and out.
     val duration = Motion.Page
     androidx.compose.runtime.CompositionLocalProvider(LocalOperationAccounts provides operators,
-        LocalQuickProgress provides QuickProgress(quick.badge, { quick.showQueue = true; nav.navigate("quick-finish") { launchSingleTop = true } })) {
+        LocalQuickProgress provides QuickProgress(quick.badge, { quick.showProgress = true })) {
     NavHost(
         navController = nav, startDestination = TABS,
         // Slides only, no fade: a fade makes the phone draw the whole page (a long form, a list of cards) into an off-screen buffer and blend it again
@@ -99,7 +102,11 @@ fun AppNav() {
                     openQuery = { field, text -> nav.navigate("list/_?q=" + Uri.encode(text) + "&f=" + field.name) },
                     openDrafts = { nav.navigate(DRAFTS) },
                     openNew = { nav.navigate(newFaultRoute()) },
-                    openQuick = { quick.showQueue = false; nav.navigate("quick-finish") { launchSingleTop = true } },
+                    openQuick = {
+                        if (quick.begun && quick.current != null) nav.navigate("quick-finish") { launchSingleTop = true }
+                        else if (quick.busy) quick.showProgress = true
+                        else quick.discover()
+                    },
                     openDev = { nav.navigate(DEV) { launchSingleTop = true } },
 
                     openDashboard = { nav.navigate("management") },
@@ -203,8 +210,9 @@ fun AppNav() {
         }
 
         composable("quick-finish") {
-            OperationAccountScope(quick.operationKey) { QuickFinishScreen(quick, onBack = { nav.popBackStack() },
-                openOrder = { nav.navigate("fault/" + Uri.encode(it)) }) }
+            OperationAccountScope(quick.operationKey) { QuickFinishScreen(quick, onBack = {
+                if (nav.currentDestination?.route == "quick-finish") nav.popBackStack()
+            }) }
         }
         composable("management") {
             PersonnelManagementScreen(onBack = { nav.popBackStack() }, openOrder = { id -> nav.navigate("fault/" + Uri.encode(id) + "?independent=true") })
@@ -254,6 +262,10 @@ fun AppNav() {
         composable(FLOW, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
             WorkflowScreen(processId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.popBackStack() })
         }
+    }
+    OperationAccountScope(quick.operationKey) {
+        QuickFinishDialogs(quick, openForm = { nav.navigate("quick-finish") { launchSingleTop = true } },
+            openOrder = { nav.navigate("fault/" + Uri.encode(it)) })
     }
     OperationAccountDialog()
     }

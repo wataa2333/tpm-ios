@@ -214,7 +214,8 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
             }
         }
         if (quick != null) DisclosureToggle(extras, if (extras) "收起选填信息" else "选填：辅助维修人、ERP 出库") { extras = !extras }
-        if (extras) {
+        Reveal(extras) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (quick != null) FormTitle("选填信息")
         GroupCard {
             val helpers = jv["repairUsers"].array
@@ -263,6 +264,7 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
                     InputRow("使用数量", use, { use = it; setRows(rows().mapIndexed { i, r -> if (i == index) JSONObject(r.raw.toString()).put("useNum", it.toDoubleOrNull() ?: 0.0) else r.raw }) }, required = true, suffix = materialUnit(material), maximum = maximum)
                 }
             }
+        }
         }
         }
         FormTitle("工作说明")

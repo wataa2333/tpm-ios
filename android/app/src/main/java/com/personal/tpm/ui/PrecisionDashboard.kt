@@ -162,8 +162,6 @@ private fun FlowLegend(counts: List<Int>, colors: List<Color>, missing: Int? = n
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun GradeFilters(selected: String?, onSelect: (String?) -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ChoiceChip(selected == null, { onSelect(null) }, "全部")
-        precisionGrades.forEach { grade -> ChoiceChip(selected == grade, { onSelect(if (selected == grade) null else grade) }, grade) }
-    }
+    val grades = listOf<String?>(null) + precisionGrades
+    SingleChoiceGroup(grades.map { it ?: "全部" }, grades.indexOf(selected), { onSelect(grades[it]) }, scrollable = true)
 }
