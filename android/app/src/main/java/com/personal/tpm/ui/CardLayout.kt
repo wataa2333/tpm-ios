@@ -1,10 +1,5 @@
 package com.personal.tpm.ui
 
-import android.content.Context
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import org.json.JSONObject
 
 enum class CardType(val title: String) {
     Fault("维修工单"), Erp("ERP 出库工单"), TodoFault("维修待办"), TodoErp("ERP 待办"), TodoOther("其他待办"),
@@ -36,95 +31,15 @@ fun cardFields(type: CardType): List<String> = (listOf("状态", "编号", "时�
     CardType.Maintenance, CardType.Precision -> poolCardFields
 }).distinct()
 
-object CardPreferences {
-    private var prefs: android.content.SharedPreferences? = null
-    private var settings by mutableStateOf<Map<String, String>>(emptyMap())
-    fun load(context: Context) {
-        prefs = context.getSharedPreferences("card_layouts", Context.MODE_PRIVATE)
-        settings = runCatching {
-            val json = JSONObject(prefs!!.getString("fields", "{}")!!)
-            json.keys().asSequence().associateWith { json.getString(it) }
-        }.getOrDefault(emptyMap())
-    }
-    fun placement(type: CardType, field: String, default: FieldPlace): FieldPlace =
-        FieldPlace.entries.firstOrNull { it.name == settings["${type.name}|$field"] } ?: default
-    fun set(type: CardType, field: String, place: FieldPlace) {
-        settings = settings + ("${type.name}|$field" to place.name)
-        save()
-    }
-    fun position(type: CardType, field: String): FieldPosition =
-        FieldPosition.entries.firstOrNull { it.name == settings["${type.name}|position:$field"] } ?: FieldPosition.Auto
-    fun setPosition(type: CardType, field: String, position: FieldPosition) {
-        val current = slot(type, field)
-        settings = settings + ("${type.name}|position:$field" to position.name)
-        if (current != null && position in listOf(FieldPosition.Left, FieldPosition.Right))
-            settings = settings + ("${type.name}|slot:$field" to (current / 2 * 2 + if (position == FieldPosition.Right) 1 else 0).toString())
-        else settings = settings - "${type.name}|slot:$field"
-        save()
-    }
-    fun showLabel(type: CardType, field: String) = settings["${type.name}|label:$field"] == "true"
-    fun setShowLabel(type: CardType, field: String, show: Boolean) {
-        settings = settings + ("${type.name}|label:$field" to show.toString()); save()
-    }
-    fun orderedFields(type: CardType): List<String> {
-        val saved = settings["${type.name}|order"].orEmpty().split(";")
-        return (saved.filter { it in cardFields(type) } + cardFields(type)).distinct()
-    }
-    fun move(type: CardType, field: String, delta: Int) {
-        val fields = orderedFields(type).toMutableList()
-        val from = fields.indexOf(field)
-        if (from < 0) return
-        val to = (from + delta).coerceIn(0, fields.lastIndex)
-        fields.removeAt(from); fields.add(to, field)
-        settings = settings + ("${type.name}|order" to fields.joinToString(";")); save()
-    }
-    fun moveRelative(type: CardType, field: String, target: String, after: Boolean) {
-        val fields = reorderCardFields(orderedFields(type), field, target, after)
-        settings = settings + ("${type.name}|order" to fields.joinToString(";")); save()
-    }
-    /** Pairing is a single saved layout operation, including metadata formerly in fixed slots. */
-    fun pair(type: CardType, field: String, target: String, fieldOnRight: Boolean) {
-        if (field == target) return
-        val place = placement(type, target, default(type, target)).takeUnless { it == FieldPlace.Hidden } ?: FieldPlace.Compact
-        val fields = reorderCardFields(orderedFields(type), field, target, fieldOnRight)
-        settings = (settings - "${type.name}|slot:$field" - "${type.name}|slot:$target") + mapOf(
-            "${type.name}|$field" to place.name,
-            "${type.name}|position:$field" to (if (fieldOnRight) FieldPosition.Right else FieldPosition.Left).name,
-            "${type.name}|position:$target" to (if (fieldOnRight) FieldPosition.Left else FieldPosition.Right).name,
-            "${type.name}|order" to fields.joinToString(";")
-        )
-        save()
-    }
-    fun detailButtonPosition(type: CardType): DetailButtonPosition =
-        DetailButtonPosition.entries.firstOrNull { it.name == settings["${type.name}|detailButton"] } ?: DetailButtonPosition.BottomRight
-    fun detailButtonSlot(type: CardType): Int = slot(type, DETAIL_BUTTON)
-        ?: settings["${type.name}|detailButton"]?.let { detailButtonPosition(type).let { p -> (if (p.top) 0 else 4) + if (p.left) 0 else 1 } }
-        ?: 3
-    fun resetDetailButton(type: CardType) {
-        settings = settings - "${type.name}|detailButton" - "${type.name}|slot:$DETAIL_BUTTON"
-        save()
-    }
-    fun setDetailButtonPosition(type: CardType, position: DetailButtonPosition) {
-        settings = settings + mapOf("${type.name}|detailButton" to position.name,
-            "${type.name}|slot:$DETAIL_BUTTON" to ((if (position.top) 0 else 4) + if (position.left) 0 else 1).toString()); save()
-    }
-    fun slot(type: CardType, field: String): Int? = settings["${type.name}|slot:$field"]?.toIntOrNull()?.takeIf { it in 0..5 }
-    fun setSlot(type: CardType, field: String, slot: Int) {
-        val safe = slot.coerceIn(0, 5)
-        fun actualSlot(name: String): Int? = slot(type, name) ?: if (name == DETAIL_BUTTON) detailButtonSlot(type) else null
-        val old = actualSlot(field)
-        val occupant = (cardFields(type) + DETAIL_BUTTON).firstOrNull { it != field && actualSlot(it) == safe }
-        if (occupant != null) {
-            val key = "${type.name}|slot:$occupant"
-            settings = settings + (key to (old ?: (safe xor 1)).toString())
-        }
-        settings = settings + ("${type.name}|slot:$field" to safe.toString())
-        if (field != DETAIL_BUTTON) settings = settings + mapOf("${type.name}|$field" to FieldPlace.Compact.name,
-            "${type.name}|position:$field" to (if (safe % 2 == 0) FieldPosition.Left else FieldPosition.Right).name)
-        save()
-    }
-    fun reset(type: CardType) { settings = settings.filterKeys { !it.startsWith("${type.name}|") }; save() }
-    private fun save() { prefs?.edit()?.putString("fields", JSONObject(settings).toString())?.apply() }
+/** Fixed layouts: old per-device customizations are deliberately no longer read. */
+object FixedCardLayout {
+    fun placement(type: CardType, field: String, default: FieldPlace) = default
+    fun position(type: CardType, field: String) = FieldPosition.Auto
+    fun showLabel(type: CardType, field: String) = false
+    fun orderedFields(type: CardType) = cardFields(type)
+    fun detailButtonPosition(type: CardType) = DetailButtonPosition.BottomRight
+    fun detailButtonSlot(type: CardType) = 3
+    fun slot(type: CardType, field: String): Int? = null
     fun default(type: CardType, field: String): FieldPlace = if (field in listOf("状态", "编号", "时间") || (type == CardType.Stock && field in stockFields)) FieldPlace.Compact else FieldPlace.Detail
 }
 
@@ -162,9 +77,9 @@ fun configureCard(model: CardModel, position: (String) -> FieldPosition = { Fiel
 data class SkeletonPlan(val reference: Boolean, val status: Boolean, val summaryLines: Int, val footer: Boolean, val topButton: Boolean = false)
 fun skeletonPlan(type: CardType, position: (String) -> FieldPosition = { FieldPosition.Auto }, order: List<String> = cardFields(type), buttonPosition: DetailButtonPosition = DetailButtonPosition.BottomRight, choose: (String, FieldPlace) -> FieldPlace): SkeletonPlan {
     val fields = order
-    val compact = fields.filter { (it !in listOf("状态", "编号", "时间") || position(it) != FieldPosition.Auto) && choose(it, CardPreferences.default(type, it)) == FieldPlace.Compact }
+    val compact = fields.filter { (it !in listOf("状态", "编号", "时间") || position(it) != FieldPosition.Auto) && choose(it, FixedCardLayout.default(type, it)) == FieldPlace.Compact }
     val lines = summaryRows(compact.map { it to "" }, position).size
-    val hasDetail = fields.any { choose(it, CardPreferences.default(type, it)) == FieldPlace.Detail }
+    val hasDetail = fields.any { choose(it, FixedCardLayout.default(type, it)) == FieldPlace.Detail }
     return SkeletonPlan(choose("编号", FieldPlace.Compact) == FieldPlace.Compact && position("编号") == FieldPosition.Auto, choose("状态", FieldPlace.Compact) == FieldPlace.Compact && position("状态") == FieldPosition.Auto, lines,
         (choose("时间", FieldPlace.Compact) == FieldPlace.Compact && position("时间") == FieldPosition.Auto) || (hasDetail && !buttonPosition.top), hasDetail && buttonPosition.top)
 }

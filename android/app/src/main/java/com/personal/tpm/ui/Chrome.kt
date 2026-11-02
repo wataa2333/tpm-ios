@@ -180,7 +180,12 @@ fun rememberLoadingReveal(loading: Boolean, pull: Float): LoadingReveal {
 }
 
 @Composable
-fun BoxScope.TopLoadingBar(reveal: LoadingReveal) {
+fun BoxScope.TopLoadingBar(reveal: LoadingReveal, linear: Boolean = false) {
+    if (linear) {
+        if (reveal.fraction > 0f) androidx.compose.material3.LinearProgressIndicator(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(4.dp))
+        return
+    }
     if (reveal.fraction <= 0f) return
     val modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
         .then(if (ThemeConfig.loadingStyle.iconStyle) Modifier.height(28.dp * reveal.fraction).clipToBounds() else Modifier)
@@ -472,7 +477,7 @@ private fun BreathStrip(loading: Boolean, pull: Float, color: Color, modifier: M
  * The plain top bar of a screen that was opened from another (a list, an order): back arrow, title, a smaller line under it, actions.
  */
 @Composable
-fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = null, loading: Boolean = false, pull: Float = 0f, onBack: (() -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
+fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = null, loading: Boolean = false, pull: Float = 0f, onBack: (() -> Unit)? = null, linearLoading: Boolean = false, actions: @Composable RowScope.() -> Unit = {}) {
     val loadingReveal = rememberLoadingReveal(loading, pull)
     val loadingSpace = if (ThemeConfig.loadingStyle.iconStyle) 28.dp * loadingReveal.fraction else 0.dp
     StatusBarIcons(dark = headerColor().luminance() > 0.5f)
@@ -507,7 +512,7 @@ fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = 
                 }
                 actions()
             }
-            TopLoadingBar(loadingReveal)
+            TopLoadingBar(loadingReveal, linearLoading)
         }
     }
 }

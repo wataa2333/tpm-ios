@@ -154,47 +154,49 @@ fun todoCardModel(task: Jv): CardModel {
  * One order. Title, state, reference and time are always there; "展开详情" opens the rest in place (the whole block is one selection area:
  * long-press a value to copy it); tapping the title (or "打开工单") opens the order.
  */
-class CardLayoutEditing(val onFieldClick: (String) -> Unit, val onCompactBounds: (androidx.compose.ui.geometry.Rect) -> Unit, val reserveRows: Boolean = false, val fieldModifier: (String) -> Modifier)
+
 
 @Composable
-fun OrderCard(model: CardModel, expanded: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null, selecting: CardSelecting? = null, editing: CardLayoutEditing? = null, bottomAction: (@Composable () -> Unit)? = null) {
-    val order = CardPreferences.orderedFields(model.cardType)
-    val configured = configureCard(model, { CardPreferences.position(model.cardType, it) }) { field, default -> CardPreferences.placement(model.cardType, field, default) }
+fun OrderCard(model: CardModel, expanded: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null, selecting: CardSelecting? = null, bottomAction: (@Composable () -> Unit)? = null) {
+    val selectionInset by androidx.compose.animation.core.animateDpAsState(
+        if (selecting != null) 40.dp else 0.dp, tween(Motion.Normal, easing = Motion.Change), label = "card selection inset")
+    val order = FixedCardLayout.orderedFields(model.cardType)
+    val configured = configureCard(model, { FixedCardLayout.position(model.cardType, it) }) { field, default -> FixedCardLayout.placement(model.cardType, field, default) }
     val body = listOfNotNull(configured.reference.takeIf { it.isNotEmpty() }?.let { "编号" to it }) +
         configured.summary.sortedBy { order.indexOf(it.first) } + listOfNotNull(configured.time.takeIf { it.isNotEmpty() }?.let { "时间" to it })
-    val buttonSlot = CardPreferences.detailButtonSlot(model.cardType)
+    val buttonSlot = FixedCardLayout.detailButtonSlot(model.cardType)
     val initialGrid = compactLayout(body, configured.facts.isNotEmpty(),
         buttonSlot,
-        { CardPreferences.slot(model.cardType, it) }, { CardPreferences.position(model.cardType, it) })
+        { FixedCardLayout.slot(model.cardType, it) }, { FixedCardLayout.position(model.cardType, it) })
     val grid = if (configured.facts.isEmpty() && initialGrid.overflow.isNotEmpty()) compactLayout(body, true,
         buttonSlot,
-        { CardPreferences.slot(model.cardType, it) }, { CardPreferences.position(model.cardType, it) }) else initialGrid
+        { FixedCardLayout.slot(model.cardType, it) }, { FixedCardLayout.position(model.cardType, it) }) else initialGrid
     val shownModel = configured.copy(facts = (configured.facts + grid.overflow).distinctBy { it.first }.sortedBy { order.indexOf(it.first) })
     val haptic = LocalHapticFeedback.current
     val detailButton: @Composable () -> Unit = {
-        DetailToggle(expanded, { if (editing != null) editing.onFieldClick(DETAIL_BUTTON) else { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onToggle() } }, editing?.fieldModifier?.invoke(DETAIL_BUTTON) ?: Modifier)
+        DetailToggle(expanded, { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onToggle() })
     }
     val tint = if (shownModel.isApproval) approvalColor(shownModel.colorCode) else stateColor(shownModel.colorCode)
     Card(
         // The whole card opens the order (a card with nothing to open expands instead). While orders are being selected it opens a read-only peek.
-        onClick = if (editing != null) ({}) else selecting?.peek ?: onOpen ?: onToggle,
+        onClick = selecting?.peek ?: onOpen ?: onToggle,
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
         // The standard Material shadow (a card at 2 dp, 4 dp while pressed), no outline.
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp, pressedElevation = 0.dp),
     ) {
-        Column(Modifier.padding(CardMetrics.padding)) {
+        Box(Modifier.padding(CardMetrics.padding)) {
+        Column(Modifier.padding(start = selectionInset)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 AnimatedLabel(shownModel.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                if (shownModel.status.isNotEmpty()) AnimatedLabel(shownModel.status, modifier = editing?.fieldModifier?.invoke("状态") ?: Modifier, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = tint, maxLines = 1)
+                if (shownModel.status.isNotEmpty()) AnimatedLabel(shownModel.status, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = tint, maxLines = 1)
             }
             Spacer(Modifier.height(CardMetrics.lineGap))
             Box(Modifier.fillMaxWidth()) {
-                Box(Modifier.padding(start = if (selecting != null) 40.dp else 0.dp)) {
-                    CompactCardGrid(grid.cells, model.cardType, editing, detailButton)
+                Box(Modifier) {
+                    CompactCardGrid(grid.cells, model.cardType, detailButton)
                 }
-                selecting?.let { Box(Modifier.align(Alignment.CenterStart)) { SelectCircle(it) } }
             }
             // The facts open and close with one motion: the space grows (or closes) on an ease-in-out curve, and the rows fade in step, so
             // the cards below move exactly as much as the space does, no earlier and no later (their own placement is not animated a second
@@ -202,22 +204,24 @@ fun OrderCard(model: CardModel, expanded: Boolean, onToggle: () -> Unit, modifie
             Reveal(visible = expanded) {
                 Column(Modifier.padding(top = 8.dp)) {
                     val facts: @Composable () -> Unit = {
-                        FactsGrid(shownModel.facts, model.cardType, editing)
+                        FactsGrid(shownModel.facts, model.cardType)
                     }
-                    if (editing == null) SelectionContainer { facts() } else facts()
+                    SelectionContainer { facts() }
                     if (onOpen != null && selecting == null) Button(onClick = onOpen, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) { Text("打开工单", maxLines = 1) }
-                    if(selecting==null && editing==null) bottomAction?.invoke()
+                    if(selecting==null) bottomAction?.invoke()
                 }
             }
+        }
+        selecting?.let { Box(Modifier.align(Alignment.CenterStart).graphicsLayer { alpha = (selectionInset / 40.dp).coerceIn(0f, 1f) }) { SelectCircle(it) } }
         }
     }
 }
 
 @Composable
-private fun CompactCardGrid(cells: List<CompactCell>, type: CardType, editing: CardLayoutEditing?, button: @Composable () -> Unit) {
+private fun CompactCardGrid(cells: List<CompactCell>, type: CardType, button: @Composable () -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
-    val rows = if (editing?.reserveRows == true) 3 else ((cells.maxOfOrNull { it.slot / 2 } ?: -1) + 1)
-    Column(Modifier.fillMaxWidth().onGloballyPositioned { editing?.onCompactBounds?.invoke(it.boundsInRoot()) }) {
+    val rows = (cells.maxOfOrNull { it.slot / 2 } ?: -1) + 1
+    Column(Modifier.fillMaxWidth()) {
         repeat(rows) { row ->
             Box(Modifier.fillMaxWidth().height(CardMetrics.footerHeight + CardMetrics.lineGap)) {
                 val content = cells.filter { it.slot / 2 == row }.sortedBy { it.slot }
@@ -231,8 +235,8 @@ private fun CompactCardGrid(cells: List<CompactCell>, type: CardType, editing: C
                     parts.forEach { cell ->
                         if (cell == null) Text("·", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         else if (cell.field == DETAIL_BUTTON) button()
-                        else AnimatedLabel((if (CardPreferences.showLabel(type, cell.field)) cell.field + " " else "") + cell.value,
-                            modifier = editing?.fieldModifier?.invoke(cell.field) ?: Modifier,
+                        else AnimatedLabel((if (FixedCardLayout.showLabel(type, cell.field)) cell.field + " " else "") + cell.value,
+                            modifier = Modifier,
                             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     }
@@ -255,10 +259,7 @@ private fun CompactCardGrid(cells: List<CompactCell>, type: CardType, editing: C
                         }
                     }
                 }
-                if (editing != null) androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(CardMetrics.footerHeight + CardMetrics.lineGap)) {
-                    val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 5.dp.toPx()))
-                    drawLine(accent.copy(alpha = .35f), androidx.compose.ui.geometry.Offset(0f, size.height - 1), androidx.compose.ui.geometry.Offset(size.width, size.height - 1), pathEffect = dash)
-                }
+
             }
         }
     }
@@ -323,15 +324,15 @@ private fun SelectCircle(selecting: CardSelecting) {
 
 /** The lines a card always shows, in as few rows as fit: two short ones side by side, a long one alone; one line each, cut with "…". */
 @Composable
-private fun SummaryGrid(items: List<Pair<String, String>>, type: CardType, editing: CardLayoutEditing?) {
-    val rows = summaryRows(items) { CardPreferences.position(type, it) }
+private fun SummaryGrid(items: List<Pair<String, String>>, type: CardType) {
+    val rows = summaryRows(items) { FixedCardLayout.position(type, it) }
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         rows.forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEachIndexed { index, (label, value) ->
                     if (index == 1 && row.all { it.first.isNotEmpty() }) Text("·", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(Modifier.weight(1f, fill = false).then(if (label.isEmpty()) Modifier else editing?.fieldModifier?.invoke(label) ?: Modifier)) {
-                        if (label.isNotEmpty() && CardPreferences.showLabel(type, label)) {
+                    Row(Modifier.weight(1f, fill = false)) {
+                        if (label.isNotEmpty() && FixedCardLayout.showLabel(type, label)) {
                             AnimatedLabel(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false)
                             Spacer(Modifier.width(6.dp))
                         }
@@ -344,15 +345,15 @@ private fun SummaryGrid(items: List<Pair<String, String>>, type: CardType, editi
 }
 
 @Composable
-private fun FactsGrid(items: List<Pair<String, String>>, type: CardType, editing: CardLayoutEditing?) {
-    val rows = summaryRows(items) { field -> CardPreferences.position(type, field).let { if (it == FieldPosition.Auto) FieldPosition.Full else it } }
+private fun FactsGrid(items: List<Pair<String, String>>, type: CardType) {
+    val rows = summaryRows(items) { field -> FixedCardLayout.position(type, field).let { if (it == FieldPosition.Auto) FieldPosition.Full else it } }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         rows.forEach { row ->
-            if (row.size == 1) PlainFact(row[0].first, row[0].second, editing?.fieldModifier?.invoke(row[0].first) ?: Modifier)
+            if (row.size == 1) PlainFact(row[0].first, row[0].second)
             else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEachIndexed { index, (label, value) ->
                     if (index == 1 && row.all { it.first.isNotEmpty() }) Text("·", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Column(Modifier.weight(1f, fill = false).then(if (label.isEmpty()) Modifier else editing?.fieldModifier?.invoke(label) ?: Modifier)) {
+                    Column(Modifier.weight(1f, fill = false)) {
                         if (label.isNotEmpty()) {
                             AnimatedLabel(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             AnimatedLabel(value, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -375,11 +376,11 @@ private fun PlainFact(label: String, value: String, modifier: Modifier = Modifie
 /** A grey stand-in for a card while the first page loads: a soft light sweeps across it, and it fades out as the real cards come in. */
 @Composable
 fun SkeletonCard(modifier: Modifier = Modifier, cardType: CardType = CardType.Fault) {
-    val plan = skeletonPlan(cardType, { CardPreferences.position(cardType, it) }, CardPreferences.orderedFields(cardType), CardPreferences.detailButtonPosition(cardType)) { field, default -> CardPreferences.placement(cardType, field, default) }
-    val preview = configureCard(previewCard(cardType), { CardPreferences.position(cardType, it) }) { field, default -> CardPreferences.placement(cardType, field, default) }
+    val plan = skeletonPlan(cardType, { FixedCardLayout.position(cardType, it) }, FixedCardLayout.orderedFields(cardType), FixedCardLayout.detailButtonPosition(cardType)) { field, default -> FixedCardLayout.placement(cardType, field, default) }
+    val preview = configureCard(previewCard(cardType), { FixedCardLayout.position(cardType, it) }) { field, default -> FixedCardLayout.placement(cardType, field, default) }
     val body = listOfNotNull(preview.reference.takeIf { it.isNotEmpty() }?.let { "编号" to it }) + preview.summary +
         listOfNotNull(preview.time.takeIf { it.isNotEmpty() }?.let { "时间" to it })
-    val grid = compactLayout(body, preview.facts.isNotEmpty(), CardPreferences.detailButtonSlot(cardType), { CardPreferences.slot(cardType, it) }, { CardPreferences.position(cardType, it) })
+    val grid = compactLayout(body, preview.facts.isNotEmpty(), FixedCardLayout.detailButtonSlot(cardType), { FixedCardLayout.slot(cardType, it) }, { FixedCardLayout.position(cardType, it) })
     val bodyRows = (grid.cells.maxOfOrNull { it.slot / 2 } ?: -1) + 1
     val transition = rememberInfiniteTransition(label = "shimmer")
     val x by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Restart), label = "x")

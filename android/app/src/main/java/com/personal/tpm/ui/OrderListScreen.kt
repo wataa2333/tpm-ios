@@ -151,19 +151,11 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
                                 )
                             }
                         }
-                        // Another status slides in from the side it lies on in the strip (the next one from the right), with grey cards while it loads.
-                        val statusOrder = FaultState.entries.map { it.code }
-                        androidx.compose.animation.AnimatedContent(
-                            targetState = vm.state,
-                            transitionSpec = {
-                                val forward = statusOrder.indexOf(targetState) >= statusOrder.indexOf(initialState)
-                                val curve = androidx.compose.animation.core.FastOutSlowInEasing
-                                (androidx.compose.animation.slideInHorizontally(tween(Motion.Slow, easing = Motion.Change)) { if (forward) it else -it } + androidx.compose.animation.fadeIn(tween(Motion.Normal, easing = Motion.Change))) togetherWith
-                                    (androidx.compose.animation.slideOutHorizontally(tween(Motion.Slow, easing = Motion.Change)) { if (forward) -it else it } + androidx.compose.animation.fadeOut(tween(Motion.Fast, easing = Motion.Change)))
-                            },
-                            modifier = Modifier.weight(1f).fillMaxWidth(), label = "status",
-                        ) { stateCode ->
+                        // Keep the filters and page identity stable when changing category.
+                        Box(Modifier.weight(1f).fillMaxWidth()) {
+                        val stateCode = vm.state
                         val listState = rememberLazyListState()
+                        LaunchedEffect(stateCode) { listState.scrollToItem(0) }
                         AutoLoadMore(listState, vm.rows.size, stateCode == vm.state && !vm.loading && !vm.last && vm.error == null) { vm.loadMore() }
                         if (stateCode == vm.state) SideEffect { activeList = listState }
                         PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.reload(pull = true) }, state = pull, indicator = {}, modifier = Modifier.fillMaxSize()) {

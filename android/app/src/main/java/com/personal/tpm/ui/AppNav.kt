@@ -92,7 +92,7 @@ fun AppNav() {
                             showDeveloperPassword=true
                         }
                     },
-                    openCards = { nav.navigate("card-settings") },
+
                     openDashboard = { nav.navigate("management") },
                     openPrecision = { nav.navigate("precision-dashboard") },
                     openQuerySettings = { nav.navigate("query-account-settings") },
@@ -180,9 +180,9 @@ fun AppNav() {
                 onSubmitted = { nav.navigate("task/Fault/" + Uri.encode(id) + "?ret=false") { popUpTo(REPAIR) { inclusive = true } } },
             )
         }
-        composable("card-settings") { CardSettingsScreen { nav.popBackStack() } }
+
         composable("management") {
-            ManagementScreen(onBack = { nav.popBackStack() }, openOrder = { id -> nav.navigate("fault/" + Uri.encode(id) + "?independent=true") })
+            PersonnelManagementScreen(onBack = { nav.popBackStack() }, openOrder = { id -> nav.navigate("fault/" + Uri.encode(id) + "?independent=true") })
         }
         composable("query-account-settings") { QueryAccountSettingsScreen { nav.popBackStack() } }
         composable("precision-dashboard") { PrecisionDashboard(onBack = { nav.popBackStack() }, openAsset = { nav.navigate("precision-asset/" + Uri.encode(it)) }) }
