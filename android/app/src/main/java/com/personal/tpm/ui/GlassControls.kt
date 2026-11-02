@@ -20,6 +20,7 @@ fun GlassFilterChip(selected: Boolean, onClick: () -> Unit, label: @Composable (
         modifier.glassSurface(backdrop = null, shape = shape,
             tint = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface) else modifier,
         enabled = enabled, shape = shape,
+        border = if (AppPreferences.liquidGlass) null else FilterChipDefaults.filterChipBorder(enabled, selected),
         colors = if (AppPreferences.liquidGlass) FilterChipDefaults.filterChipColors(containerColor = Color.Transparent,
             selectedContainerColor = Color.Transparent, disabledContainerColor = Color.Transparent) else FilterChipDefaults.filterChipColors())
 }

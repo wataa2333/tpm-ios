@@ -21,7 +21,6 @@ class TpmApp : Application() {
         super.onCreate()
         ThemeConfig.load(this)
         com.personal.tpm.ui.AppPreferences.load(this)
-        com.personal.tpm.ui.CardPreferences.load(this)
         com.personal.tpm.ui.Motion.load(this)
         session = Session(this)
         vault = AccountVault(this)

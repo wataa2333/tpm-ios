@@ -3,7 +3,7 @@ package com.personal.tpm.ui
 import org.junit.Assert.*
 import org.junit.Test
 
-class CardPreferencesTest {
+class CardLayoutTest {
     @Test fun inlineFieldsUseNaturalWidthsAndOnlyShrinkWhenNecessary() {
         assertEquals(listOf(210,40),inlineCardWidths(listOf(210,40),340))
         assertEquals(listOf(300,40),inlineCardWidths(listOf(400,40),340))
@@ -131,23 +131,7 @@ class CardPreferencesTest {
         assertEquals(listOf("左字段" to "B", "右字段" to "C"), rows.last())
         assertEquals(2, rows.size)
     }
-    @Test fun pairingMovesFixedMetadataIntoSameBodyRowAndPreservesIdentity() {
-        val type = CardType.Fault
-        CardPreferences.reset(type)
-        try {
-            CardPreferences.pair(type, "时间", "编号", true)
-            val projected = configureCard(model, { CardPreferences.position(type, it) }) { f, d -> CardPreferences.placement(type, f, d) }
-            assertEquals("", projected.reference)
-            assertEquals("", projected.time)
-            assertEquals(model.openId, projected.openId)
-            val order = CardPreferences.orderedFields(type)
-            val rows = summaryRows(projected.summary.sortedBy { order.indexOf(it.first) }) { CardPreferences.position(type, it) }
-            assertEquals(listOf("编号" to "编号001", "时间" to "日期"), rows.single())
-            val skeleton = skeletonPlan(type, { CardPreferences.position(type, it) }, order) { f, d -> CardPreferences.placement(type, f, d) }
-            assertEquals(1, skeleton.summaryLines)
-            assertFalse(skeleton.reference)
-        } finally { CardPreferences.reset(type) }
-    }
+
 
     @Test fun compactGridCapsThreeBodyRowsAndKeepsOverflow() {
         val items = (1..10).map { "字段$it" to "值$it" }
@@ -164,15 +148,7 @@ class CardPreferencesTest {
         assertEquals(5, snapCompactSlot(androidx.compose.ui.geometry.Offset(230f, 420f), area, 32f))
         assertNull(snapCompactSlot(androidx.compose.ui.geometry.Offset(250f, 450f), area, 32f))
     }
-    @Test fun fieldCanTakeDefaultButtonSlotWithoutDisappearing() {
-        CardPreferences.reset(CardType.Fault)
-        try {
-            CardPreferences.setSlot(CardType.Fault, "报修人", 3)
-            val layout = compactLayout(listOf("报修人" to "张三"), true, slot = { CardPreferences.slot(CardType.Fault, it) })
-            assertEquals(3, layout.cells.single { it.field == "报修人" }.slot)
-            assertEquals(2, layout.cells.single { it.field == DETAIL_BUTTON }.slot)
-        } finally { CardPreferences.reset(CardType.Fault) }
-    }
+
 
     @Test fun defaultCardHasTwoBodyRowsAndNoRepeatedAssetCode() {
         val card = model.copy(reference = "A001 · T21", facts = listOf("资产编码" to "A001", "资产名称" to "设备"))
@@ -185,15 +161,6 @@ class CardPreferencesTest {
         assertTrue(hiddenReference.facts.contains("资产编码" to "A001"))
     }
 
-    @Test fun defaultButtonMovesWithoutOverwritingCustomPlacement() {
-        CardPreferences.reset(CardType.Fault)
-        try {
-            assertEquals(3, CardPreferences.detailButtonSlot(CardType.Fault))
-            CardPreferences.setSlot(CardType.Fault, DETAIL_BUTTON, 5)
-            assertEquals(5, CardPreferences.detailButtonSlot(CardType.Fault))
-            CardPreferences.resetDetailButton(CardType.Fault)
-            assertEquals(3, CardPreferences.detailButtonSlot(CardType.Fault))
-        } finally { CardPreferences.reset(CardType.Fault) }
-    }
+
 
 }

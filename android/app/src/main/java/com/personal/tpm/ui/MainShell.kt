@@ -41,7 +41,6 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Checklist
-import androidx.compose.material.icons.filled.ViewQuilt
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Add
@@ -114,7 +113,7 @@ private typealias Tab = GlassTab
 @Composable
 fun MainShell(
     openList: (String) -> Unit, openPool: (PoolKind) -> Unit, openOrder: (OrderKind, String) -> Unit,
-    openWork: (WorkList) -> Unit, openQuery: (com.personal.tpm.data.FaultSearchField, String) -> Unit, openDrafts: () -> Unit, openNew: () -> Unit, openDev: () -> Unit, openCards: () -> Unit, openDashboard: () -> Unit, openPrecision: () -> Unit, openQuerySettings: () -> Unit,
+    openWork: (WorkList) -> Unit, openQuery: (com.personal.tpm.data.FaultSearchField, String) -> Unit, openDrafts: () -> Unit, openNew: () -> Unit, openDev: () -> Unit, openDashboard: () -> Unit, openPrecision: () -> Unit, openQuerySettings: () -> Unit,
 ) {
     val session = LocalSession.current
     val auth by session.auth.collectAsState()
@@ -183,8 +182,8 @@ fun MainShell(
             ) { if (AppPreferences.liquidGlass) {
                 val tint = MaterialTheme.colorScheme.primaryContainer
                 GlassActionButton(onClick = openNew,
-                    modifier = Modifier.heightIn(min = 56.dp).glassSurface(tint = tint, prominent = true),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)) {
+                    modifier = Modifier.heightIn(min = 56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = tint, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)) {
                     Icon(Icons.Filled.Add, contentDescription = null)
                     androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
                     Text("新建报修")
@@ -239,7 +238,7 @@ fun MainShell(
                                 0 -> HomeTab(homeVm, gridState, pull, nested, openList, openPool)
                                 1 -> TodoTab(todoVm, todoState, pull, nested, openOrder)
                                 2 -> WorkspaceTab(workspaceVm, workspaceGrid, pull, nested, openWork, openQuery, openDashboard, openPrecision)
-                                3 -> MineTab(session, nested, onBusy = { mineBusy = it }, onChooseFactory = { choosingFactory = true }, openDrafts = openDrafts, openCards = openCards, openDev = openDev, openQuerySettings = openQuerySettings)
+                                3 -> MineTab(session, nested, onBusy = { mineBusy = it }, onChooseFactory = { choosingFactory = true }, openDrafts = openDrafts, openDev = openDev, openQuerySettings = openQuerySettings)
                                 else -> Placeholder(tabs[tab].title)
                             }
                             }
@@ -354,7 +353,7 @@ private fun FactorySheet(session: Session, onDismiss: () -> Unit, onPick: (Strin
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Unit, onChooseFactory: () -> Unit, openDrafts: () -> Unit, openCards: () -> Unit, openDev: () -> Unit, openQuerySettings: () -> Unit) {
+private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Unit, onChooseFactory: () -> Unit, openDrafts: () -> Unit, openDev: () -> Unit, openQuerySettings: () -> Unit) {
     val vault = LocalVault.current
     val context = LocalContext.current
     val auth by session.auth.collectAsState()
@@ -482,15 +481,7 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
                 )
             }
             SectionTitle("外观")
-            GroupCard {
-                ListItem(
-                    modifier = Modifier.clickable(onClick = openCards), colors = transparentRow,
-                    headlineContent = { Text("卡片自定义") },
-                    supportingContent = { Text("按类型设置缩略卡片与展开详情的字段") },
-                    leadingContent = { Icon(Icons.Filled.ViewQuilt, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
-                )
-            }
+
             GroupCard {
                 ListItem(
                     modifier = Modifier.clickable { pickingAccent = true },
