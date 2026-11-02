@@ -101,12 +101,10 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
             data = copy
             loaded = true
             // A draft of this order's result is put back over the fresh record.
-            store.drafts(scopeKey, DraftTarget.Order(faultId)).firstOrNull()?.let { draft ->
+            if (quick == null) store.drafts(scopeKey, DraftTarget.Order(faultId)).firstOrNull()?.let { draft ->
                 val merged = JSONObject(data.toString())
                 for (key in draftKeys) if (draft.data.has(key)) merged.put(key, draft.data.get(key))
                 data = merged; draftId = draft.id
-                if (quick != null) approvers = com.personal.tpm.data.inheritedQuickApprovers(prepared!!.nodes, approvers,
-                    prepared!!.nodes.associate { com.personal.tpm.data.quickApproverKey(it) to draft.selections[it["variableName"].text].orEmpty() })
                 scope.launch { snackbar.showSnackbar("已加载上次保存的草稿（" + draft.title + "）") }
             }
             quick?.restored?.let { edit ->

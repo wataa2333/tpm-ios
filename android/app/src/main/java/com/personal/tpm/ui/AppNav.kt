@@ -103,9 +103,8 @@ fun AppNav() {
                     openDrafts = { nav.navigate(DRAFTS) },
                     openNew = { nav.navigate(newFaultRoute()) },
                     openQuick = {
-                        if (quick.begun && quick.current != null) nav.navigate("quick-finish") { launchSingleTop = true }
-                        else if (quick.busy) quick.showProgress = true
-                        else quick.discover()
+                        if (quick.loading || quick.signing) quick.showProgress = true
+                        else { operators.clear(quick.operationKey); quick.discover() }
                     },
                     openDev = { nav.navigate(DEV) { launchSingleTop = true } },
 

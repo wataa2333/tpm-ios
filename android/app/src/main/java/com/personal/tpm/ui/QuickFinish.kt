@@ -1,5 +1,14 @@
 package com.personal.tpm.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.SizeTransform
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,7 +29,7 @@ import java.util.UUID
 
 enum class QuickJobState { Queued, Running, Done, Failed, Review }
 class QuickFinishJob(val item: BatchItem, val taskId: String, val frozen: String,
-    val choices: Map<String, List<String>>, var actor: Session, val draftId: String, val draftScope: String) {
+    val choices: Map<String, List<String>>, var actor: Session, val draftId: String, val draftScope: String, val round: Int) {
     var state by mutableStateOf(QuickJobState.Queued)
     var message by mutableStateOf("")
     var wrote = false
@@ -36,6 +45,8 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
     var showProgress by mutableStateOf(false)
     var completionAcknowledged by mutableStateOf(true); private set
     val signFailures = mutableStateListOf<String>()
+    private var round by mutableIntStateOf(0)
+    private val roundJobs get() = jobs.filter { it.round == round }
     var signing by mutableStateOf(false); private set
     var signProgress by mutableStateOf(""); private set
     var failure by mutableStateOf<String?>(null)
@@ -54,6 +65,7 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
     private var valid = true
     val current get() = items.getOrNull(position)
     val busy get() = signing || loading || jobs.any { it.state == QuickJobState.Queued || it.state == QuickJobState.Running }
+    val formBadge: String? get() = if (quickSubmissionActive(roundJobs.map { it.state })) badge else quickPreviousResult(roundJobs.map { it.state }) ?: badge
     val badge: String? get() = when {
         loading -> "读取待办…"
         signing -> signProgress
@@ -71,19 +83,25 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
         } }
     }
     private fun engine(actor: Session) = QuickRepairEngine(LiveBatchApi(actor, prefs))
-    val completionReady get() = quickCompletionReady(begun, current != null, busy, completionAcknowledged)
-    val summary get() = quickRunSummary(jobs.map { it.state }, skipped.size, signFailures.size)
-    fun acknowledgeCompletion() { completionAcknowledged = true; visible = false }
+    val completionReady get() = quickCompletionReady(begun, current != null, loading || signing || quickSubmissionActive(roundJobs.map { it.state }), completionAcknowledged)
+    val summary get() = quickRunSummary(roundJobs.map { it.state }, skipped.size, signFailures.size)
+    fun acknowledgeCompletion() { completionAcknowledged = true; visible = quickSubmissionActive(jobs.map { it.state }) }
     fun discover() {
-        if (busy || !valid || (begun && current != null)) return
-        protectedOrders += jobs.filter { it.state != QuickJobState.Failed }.map { it.item.id }
-        jobs.clear(); skipped.clear(); signFailures.clear(); edits.clear()
+        if (loading || signing || !valid) return
+        protectedOrders += jobs.filter { it.state == QuickJobState.Review }.map { it.item.id }
+        // Submitted jobs keep their frozen actor while the next run reads fresh server state.
+        jobs.removeAll { it.state == QuickJobState.Done || it.state == QuickJobState.Failed }
+        round++
+        items = emptyList(); position = 0
+        skipped.clear(); signFailures.clear(); edits.clear(); previous.clear()
         completionAcknowledged = false
         loading = true; failure = null; begun = false; showProgress = false
+        val blockedAtStart = jobs.filter { quickBlocksNewRun(it.state) }.map { it.item.id }.toSet()
         preparation = viewModelScope.launch {
             try {
                 val pending = engine(owner).pending()
-                items = pending.filter { it.id !in protectedOrders }; position = 0; confirming = true
+                val blocked = protectedOrders + blockedAtStart + jobs.filter { quickBlocksNewRun(it.state) }.map { it.item.id }
+                items = pending.filter { it.id !in blocked }; position = 0; confirming = true
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { failure = e.message ?: "读取待办失败" }
             finally { loading = false }
@@ -125,6 +143,7 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
         }
     }
     suspend fun enqueue(prepared: QuickRepairPrepared, data: JSONObject, choices: Map<String, List<String>>, actor: Session, existingDraft: QuickDraftRef?) {
+        val submittingRound = round
         check(valid && owner.signedIn) { "当前操作已失效" }
         check(current?.id == prepared.item.id) { "当前工单已切换，请勿重复提交" }
         check(jobs.none { it.item.id == prepared.item.id && it.state != QuickJobState.Failed }) { "此工单已在提交队列中" }
@@ -135,9 +154,9 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
         val draftId = existingDraft?.id ?: UUID.randomUUID().toString(); val draftScope = existingDraft?.scope ?: actor.repairDraftScope
         withContext(Dispatchers.IO) { drafts.save(FormDraft(id = draftId, data = JSONObject(frozen), selections = choices, orderId = prepared.item.id,
             orderSn = prepared.detail["sn"].text.ifEmpty { null }), draftScope) }
-        check(valid) { "账号已改变，内容已保存为草稿" }
+        check(valid && round == submittingRound && current?.id == prepared.item.id) { "当前操作已改变，内容已保存为草稿" }
         jobs.removeAll { it.item.id == prepared.item.id && it.state == QuickJobState.Failed }
-        jobs += QuickFinishJob(prepared.item, prepared.task["id"].text, frozen, choices.mapValues { it.value.toList() }, actor, draftId, draftScope)
+        jobs += QuickFinishJob(prepared.item, prepared.task["id"].text, frozen, choices.mapValues { it.value.toList() }, actor, draftId, draftScope, submittingRound)
         edits.remove(prepared.item.id)
         visible = true; advance(); startWorker()
     }
@@ -204,6 +223,19 @@ fun QuickQueueCapsule() {
     }
 }
 
+fun quickBlocksNewRun(state: QuickJobState) = state == QuickJobState.Queued || state == QuickJobState.Running || state == QuickJobState.Review
+
+fun quickPreviousResult(states: List<QuickJobState>): String? {
+    if (quickSubmissionActive(states)) return null
+    val label = when(states.lastOrNull()) {
+        QuickJobState.Done -> "上一单已提交"
+        QuickJobState.Failed -> "上一单提交失败"
+        QuickJobState.Review -> "上一单结果待核对"
+        else -> return null
+    }
+    return "$label · ${states.count { it == QuickJobState.Done }}/${states.size}"
+}
+
 fun quickSubmissionActive(states: List<QuickJobState>) = states.any { it == QuickJobState.Queued || it == QuickJobState.Running }
 
 fun quickCompletionReady(begun: Boolean, hasCurrent: Boolean, busy: Boolean, acknowledged: Boolean) =
@@ -219,23 +251,49 @@ fun quickRunSummary(states: List<QuickJobState>, skipped: Int, signFailed: Int) 
     states.count { it == QuickJobState.Done }, states.count { it == QuickJobState.Failed },
     states.count { it == QuickJobState.Review }, skipped, signFailed)
 
+private data class QuickFormPage(val item: BatchItem, val index: Int, val total: Int)
+
 @Composable
 fun QuickFinishScreen(model: QuickFinishViewModel, onBack: () -> Unit) {
     val actor = LocalSession.current
+    val focus = LocalFocusManager.current
+    val progress = LocalQuickProgress.current
     val current = model.current
-    var lastItem by remember { mutableStateOf(current) }
-    if (current != null) lastItem = current
-    // Retain the last form while the native back transition removes this destination.
-    val item = current ?: lastItem
+    val currentPage = current?.let { QuickFormPage(it, model.position + 1, model.items.size) }
+    var lastPage by remember { mutableStateOf(currentPage) }
+    if (currentPage != null) lastPage = currentPage
+    val page = currentPage ?: lastPage
     LaunchedEffect(current?.id, model.begun) { if (model.begun && current == null) onBack() }
-    if (item != null && model.begun && !model.signing) key(item.id) {
-        RepairFormScreen(item.id, onClose = onBack, onSubmitted = {}, quick = QuickRepairContext(
-            restored = model.editFor(item.id), retainEdit = { model.retainEdit(item.id, it) },
-            prepare = { model.prepare(item, actor) },
-            enqueue = { prepared, data, choices, draft -> model.enqueue(prepared, data, choices, actor, draft) },
-            rememberApprovers = model::rememberApprovers, onSkip = model::skip,
-            position = "${minOf(model.position + 1, model.items.size)}/${model.items.size}",
-        ))
+    if (page != null && model.begun && !model.signing) {
+        val change = updateTransition(page, label = "quick form page")
+        val moving = change.currentState != change.targetState || change.isRunning
+        CompositionLocalProvider(LocalQuickProgress provides QuickProgress(model.formBadge, progress.open),
+            LocalOperationLocked provides moving) {
+            Box(Modifier.fillMaxSize().clipToBounds()) {
+                change.AnimatedContent(transitionSpec = {
+                    (slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(Motion.Normal, easing = Motion.Arrive)) togetherWith
+                        slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(Motion.Normal, easing = Motion.Leave)))
+                        .using(SizeTransform(clip = false))
+                }, contentKey = { it.item.id }, modifier = Modifier.fillMaxSize()) { shown ->
+                    // Capture the outgoing page and its position until its exit animation finishes.
+                    RepairFormScreen(shown.item.id, onClose = onBack, onSubmitted = {}, quick = QuickRepairContext(
+                        restored = model.editFor(shown.item.id), retainEdit = { model.retainEdit(shown.item.id, it) },
+                        prepare = { model.prepare(shown.item, actor) },
+                        enqueue = { prepared, data, choices, draft ->
+                            model.enqueue(prepared, data, choices, actor, draft)
+                            focus.clearFocus()
+                        },
+                        rememberApprovers = model::rememberApprovers,
+                        onSkip = { if (model.current?.id == shown.item.id) { focus.clearFocus(); model.skip() } },
+                        position = "${shown.index}/${shown.total}",
+                    ))
+                }
+                // While two forms are on screen, neither can receive an accidental second submission.
+                if (moving) Box(Modifier.matchParentSize().pointerInput(Unit) {
+                    awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
+                })
+            }
+        }
     }
 }
 
@@ -277,9 +335,6 @@ fun QuickFinishDialogs(model: QuickFinishViewModel, openForm: () -> Unit, openOr
                 model.signFailures.forEach { message -> item { Text(message, style = MaterialTheme.typography.bodySmall) } }
             }
         },
-        confirmButton = { GlassTextButton(onClick = { model.showProgress = false }) { Text("关闭") } },
-        dismissButton = if (model.current != null && model.begun && !model.signing) ({
-            GlassTextButton(onClick = { model.showProgress = false; openForm() }) { Text("继续填写") }
-        }) else null)
+        confirmButton = { GlassTextButton(onClick = { model.showProgress = false }) { Text("关闭") } })
     model.failure?.let { ErrorDialog("快速完成提示", it) { model.failure = null } }
 }

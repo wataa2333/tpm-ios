@@ -4,6 +4,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class QuickCompletionTest {
+    @Test fun previousOrderResultRemainsAvailableInsideTheWizard() {
+        assertNull(quickPreviousResult(emptyList()))
+        assertNull(quickPreviousResult(listOf(QuickJobState.Running)))
+        assertEquals("上一单已提交 · 1/1", quickPreviousResult(listOf(QuickJobState.Done)))
+        assertEquals("上一单提交失败 · 0/1", quickPreviousResult(listOf(QuickJobState.Failed)))
+        assertEquals("上一单结果待核对 · 0/1", quickPreviousResult(listOf(QuickJobState.Review)))
+    }
+    @Test fun newRunsExcludeInflightOrUncertainWritesButAllowFreshServerChecks() {
+        assertTrue(quickBlocksNewRun(QuickJobState.Queued))
+        assertTrue(quickBlocksNewRun(QuickJobState.Running))
+        assertTrue(quickBlocksNewRun(QuickJobState.Review))
+        assertFalse(quickBlocksNewRun(QuickJobState.Done))
+        assertFalse(quickBlocksNewRun(QuickJobState.Failed))
+    }
     @Test fun completedOrFailedJobsCannotLeaveAnIdleProgressBadge() {
         assertFalse(quickSubmissionActive(emptyList()))
         assertFalse(quickSubmissionActive(listOf(QuickJobState.Done, QuickJobState.Failed, QuickJobState.Review)))

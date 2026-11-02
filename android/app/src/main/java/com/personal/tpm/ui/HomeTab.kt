@@ -160,7 +160,7 @@ fun SectionTitle(text: String) {
 /** A soft round badge with the icon in the card's colour. */
 @Composable
 fun Badge(icon: ImageVector, tint: Color) {
-    Box(Modifier.size(40.dp).clip(CircleShape).background(tint.copy(alpha = 0.14f)), Alignment.Center) { Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp)) }
+    Box(Modifier.size(52.dp).clip(CircleShape).background(tint.copy(alpha = 0.14f)), Alignment.Center) { Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(28.dp)) }
 }
 
 val cardElevation @Composable get() = CardDefaults.cardElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
