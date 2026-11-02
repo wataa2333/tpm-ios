@@ -149,6 +149,7 @@ fun ReferenceSheet(
     var loadingMore by remember { mutableStateOf(false) }
     var last by remember { mutableStateOf(true) }
     var selecting by remember { mutableStateOf(false) }
+    var closing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
     var committed by remember { mutableStateOf("") }
@@ -197,9 +198,18 @@ fun ReferenceSheet(
     }
 
     fun entryOf(value: Jv) = PickerEntry(referenceKey(source, value), if (source == RefSource.OutboundMaterials) value["material"].label else value.label, value)
-    fun finish() { scope.launch { sheetState.hide(); onDismiss() } }
+    suspend fun dismiss(afterHidden: () -> Unit = {}) {
+        if (closing) return
+        closing = true
+        try {
+            sheetState.hide()
+            afterHidden()
+            onDismiss()
+        } finally { closing = false }
+    }
+    fun finish() { scope.launch { dismiss() } }
     fun choose(value: Jv) {
-        if (selecting) return
+        if (selecting || closing) return
         val key = entryOf(value).key
         if (multiple && key in picked) {
             (onRemove ?: onToggle)(value)
@@ -213,12 +223,17 @@ fun ReferenceSheet(
         scope.launch {
             try {
                 val result = resolveReference(session, source, value)
+                if (closing) return@launch
                 if (!multiple && source.hasMenu) lists = PickerRules.record(entryOf(value), lists).also { prefs.save(scopeKey, source, it) }
                 UserNames.remember(value)
-                onToggle(result)
                 if (multiple) {
+                    onToggle(result)
                     picked = picked + key
-                } else finish()
+                } else {
+                    picked = setOf(key)
+                    // A selection callback may remove the host; run it only after the native sheet exits.
+                    dismiss { onToggle(result) }
+                }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { error = e.message ?: "选择失败" }
             finally { selecting = false }
@@ -304,7 +319,7 @@ fun ReferenceSheet(
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.9f)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 AnimatedLabel(source.title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                GlassTextButton(onClick = onDismiss) { AnimatedLabel(if (multiple) "完成（${picked.size}）" else "关闭") }
+                GlassTextButton(onClick = ::finish, enabled = !closing) { AnimatedLabel(if (multiple) "完成（${picked.size}）" else "关闭") }
             }
             SearchField(
                 query, { query = it }, if (modes.isEmpty()) "搜索" else "搜索" + searchMode.label(source),

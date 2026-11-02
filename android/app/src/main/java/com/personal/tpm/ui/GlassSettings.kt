@@ -17,6 +17,11 @@ fun GlassEffectSettings() {
     val supportsBlur = rendering == GlassRendering.Blur || rendering == GlassRendering.Liquid
     val supportsLens = rendering == GlassRendering.Liquid
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("背景采样", style = MaterialTheme.typography.titleSmall)
+        SingleChoiceGroup(GlassSampling.entries.map { it.label }, effects.sampling.ordinal,
+            { AppPreferences.updateGlassEffects(effects.copy(sampling = GlassSampling.entries[it])) }, enabled = supportsBlur)
+        Text("默认均衡：背景按 1/2 边长采样；省电为 1/3，清晰为原分辨率。只影响玻璃后面的背景，文字、图标和按钮轮廓保持清晰。立即生效并保存。",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("模糊档位", style = MaterialTheme.typography.titleSmall)
         SingleChoiceGroup(GlassBlur.entries.map { it.label }, effects.blur.ordinal,
             { AppPreferences.updateGlassEffects(effects.copy(blur = GlassBlur.entries[it])) }, enabled = supportsBlur)

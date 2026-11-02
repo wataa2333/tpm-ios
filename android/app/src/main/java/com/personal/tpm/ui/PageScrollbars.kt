@@ -30,7 +30,6 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 
 /** Thumb is visible whenever the page has a scroll range. Only the rightmost 20dp captures dragging. */
 private fun Modifier.pageScrollbar(position:()->Float, fraction:()->Float, canScroll:()->Boolean,
@@ -108,7 +107,7 @@ fun ScrollableLazyColumn(modifier:Modifier=Modifier,state:LazyListState=remember
     val captureEdges = sheetEdges && AppPreferences.glassEffects.blur != GlassBlur.Off &&
         currentGlassRendering() in listOf(GlassRendering.Blur, GlassRendering.Liquid)
     // Capture only the list. Edge readers are siblings, so they never sample their own output.
-    val edgeBackdrop = if (captureEdges) rememberLayerBackdrop { drawRect(surface); drawContent() } else null
+    val edgeBackdrop = if (captureEdges) rememberGlassPageBackdrop(surface) else null
     val direction = LocalLayoutDirection.current
     val sheetBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val glassPadding = LocalGlassContentPadding.current

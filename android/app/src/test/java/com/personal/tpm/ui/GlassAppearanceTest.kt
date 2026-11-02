@@ -42,7 +42,7 @@ class GlassAppearanceTest {
             AppPreferences.load(context)
             assertTrue(AppPreferences.showGlassIntroduction)
             AppPreferences.dismissGlassIntroduction()
-            val chosen = GlassEffects(GlassBlur.High, highlight = false, refraction = false, dispersion = true, shadow = true, motion = false)
+            val chosen = GlassEffects(GlassBlur.High, highlight = false, refraction = false, dispersion = true, shadow = true, motion = false, sampling = GlassSampling.Saver)
             AppPreferences.updateGlassEffects(chosen)
             AppPreferences.load(context)
             assertEquals(chosen, AppPreferences.glassEffects)
@@ -60,6 +60,26 @@ class GlassAppearanceTest {
         assertEquals(GlassBlur.Low, GlassBlur.fromKey(null))
         assertEquals(GlassBlur.Low, GlassBlur.fromKey("old-option"))
         GlassBlur.entries.forEach { assertEquals(it, GlassBlur.fromKey(it.name)) }
+    }
+
+    @Test fun missingOrUnknownSamplingUsesBalancedAndEveryChoiceRoundTrips() {
+        assertEquals(GlassSampling.Balanced, GlassSampling.fromKey(null))
+        assertEquals(GlassSampling.Balanced, GlassSampling.fromKey("retired-option"))
+        assertEquals(GlassSampling.Balanced, GlassEffects().sampling)
+        GlassSampling.entries.forEach { assertEquals(it, GlassSampling.fromKey(it.name)) }
+    }
+
+    @Test fun samplingCoversOddPixelEdgesAndNeverAllocatesAnEmptySource() {
+        assertEquals(361, GlassSampling.Balanced.pixels(721))
+        assertEquals(241, GlassSampling.Saver.pixels(721))
+        assertEquals(721, GlassSampling.Clear.pixels(721))
+        GlassSampling.entries.forEach {
+            assertEquals(1, it.pixels(0))
+            assertTrue(it.pixels(Int.MAX_VALUE) > 0)
+            val pixels = it.pixels(721)
+            assertTrue(pixels.toLong() * it.divisor >= 721)
+            assertTrue((pixels - 1).toLong() * it.divisor < 721)
+        }
     }
 
     @Test fun blurOffDoesNotDisableIndependentOpticalEffects() {

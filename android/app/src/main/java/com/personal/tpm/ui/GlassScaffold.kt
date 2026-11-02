@@ -11,7 +11,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 
 /** Shared by all secondary routes. Scroll containers consume the measured chrome insets. */
 @Composable
@@ -36,7 +35,7 @@ fun GlassScaffold(
     }
     val density = LocalDensity.current
     val capture = currentGlassRendering() in listOf(GlassRendering.Blur, GlassRendering.Liquid)
-    val backdrop = if (capture) rememberLayerBackdrop { drawRect(containerColor); drawContent() } else null
+    val backdrop = if (capture) rememberGlassPageBackdrop(containerColor) else null
     var topHeight by remember { mutableIntStateOf(0) }
     var bottomHeight by remember { mutableIntStateOf(0) }
     val insets = with(density) { PaddingValues(top = topHeight.toDp(), bottom = bottomHeight.toDp()) }

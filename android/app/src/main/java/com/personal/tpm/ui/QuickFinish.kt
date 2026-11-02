@@ -209,7 +209,7 @@ data class QuickRepairContext(
     val onSkip: () -> Unit,
     val position: String,
 )
-data class QuickProgress(val text: String?, val open: () -> Unit)
+data class QuickProgress(val text: String?, val open: () -> Unit, val reserveHeaderSpace: Boolean = false)
 val LocalQuickProgress = compositionLocalOf { QuickProgress(null, {}) }
 
 @Composable
@@ -267,7 +267,7 @@ fun QuickFinishScreen(model: QuickFinishViewModel, onBack: () -> Unit) {
     if (page != null && model.begun && !model.signing) {
         val change = updateTransition(page, label = "quick form page")
         val moving = change.currentState != change.targetState || change.isRunning
-        CompositionLocalProvider(LocalQuickProgress provides QuickProgress(model.formBadge, progress.open),
+        CompositionLocalProvider(LocalQuickProgress provides QuickProgress(model.formBadge, progress.open, reserveHeaderSpace = true),
             LocalOperationLocked provides moving) {
             Box(Modifier.fillMaxSize().clipToBounds()) {
                 change.AnimatedContent(transitionSpec = {

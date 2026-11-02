@@ -182,10 +182,12 @@ fun BoxScope.TopLoadingBar(reveal: LoadingReveal, linear: Boolean = false) {
 fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = null, loading: Boolean = false, pull: Float = 0f, onBack: (() -> Unit)? = null, linearLoading: Boolean = false, operationLocked: Boolean = false, actions: @Composable RowScope.() -> Unit = {}) {
     val loadingReveal = rememberLoadingReveal(loading, pull)
     val loadingSpace = if (linearLoading) 4.dp else 28.dp * loadingReveal.fraction
+    // The quick form always owns this slot, including before the first submission and after completion.
+    val progressSpace = if (LocalQuickProgress.current.reserveHeaderSpace) 24.dp else 0.dp
     StatusBarIcons(dark = headerColor().luminance() > 0.5f)
     HeaderSurface(modifier.zIndex(1f)) {
         Box {
-            Row(Modifier.padding(bottom = loadingSpace).statusBarsPadding().height(64.dp)
+            Row(Modifier.padding(bottom = loadingSpace + progressSpace).statusBarsPadding().height(64.dp)
                 .padding(start = if (AppPreferences.liquidGlass) 16.dp else 0.dp, end = if (AppPreferences.liquidGlass) 16.dp else 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (onBack != null) {
                     GlassIconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }

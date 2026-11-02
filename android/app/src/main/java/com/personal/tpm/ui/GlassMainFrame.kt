@@ -11,7 +11,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 
 /** Main tabs share one source. Only overlay chrome reads it, so there is no capture feedback. */
 @Composable
@@ -33,7 +32,7 @@ fun GlassMainFrame(
     val density = LocalDensity.current
     val color = MaterialTheme.colorScheme.background
     val capture = currentGlassRendering() in listOf(GlassRendering.Blur, GlassRendering.Liquid)
-    val backdrop = if (capture) rememberLayerBackdrop { drawRect(color); drawContent() } else null
+    val backdrop = if (capture) rememberGlassPageBackdrop(color) else null
     val initialTop = 120.dp + WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     var topHeight by remember(density.density) { mutableIntStateOf(with(density) { initialTop.roundToPx() }) }
     var bottomHeight by remember { mutableIntStateOf(0) }

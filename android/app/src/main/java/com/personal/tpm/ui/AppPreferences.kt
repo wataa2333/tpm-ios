@@ -17,7 +17,7 @@ object AppPreferences {
         prefs?.edit()?.putString("glassBlur", value.blur.name)
             ?.putBoolean("glassHighlight", value.highlight)?.putBoolean("glassRefraction", value.refraction)
             ?.putBoolean("glassDispersion", value.dispersion)?.putBoolean("glassShadow", value.shadow)
-            ?.putBoolean("glassMotion", value.motion)?.apply()
+            ?.putBoolean("glassMotion", value.motion)?.putString("glassSampling", value.sampling.name)?.apply()
     }
     val repairPageSizes = listOf(50, 100, 200, 500)
     val repairConcurrencyLevels = listOf(1, 3, 5, 8)
@@ -38,6 +38,7 @@ object AppPreferences {
             dispersion = prefs!!.getBoolean("glassDispersion", false),
             shadow = prefs!!.getBoolean("glassShadow", true),
             motion = prefs!!.getBoolean("glassMotion", true),
+            sampling = GlassSampling.fromKey(prefs!!.getString("glassSampling", null)),
         )
         // Apply the requested light preset once when upgrading; later user adjustments remain persistent.
         if (prefs!!.getInt("glassPresetRevision", 0) < 108) {
