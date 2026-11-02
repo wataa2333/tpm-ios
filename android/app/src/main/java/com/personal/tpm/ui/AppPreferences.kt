@@ -9,6 +9,14 @@ object AppPreferences {
     private var prefs: android.content.SharedPreferences? = null
     var liquidGlass by mutableStateOf(false); private set
     fun updateLiquidGlass(on: Boolean) { liquidGlass = on; prefs?.edit()?.putBoolean("liquidGlass", on)?.apply() }
+    var glassEffects by mutableStateOf(GlassEffects()); private set
+    fun updateGlassEffects(value: GlassEffects) {
+        glassEffects = value
+        prefs?.edit()?.putString("glassBlur", value.blur.name)
+            ?.putBoolean("glassHighlight", value.highlight)?.putBoolean("glassRefraction", value.refraction)
+            ?.putBoolean("glassDispersion", value.dispersion)?.putBoolean("glassShadow", value.shadow)
+            ?.putBoolean("glassMotion", value.motion)?.apply()
+    }
     val repairPageSizes = listOf(50, 100, 200, 500)
     val repairConcurrencyLevels = listOf(1, 3, 5, 8)
     var repairReadExperiment by mutableStateOf(false); private set
@@ -20,6 +28,14 @@ object AppPreferences {
         prefs = context.getSharedPreferences("ui_options", Context.MODE_PRIVATE)
         prefs!!.edit().remove("repairExcelMode").apply()
         liquidGlass = prefs!!.getBoolean("liquidGlass", false)
+        glassEffects = GlassEffects(
+            blur = GlassBlur.fromKey(prefs!!.getString("glassBlur", null)),
+            highlight = prefs!!.getBoolean("glassHighlight", true),
+            refraction = prefs!!.getBoolean("glassRefraction", true),
+            dispersion = prefs!!.getBoolean("glassDispersion", false),
+            shadow = prefs!!.getBoolean("glassShadow", false),
+            motion = prefs!!.getBoolean("glassMotion", true),
+        )
         repairReadExperiment = prefs!!.getBoolean("repairReadExperiment", false)
         repairPageSize = prefs!!.getInt("repairPageSize", 500).takeIf { it in repairPageSizes } ?: 500
         repairConcurrency = prefs!!.getInt("repairConcurrency", 8).takeIf { it in repairConcurrencyLevels } ?: 8

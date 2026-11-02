@@ -3,14 +3,11 @@ package com.personal.tpm.ui
 import android.graphics.RenderEffect
 import android.os.Build
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -26,6 +23,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -33,6 +31,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.DpOffset
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.rememberCanvasBackdrop
 import com.kyant.backdrop.drawBackdrop
@@ -41,6 +40,9 @@ import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.effect
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.highlight.HighlightStyle
+import com.kyant.backdrop.shadow.Shadow
 
 @Composable
 fun HeaderSurface(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
@@ -83,25 +85,35 @@ fun Modifier.glassSurface(
     tint: Color = MaterialTheme.colorScheme.surface,
     prominent: Boolean = false,
     layerBlock: (GraphicsLayerScope.() -> Unit)? = null,
+    illumination: (DrawScope.() -> Unit)? = null,
+    highlightAngle: () -> Float = { 45f },
 ): Modifier {
     val rendering = currentGlassRendering()
+    val effects = AppPreferences.glassEffects
     val material = backdrop ?: rememberControlBackdrop()
     // Color.Transparent carries black RGB. Giving it a new alpha would create a black button.
     val surfaceTint = glassTintColor(tint, if (prominent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
     if (rendering == GlassRendering.Solid) return graphicsLayer(layerBlock ?: {}).background(surfaceTint, shape)
     if (rendering == GlassRendering.Translucent) return graphicsLayer(layerBlock ?: {}).background(surfaceTint.copy(alpha = .90f * surfaceTint.alpha), shape)
-    val alpha = (if (prominent) .88f else .52f) * surfaceTint.alpha
+    val alpha = (if (prominent) .32f else .28f) * surfaceTint.alpha
     return drawBackdrop(
         backdrop = material, shape = { shape },
         effects = {
             vibrancy()
-            blur(3.dp.toPx())
-            if (rendering == GlassRendering.Liquid) lens(6.dp.toPx(), 12.dp.toPx())
+            // The independent theme canvas is already smooth; only live page detail needs a blur pass.
+            if (backdrop != null && effects.blur != GlassBlur.Off) blur(effects.blur.radiusDp.dp.toPx())
+            if (rendering == GlassRendering.Liquid && effects.refraction) {
+                lens(10.dp.toPx(), 20.dp.toPx(), depthEffect = true, chromaticAberration = effects.dispersion)
+            }
         },
-        highlight = null,
-        shadow = null,
+        highlight = if (effects.highlight) ({ Highlight(width = .7.dp, blurRadius = .35.dp,
+            style = HighlightStyle.Default(intensity = .6f, angle = highlightAngle(), falloff = 1.5f)) }) else null,
+        shadow = if (effects.shadow) ({ Shadow(radius = 8.dp, offset = DpOffset(0.dp, 2.dp), color = Color.Black.copy(alpha = .10f)) }) else null,
         layerBlock = layerBlock,
-        onDrawSurface = { drawRect(surfaceTint.copy(alpha = alpha)) },
+        onDrawSurface = {
+            drawRect(surfaceTint.copy(alpha = alpha))
+            illumination?.invoke(this)
+        },
     )
 }
 
@@ -115,14 +127,18 @@ fun GlassActionButton(
     content: @Composable RowScope.() -> Unit,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
-    val feedback = rememberGlassFeedback(source, AppPreferences.liquidGlass)
+    val feedback = rememberGlassFeedback(source, AppPreferences.liquidGlass && enabled)
     val glass = AppPreferences.liquidGlass
     val fill = if (enabled) colors.containerColor else colors.disabledContainerColor
+    val ink = glassContentColor(if (enabled) colors.contentColor else colors.disabledContentColor,
+        glassTintColor(fill, MaterialTheme.colorScheme.surface), MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.onSurface)
     Button(onClick = onClick,
         modifier = if (glass) modifier.then(feedback.input)
-            .glassSurface(backdrop = null, shape = shape as? RoundedCornerShape ?: RoundedCornerShape(28.dp), tint = fill, prominent = true, layerBlock = feedback.layer) else modifier,
+            .glassSurface(shape = shape as? RoundedCornerShape ?: RoundedCornerShape(28.dp), tint = fill, prominent = true,
+                layerBlock = feedback.layer, illumination = feedback.illumination, highlightAngle = feedback.highlightAngle) else modifier,
         enabled = enabled, shape = shape,
-        colors = if (glass) colors.copy(containerColor = Color.Transparent, disabledContainerColor = Color.Transparent) else colors,
+        colors = if (glass) colors.copy(containerColor = Color.Transparent, disabledContainerColor = Color.Transparent,
+            contentColor = ink, disabledContentColor = ink) else colors,
         elevation = if (glass) null else elevation, border = if (glass) null else border, contentPadding = contentPadding,
         interactionSource = source, content = content)
 }
@@ -157,6 +173,7 @@ fun GlassHeaderBackground(modifier: Modifier = Modifier) {
     val source = LocalGlassBackdrop.current
     val rendering = currentGlassRendering()
     val surface = MaterialTheme.colorScheme.background
+    val blurRadius = AppPreferences.glassEffects.blur.radiusDp.dp
     val fallbackBrush = Brush.verticalGradient(listOf(surface.copy(alpha = .96f), surface.copy(alpha = .88f), surface.copy(alpha = .50f), Color.Transparent))
     if (source == null || rendering in listOf(GlassRendering.Solid, GlassRendering.Translucent)) {
         Box(modifier.background(fallbackBrush))
@@ -164,7 +181,7 @@ fun GlassHeaderBackground(modifier: Modifier = Modifier) {
     }
     if (rendering == GlassRendering.Liquid) {
         Box(modifier.drawPlainBackdrop(source, shape = { RectangleShape }, effects = {
-            blur(6.dp.toPx())
+            if (blurRadius > 0.dp) blur(blurRadius.toPx())
             effect(RenderEffect.createRuntimeShaderEffect(obtainRuntimeShader("HeaderAlphaMask", HeaderAlphaMask).apply {
                 setFloatUniform("size", size.width, size.height)
                 setColorUniform("tint", surface.toArgb())
@@ -178,7 +195,7 @@ fun GlassHeaderBackground(modifier: Modifier = Modifier) {
                 drawContent()
                 drawRect(Brush.verticalGradient(listOf(Color.White, Color.White, Color.Transparent)), blendMode = BlendMode.DstIn)
             }
-            .drawPlainBackdrop(source, shape = { RectangleShape }, effects = { blur(6.dp.toPx()) },
+            .drawPlainBackdrop(source, shape = { RectangleShape }, effects = { if (blurRadius > 0.dp) blur(blurRadius.toPx()) },
                 onDrawSurface = { drawRect(surface.copy(alpha = .72f)) }))
     }
 }
@@ -191,13 +208,14 @@ fun GlassButton(
     content: @Composable RowScope.() -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
-    val feedback = rememberGlassFeedback(interactions, true)
+    val feedback = rememberGlassFeedback(interactions, AppPreferences.liquidGlass && enabled && !loading)
     val shape = RoundedCornerShape(28.dp)
     val tint = if (prominent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
     val ink = if (!enabled) contentColor.copy(alpha = .38f) else contentColor
     Button(
         onClick, modifier.then(feedback.input)
-            .glassSurface(backdrop = null, shape = shape, tint = tint, prominent = prominent, layerBlock = feedback.layer)
+            .glassSurface(shape = shape, tint = tint, prominent = prominent, layerBlock = feedback.layer,
+                illumination = feedback.illumination, highlightAngle = feedback.highlightAngle)
             .then(if (loading) Modifier.semantics { stateDescription = "正在处理" } else Modifier),
         enabled = enabled && !loading, shape = shape, interactionSource = interactions,
         colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = ink,
@@ -218,7 +236,8 @@ fun GlassIconButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled:
     val feedback = rememberGlassFeedback(interactions, enabled)
     Box(modifier.size(48.dp), contentAlignment = Alignment.Center) {
         IconButton(onClick, Modifier.size(44.dp).then(feedback.input)
-            .glassSurface(shape = CircleShape, layerBlock = feedback.layer), enabled = enabled, colors = colors, interactionSource = interactions, content = content)
+            .glassSurface(shape = CircleShape, layerBlock = feedback.layer, illumination = feedback.illumination,
+                highlightAngle = feedback.highlightAngle), enabled = enabled, colors = colors, interactionSource = interactions, content = content)
     }
 }
 
@@ -229,11 +248,15 @@ fun GlassBottomBar(tabs: List<GlassTab>, selected: Int, badge: Int, onSelect: (I
     var width by remember { mutableIntStateOf(0) }
     var dragX by remember { mutableStateOf<Float?>(null) }
     val density = androidx.compose.ui.platform.LocalDensity.current
+    val motion = AppPreferences.glassEffects.motion
+    val pageBackdrop = LocalGlassBackdrop.current
     val cell = if (tabs.isEmpty()) 0f else width.toFloat() / tabs.size
     val visual = dragX?.let { glassTabIndex(it, width.toFloat(), tabs.size) } ?: selected
     val target = dragX?.let { (it - cell / 2).coerceIn(0f, (width - cell).coerceAtLeast(0f)) } ?: (selected * cell)
-    val indicator by animateFloatAsState(target, androidx.compose.animation.core.spring(dampingRatio = .78f, stiffness = 450f), label = "glass tab drag")
-    val stretch by animateFloatAsState(if (dragX != null) 1.04f else 1f, androidx.compose.animation.core.spring(), label = "glass tab stretch")
+    val indicator by animateFloatAsState(target, if (motion) androidx.compose.animation.core.spring(dampingRatio = .78f, stiffness = 450f) else androidx.compose.animation.core.snap(), label = "glass tab drag")
+    val stretch by animateFloatAsState(if (motion && dragX != null) 1.02f else 1f, androidx.compose.animation.core.spring(), label = "glass tab stretch")
+    val bubble by animateFloatAsState(if (motion && dragX != null) 1.12f else 1f,
+        androidx.compose.animation.core.spring(dampingRatio = .65f, stiffness = 350f), label = "glass tab bubble")
     val dragState = androidx.compose.foundation.gestures.rememberDraggableState { delta -> dragX = ((dragX ?: selected * cell + cell / 2) + delta).coerceIn(0f, width.toFloat()) }
     Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
         Box(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth()
@@ -249,7 +272,9 @@ fun GlassBottomBar(tabs: List<GlassTab>, selected: Int, badge: Int, onSelect: (I
             Box(Modifier.matchParentSize()) {
                 Box(Modifier.offset { androidx.compose.ui.unit.IntOffset(indicator.toInt(), 0) }
                     .width(with(density) { cell.toDp() }).fillMaxHeight()
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = .16f), RoundedCornerShape(30.dp)))
+                    .glassSurface(backdrop = pageBackdrop, shape = RoundedCornerShape(30.dp),
+                        tint = MaterialTheme.colorScheme.primaryContainer, prominent = true,
+                        layerBlock = { scaleX = bubble; scaleY = bubble }))
             }
             Row(Modifier.fillMaxWidth().selectableGroup(), verticalAlignment = Alignment.CenterVertically) {
                 tabs.forEachIndexed { index, tab ->
@@ -266,16 +291,5 @@ fun GlassBottomBar(tabs: List<GlassTab>, selected: Int, badge: Int, onSelect: (I
                 }
             }
         }
-    }
-}
-
-/** A visible sample lives next to the developer switch so every control state is reviewable. */
-@Composable
-fun GlassControlPreview() {
-    var busy by remember { mutableStateOf(false) }
-    LaunchedEffect(busy) { if (busy) { kotlinx.coroutines.delay(1500); busy = false } }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        GlassButton(onClick = { busy = true }, loading = busy, prominent = true) { Text("按钮预览") }
-        GlassButton(onClick = {}, enabled = false) { Text("不可用") }
     }
 }

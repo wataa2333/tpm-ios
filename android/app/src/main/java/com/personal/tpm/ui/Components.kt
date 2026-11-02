@@ -161,7 +161,7 @@ fun BlockSegmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit
         options.forEachIndexed { index, name ->
             val on = index == selected
             val fill by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "segFill")
-            val ink by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "segInk")
+            val ink by androidx.compose.animation.animateColorAsState(if (on && !AppPreferences.liquidGlass) MaterialTheme.colorScheme.onPrimary else if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "segInk")
             androidx.compose.foundation.layout.Box(
                 Modifier.weight(1f).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).then(if (AppPreferences.liquidGlass) Modifier.glassSurface(backdrop = null, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp), tint = fill, prominent = on) else Modifier.background(fill)).clickable { onSelect(index) }.padding(vertical = 10.dp),
                 androidx.compose.ui.Alignment.Center,

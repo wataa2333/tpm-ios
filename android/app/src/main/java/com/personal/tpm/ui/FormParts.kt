@@ -91,7 +91,7 @@ import java.time.ZoneOffset
 @Composable
 fun ChoiceChip(selected: Boolean, onClick: () -> Unit, label: String, enabled: Boolean = true) {
     val background by androidx.compose.animation.animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "chipFill")
-    val content by androidx.compose.animation.animateColorAsState(if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "chipText")
+    val content by androidx.compose.animation.animateColorAsState(if (selected && !AppPreferences.liquidGlass) MaterialTheme.colorScheme.onPrimary else if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "chipText")
     Row(
         Modifier.clip(androidx.compose.foundation.shape.CircleShape).then(if (AppPreferences.liquidGlass) Modifier.glassSurface(backdrop = null, shape = androidx.compose.foundation.shape.CircleShape, tint = if (enabled) background else background.copy(alpha=.38f), prominent = selected) else Modifier.background(if(enabled) background else background.copy(alpha=.38f))).clickable(enabled=enabled,onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),

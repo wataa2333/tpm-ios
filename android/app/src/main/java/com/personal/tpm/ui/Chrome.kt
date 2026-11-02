@@ -191,9 +191,10 @@ fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = 
     StatusBarIcons(dark = headerColor().luminance() > 0.5f)
     HeaderSurface(modifier.zIndex(1f)) {
         Box {
-            Row(Modifier.padding(bottom = loadingSpace).statusBarsPadding().height(64.dp).padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(bottom = loadingSpace).statusBarsPadding().height(64.dp)
+                .padding(start = if (AppPreferences.liquidGlass) 16.dp else 0.dp, end = if (AppPreferences.liquidGlass) 16.dp else 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (onBack != null) GlassIconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
-                else Spacer(Modifier.width(20.dp))
+                else Spacer(Modifier.width(if (AppPreferences.liquidGlass) 4.dp else 20.dp))
                 // The title changes by sliding up out and in; the line under it (the number of orders) opens and closes with its own motion, and since the
                 // two are centred together the title glides up when the line appears and back down when it goes, instead of jumping.
                 var lastSubtitle by remember { mutableStateOf(subtitle) }
@@ -218,7 +219,8 @@ fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = 
                         ) { text -> AnimatedLabel(text.orEmpty(), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = headerContent().copy(alpha = 0.75f)) }
                     }
                 }
-                actions()
+                if (AppPreferences.liquidGlass) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { actions() }
+                else actions()
             }
             TopLoadingBar(loadingReveal, linearLoading)
         }
@@ -322,7 +324,8 @@ fun CollapsingTopBar(title: String, state: CollapsingBarState, modifier: Modifie
                 layout(placeable.width, (full - state.offset).roundToInt().coerceAtLeast(BarRow.roundToPx())) { placeable.place(0, 0) }
             },
         ) {
-            Row(Modifier.align(Alignment.TopEnd).height(BarRow).padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) { actions() }
+            Row(Modifier.align(Alignment.TopEnd).height(BarRow).padding(end = if (AppPreferences.liquidGlass) 16.dp else 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (AppPreferences.liquidGlass) 8.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) { actions() }
             Text(
                 title,
                 Modifier.align(Alignment.BottomStart).then(

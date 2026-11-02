@@ -85,7 +85,7 @@ fun DevScreen(onBack: () -> Unit) {
                                         modifier = Modifier.semantics { contentDescription = "启用液态玻璃" })
                                 }
                                 Text("即时生效并记住选择。Android 13 及以上支持折射，Android 12 使用背景模糊，旧系统或软件绘制使用半透明材质。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Reveal(AppPreferences.liquidGlass) { GlassControlPreview() }
+                                Reveal(AppPreferences.liquidGlass) { GlassEffectSettings() }
                             }
                         }
                         SectionTitle("精密度接口验证")

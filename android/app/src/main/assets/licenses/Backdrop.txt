@@ -3,6 +3,9 @@ Copyright 2025 Kyant
 https://github.com/Kyant0/AndroidLiquidGlass
 
 The header alpha-mask recipe is adapted from the upstream progressive-blur example.
+Button inflation, directional drag deformation and touch-light behavior are adapted
+from the upstream catalog LiquidButton and InteractiveHighlight examples (tag 1.0.0).
+https://github.com/Kyant0/AndroidLiquidGlass/tree/1.0.0/catalog/src/main/java/com/kyant/backdrop/catalog
 
 
                                  Apache License

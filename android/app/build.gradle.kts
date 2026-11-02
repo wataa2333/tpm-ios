@@ -19,17 +19,14 @@ android {
         applicationId = "com.personal.tpm"
         minSdk = 29            // Android 10
         targetSdk = 35
-        versionCode = 106
-        versionName = "1.106.0"
+        versionCode = 107
+        versionName = "1.107.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEFAULT_QUERY_USERNAME", queryConfigLiteral("C0382522"))
         buildConfigField("String", "DEFAULT_QUERY_PASSWORD", queryConfigLiteral(queryLocalSettings.getProperty("tpm.defaultQueryPassword", "")))
     }
 
     buildTypes {
-        debug {
-            if (providers.gradleProperty("uiCheck").orNull == "true") applicationIdSuffix = ".uicheck"
-        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

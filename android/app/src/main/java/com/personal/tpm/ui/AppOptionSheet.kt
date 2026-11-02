@@ -54,7 +54,7 @@ fun AppOptionItem(
         .heightIn(min = 56.dp).padding(horizontal = 18.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         if (leadingIcon != null) leadingIcon()
-        Box(Modifier.weight(1f)) { ProvideTextStyle(MaterialTheme.typography.bodyLarge.copy(color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal)) { text() } }
-        if (selected) Icon(Icons.Filled.Check, contentDescription = "已选", tint = MaterialTheme.colorScheme.onPrimary)
+        Box(Modifier.weight(1f)) { ProvideTextStyle(MaterialTheme.typography.bodyLarge.copy(color = if (selected && !AppPreferences.liquidGlass) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal)) { text() } }
+        if (selected) Icon(Icons.Filled.Check, contentDescription = "已选", tint = if (AppPreferences.liquidGlass) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimary)
     }
 }
