@@ -26,21 +26,16 @@ import com.personal.tpm.data.AccountVault
 import com.personal.tpm.data.Session
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
-import com.personal.tpm.license.LicenseState
-import com.personal.tpm.license.LicenseViewModel
 
-private enum class Screen { Checking, Key, Login, Main }
+private enum class Screen { Login, Main }
 
-/** The licence first, then the sign-in, then the app. Each change is a plain cross-fade. */
+/** Sign in, then open the app. Each change is a plain cross-fade. */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun AppRoot(license: LicenseViewModel, session: Session, vault: AccountVault, prefs: com.personal.tpm.data.PickerPrefs, drafts: com.personal.tpm.data.DraftStore) {
+fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.PickerPrefs, drafts: com.personal.tpm.data.DraftStore) {
     TransparentSystemBars()
-    val state by license.state.collectAsState()
     val auth by session.auth.collectAsState()
     val screen = when {
-        state is LicenseState.Checking -> Screen.Checking
-        state is LicenseState.NeedKey -> Screen.Key
         auth["token"].text.isEmpty() -> Screen.Login
         else -> Screen.Main
     }
@@ -62,12 +57,10 @@ fun AppRoot(license: LicenseViewModel, session: Session, vault: AccountVault, pr
         ) {
             Crossfade(targetState = screen, label = "root") { current ->
                 when (current) {
-                    Screen.Checking -> StartupSkeleton()
-                    Screen.Key -> LicenseScreen(license, (state as? LicenseState.NeedKey)?.reason.orEmpty())
                     Screen.Login -> LoginScreen(session, vault)
                     // The pages are rebuilt when the account or the factory changes (the key), like the iOS app.
                     Screen.Main -> Box(Modifier.fillMaxSize()) {
-                        key(scope) { AppNav(state as? LicenseState.Allowed) }
+                        key(scope) { AppNav() }
                         StartupCover()
                     }
                 }

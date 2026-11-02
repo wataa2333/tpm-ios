@@ -117,15 +117,13 @@ fun WorkspaceTab(vm: WorkspaceViewModel, gridState: LazyGridState, pullState: Pu
                 horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 vm.error?.let { message -> item(span = { GridItemSpan(maxLineSpan) }) { AnimatedLabel(message, color = MaterialTheme.colorScheme.error) } }
-                item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("看板") }
-                if (AppPreferences.management) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Card(onClick=openDashboard,modifier=Modifier.fillMaxWidth(),shape=MaterialTheme.shapes.large,colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surfaceContainerLowest)) {
-                            Row(Modifier.fillMaxWidth().padding(16.dp),horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically) {
-                                Badge(Icons.Filled.Assessment, Color(0xFFD83B70))
-                                Column(Modifier.weight(1f)) { Text("人员与工单分析",style=MaterialTheme.typography.titleMedium); Text("查看维修待处理与人员趋势",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight,contentDescription="进入",tint=MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("统计页面") }
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Card(onClick=openDashboard,modifier=Modifier.fillMaxWidth(),shape=MaterialTheme.shapes.large,colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surfaceContainerLowest)) {
+                        Row(Modifier.fillMaxWidth().padding(16.dp),horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically) {
+                            Badge(Icons.Filled.Assessment, Color(0xFFD83B70))
+                            Column(Modifier.weight(1f)) { Text("人员工单统计",style=MaterialTheme.typography.titleMedium); Text("查看维修待处理与人员趋势",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight,contentDescription="进入",tint=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }

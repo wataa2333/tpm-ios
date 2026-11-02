@@ -8,11 +8,7 @@ import androidx.activity.compose.setContent
 import android.graphics.Color
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels
 import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
-import com.personal.tpm.license.LicenseViewModel
 import com.personal.tpm.ui.AppRoot
 import com.personal.tpm.ui.theme.AppTheme
 import com.personal.tpm.ui.theme.ThemeConfig
@@ -53,7 +49,6 @@ class MainActivity : FragmentActivity() {
             if (pending?.isActive == true) pending.resumeWith(Result.success(if (resultCode == RESULT_OK) com.personal.tpm.ui.BiometricGate.Outcome.Passed else com.personal.tpm.ui.BiometricGate.Outcome.Cancelled))
         }
     }
-    private val license: LicenseViewModel by viewModels()
 
     /**
      * The interface size (the owner's step times the fit to the screen width) is applied here, to the density of the Activity's own resources,
@@ -96,10 +91,8 @@ class MainActivity : FragmentActivity() {
         applyRefreshRate()
         val session = (application as TpmApp).session
         setContent {
-            // Back in the foreground after a while: the month may have turned.
-            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { license.recheck() }
             AppTheme {
-                AppRoot(license, session, (application as TpmApp).vault, (application as TpmApp).pickerPrefs, (application as TpmApp).drafts)
+                AppRoot(session, (application as TpmApp).vault, (application as TpmApp).pickerPrefs, (application as TpmApp).drafts)
             }
         }
     }

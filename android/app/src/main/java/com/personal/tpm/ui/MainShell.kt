@@ -51,7 +51,6 @@ import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -106,8 +105,6 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.personal.tpm.data.SavedAccount
 import com.personal.tpm.data.batchItem
 import com.personal.tpm.data.Session
-import com.personal.tpm.license.LicensePolicy
-import com.personal.tpm.license.LicenseState
 import com.personal.tpm.ui.theme.ThemeConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -121,7 +118,7 @@ private data class Tab(val title: String, val icon: ImageVector)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainShell(
-    license: LicenseState.Allowed?, openList: (String) -> Unit, openPool: (PoolKind) -> Unit, openOrder: (OrderKind, String) -> Unit,
+    openList: (String) -> Unit, openPool: (PoolKind) -> Unit, openOrder: (OrderKind, String) -> Unit,
     openWork: (WorkList) -> Unit, openQuery: (com.personal.tpm.data.FaultSearchField, String) -> Unit, openDrafts: () -> Unit, openNew: () -> Unit, openDev: () -> Unit, openCards: () -> Unit, openDashboard: () -> Unit, openPrecision: () -> Unit, openQuerySettings: () -> Unit,
 ) {
     val session = LocalSession.current
@@ -226,12 +223,6 @@ fun MainShell(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 RoundedSheet {
                     Column(Modifier.fillMaxSize()) {
-                        license?.notice?.let { notice ->
-                            Card(
-                                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                            ) { AnimatedLabel(notice, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer) }
-                        }
                         Box(Modifier.weight(1f).fillMaxWidth()) {
                             val nested = Modifier.nestedScroll(bar.connection)
                             androidx.compose.animation.Crossfade(targetState = selected, animationSpec = tween(Motion.Normal, easing = Motion.Change), label = "tabs") { tab ->
@@ -239,7 +230,7 @@ fun MainShell(
                                 0 -> HomeTab(homeVm, gridState, pull, nested, openList, openPool)
                                 1 -> TodoTab(todoVm, todoState, pull, nested, openOrder)
                                 2 -> WorkspaceTab(workspaceVm, workspaceGrid, pull, nested, openWork, openQuery, openDashboard, openPrecision)
-                                3 -> MineTab(session, license, nested, onBusy = { mineBusy = it }, onChooseFactory = { choosingFactory = true }, openDrafts = openDrafts, openCards = openCards, openDev = openDev, openQuerySettings = openQuerySettings)
+                                3 -> MineTab(session, nested, onBusy = { mineBusy = it }, onChooseFactory = { choosingFactory = true }, openDrafts = openDrafts, openCards = openCards, openDev = openDev, openQuerySettings = openQuerySettings)
                                 else -> Placeholder(tabs[tab].title)
                             }
                             }
@@ -354,7 +345,7 @@ private fun FactorySheet(session: Session, onDismiss: () -> Unit, onPick: (Strin
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun MineTab(session: Session, license: LicenseState.Allowed?, nested: Modifier, onBusy: (Boolean) -> Unit, onChooseFactory: () -> Unit, openDrafts: () -> Unit, openCards: () -> Unit, openDev: () -> Unit, openQuerySettings: () -> Unit) {
+private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Unit, onChooseFactory: () -> Unit, openDrafts: () -> Unit, openCards: () -> Unit, openDev: () -> Unit, openQuerySettings: () -> Unit) {
     val vault = LocalVault.current
     val context = LocalContext.current
     val auth by session.auth.collectAsState()
@@ -426,15 +417,6 @@ private fun MineTab(session: Session, license: LicenseState.Allowed?, nested: Mo
                     leadingContent = { Icon(Icons.Filled.Factory, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "切换厂区") },
                 )
-                license?.month?.let {
-                    GroupDivider()
-                    ListItem(
-                        colors = transparentRow,
-                        overlineContent = { Text("授权") },
-                        headlineContent = { AnimatedLabel("${LicensePolicy.describe(it)}密钥已验证") },
-                        leadingContent = { Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    )
-                }
             }
 
             GroupCard {

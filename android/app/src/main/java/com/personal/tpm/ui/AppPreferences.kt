@@ -7,8 +7,6 @@ import androidx.compose.runtime.setValue
 
 object AppPreferences {
     private var prefs: android.content.SharedPreferences? = null
-    var management by mutableStateOf(false)
-        private set
     val repairPageSizes = listOf(50, 100, 200, 500)
     val repairConcurrencyLevels = listOf(1, 3, 5, 8)
     var repairReadExperiment by mutableStateOf(false); private set
@@ -19,7 +17,6 @@ object AppPreferences {
     fun load(context: Context) {
         prefs = context.getSharedPreferences("ui_options", Context.MODE_PRIVATE)
         prefs!!.edit().remove("repairExcelMode").apply()
-        management = prefs!!.getBoolean("management", false)
         repairReadExperiment = prefs!!.getBoolean("repairReadExperiment", false)
         repairPageSize = prefs!!.getInt("repairPageSize", 500).takeIf { it in repairPageSizes } ?: 500
         repairConcurrency = prefs!!.getInt("repairConcurrency", 8).takeIf { it in repairConcurrencyLevels } ?: 8
@@ -27,5 +24,4 @@ object AppPreferences {
     fun updateRepairReadExperiment(on: Boolean) { repairReadExperiment = on; prefs?.edit()?.putBoolean("repairReadExperiment", on)?.apply() }
     fun updateRepairPageSize(value: Int) { require(value in repairPageSizes); repairPageSize = value; prefs?.edit()?.putInt("repairPageSize", value)?.apply() }
     fun updateRepairConcurrency(value: Int) { require(value in repairConcurrencyLevels); repairConcurrency = value; prefs?.edit()?.putInt("repairConcurrency", value)?.apply() }
-    fun updateManagement(on: Boolean) { management = on; prefs?.edit()?.putBoolean("management", on)?.apply() }
 }

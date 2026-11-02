@@ -36,7 +36,7 @@ fun PersonnelManagementScreen(onBack: () -> Unit, openOrder: (String) -> Unit) {
     androidx.activity.compose.BackHandler { leaveDashboard() }
     val current = if (tab == 0) pending else history
     val navigationBottom=WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    Scaffold(contentWindowInsets=WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),topBar = { AppTopBar("人员与工单分析", onBack = ::leaveDashboard, loading = current.loading) }) { padding ->
+    Scaffold(contentWindowInsets=WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),topBar = { AppTopBar("人员工单统计", onBack = ::leaveDashboard, loading = current.loading) }) { padding ->
         LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(start=16.dp,end=16.dp,top=16.dp,bottom=16.dp+navigationBottom), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
                 AnimatedLabel(session.currentFactoryName, style = MaterialTheme.typography.titleLarge)

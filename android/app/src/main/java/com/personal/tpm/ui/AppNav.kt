@@ -23,7 +23,6 @@ import androidx.navigation.navArgument
 import com.personal.tpm.data.FaultSearchField
 import com.personal.tpm.data.OrderKind
 import com.personal.tpm.data.faultStateName
-import com.personal.tpm.license.LicenseState
 
 private const val TABS = "tabs"
 private const val LIST = "list/{state}?q={q}&f={f}"
@@ -46,7 +45,7 @@ private fun newFaultRoute(id: String = "", draft: String = "") = "form/fault?id=
  * tabs, and a list that was left to open an order is found as it was (rows, scroll, expanded cards) when coming back.
  */
 @Composable
-fun AppNav(license: LicenseState.Allowed?) {
+fun AppNav() {
     val nav = rememberNavController()
     val session = LocalSession.current
     var showDeveloperPassword by remember { mutableStateOf(false) }
@@ -80,7 +79,6 @@ fun AppNav(license: LicenseState.Allowed?) {
         composable(TABS) {
             run {
                 MainShell(
-                    license,
                     openList = { state -> nav.navigate("list/" + Uri.encode(state.ifEmpty { "_" }) + "?q=&f=") },
                     openPool = { kind -> nav.navigate("pool/" + kind.path) },
                     openOrder = { kind, id -> nav.navigate((if (kind == OrderKind.Erp) "erp/" else "fault/") + Uri.encode(id)) },
@@ -184,8 +182,7 @@ fun AppNav(license: LicenseState.Allowed?) {
         }
         composable("card-settings") { CardSettingsScreen { nav.popBackStack() } }
         composable("management") {
-            if (AppPreferences.management) ManagementScreen(onBack = { nav.popBackStack() }, openOrder = { id -> nav.navigate("fault/" + Uri.encode(id) + "?independent=true") })
-            else androidx.compose.runtime.LaunchedEffect(Unit) { nav.popBackStack() }
+            ManagementScreen(onBack = { nav.popBackStack() }, openOrder = { id -> nav.navigate("fault/" + Uri.encode(id) + "?independent=true") })
         }
         composable("query-account-settings") { QueryAccountSettingsScreen { nav.popBackStack() } }
         composable("precision-dashboard") { PrecisionDashboard(onBack = { nav.popBackStack() }, openAsset = { nav.navigate("precision-asset/" + Uri.encode(it)) }) }

@@ -74,13 +74,6 @@ fun DevScreen(onBack: () -> Unit) {
                         Modifier.verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        SectionTitle("管理功能")
-                        GroupCard {
-                            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("管理看板", Modifier.weight(1f))
-                                Switch(checked = AppPreferences.management, onCheckedChange = AppPreferences::updateManagement)
-                            }
-                        }
                         SectionTitle("精密度接口验证")
                         PrecisionApiProbe()
                         // ---- motion ----
