@@ -20,12 +20,12 @@ fun GlassEffectSettings() {
         Text("背景采样", style = MaterialTheme.typography.titleSmall)
         SingleChoiceGroup(GlassSampling.entries.map { it.label }, effects.sampling.ordinal,
             { AppPreferences.updateGlassEffects(effects.copy(sampling = GlassSampling.entries[it])) }, enabled = supportsBlur)
-        Text("默认均衡：背景按 1/2 边长采样；省电为 1/3，清晰为原分辨率。只影响玻璃后面的背景，文字、图标和按钮轮廓保持清晰。立即生效并保存。",
+        Text("默认省电：背景按 1/3 边长采样；均衡为 1/2，清晰为原分辨率。只影响玻璃后面的背景，文字、图标和按钮轮廓保持清晰。立即生效并保存。",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("模糊档位", style = MaterialTheme.typography.titleSmall)
         SingleChoiceGroup(GlassBlur.entries.map { it.label }, effects.blur.ordinal,
             { AppPreferences.updateGlassEffects(effects.copy(blur = GlassBlur.entries[it])) }, enabled = supportsBlur)
-        Text("立即生效，重启后保留。默认低模糊、柔和阴影开启、边缘色散关闭；关闭模糊仍可保留高光和折射。",
+        Text("立即生效，重启后保留。默认低模糊、边缘色散关闭，高光、折射、柔和阴影和弹性动效全部开启。",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         GlassEffectToggle("边缘高光", "细边缘与触摸光泽", effects.highlight, supportsBlur) {
             AppPreferences.updateGlassEffects(effects.copy(highlight = it))

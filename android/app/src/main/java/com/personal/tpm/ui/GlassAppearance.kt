@@ -7,7 +7,7 @@ enum class GlassSampling(val label: String, val divisor: Int) {
     fun pixels(length: Int) = ((length.coerceAtLeast(1).toLong() + divisor - 1) / divisor).toInt()
 
     companion object {
-        fun fromKey(key: String?) = entries.firstOrNull { it.name == key } ?: Balanced
+        fun fromKey(key: String?) = entries.firstOrNull { it.name == key } ?: Saver
     }
 }
 
@@ -26,5 +26,5 @@ data class GlassEffects(
     val dispersion: Boolean = false,
     val shadow: Boolean = true,
     val motion: Boolean = true,
-    val sampling: GlassSampling = GlassSampling.Balanced,
+    val sampling: GlassSampling = GlassSampling.Saver,
 )

@@ -10,7 +10,8 @@ import org.junit.Test
 class GlassAppearanceTest {
     @Test fun changesSurvivePreferencesReloadAndResetOnlyAffectsGlassOptions() {
         val values = mutableMapOf<String, Any>("repairPageSize" to 100, "liquidGlass" to true,
-            "glassBlur" to "High", "glassDispersion" to true, "glassShadow" to true)
+            "glassBlur" to "High", "glassDispersion" to true, "glassShadow" to false,
+            "glassSampling" to "Clear", "glassHighlight" to false, "glassRefraction" to false, "glassMotion" to false)
         val editor = Proxy.newProxyInstance(javaClass.classLoader, arrayOf(SharedPreferences.Editor::class.java)) { proxy, method, args ->
             when {
                 method.name.startsWith("put") -> { values[args!![0] as String] = args[1]; proxy }
@@ -34,6 +35,7 @@ class GlassAppearanceTest {
             assertEquals(GlassBlur.Low, AppPreferences.glassEffects.blur)
             assertFalse(AppPreferences.glassEffects.dispersion)
             assertTrue(AppPreferences.glassEffects.shadow)
+            assertEquals(GlassEffects(), AppPreferences.glassEffects)
             assertTrue(AppPreferences.showGlassIntroduction)
             AppPreferences.dismissGlassIntroduction()
             AppPreferences.load(context)
@@ -42,7 +44,7 @@ class GlassAppearanceTest {
             AppPreferences.load(context)
             assertTrue(AppPreferences.showGlassIntroduction)
             AppPreferences.dismissGlassIntroduction()
-            val chosen = GlassEffects(GlassBlur.High, highlight = false, refraction = false, dispersion = true, shadow = true, motion = false, sampling = GlassSampling.Saver)
+            val chosen = GlassEffects(GlassBlur.High, highlight = false, refraction = false, dispersion = true, shadow = true, motion = false, sampling = GlassSampling.Balanced)
             AppPreferences.updateGlassEffects(chosen)
             AppPreferences.load(context)
             assertEquals(chosen, AppPreferences.glassEffects)
@@ -62,10 +64,10 @@ class GlassAppearanceTest {
         GlassBlur.entries.forEach { assertEquals(it, GlassBlur.fromKey(it.name)) }
     }
 
-    @Test fun missingOrUnknownSamplingUsesBalancedAndEveryChoiceRoundTrips() {
-        assertEquals(GlassSampling.Balanced, GlassSampling.fromKey(null))
-        assertEquals(GlassSampling.Balanced, GlassSampling.fromKey("retired-option"))
-        assertEquals(GlassSampling.Balanced, GlassEffects().sampling)
+    @Test fun missingOrUnknownSamplingUsesSaverAndEveryChoiceRoundTrips() {
+        assertEquals(GlassSampling.Saver, GlassSampling.fromKey(null))
+        assertEquals(GlassSampling.Saver, GlassSampling.fromKey("retired-option"))
+        assertEquals(GlassSampling.Saver, GlassEffects().sampling)
         GlassSampling.entries.forEach { assertEquals(it, GlassSampling.fromKey(it.name)) }
     }
 

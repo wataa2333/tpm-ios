@@ -49,6 +49,11 @@ object AppPreferences {
             updateGlassEffects(glassEffects.copy(dispersion = false, shadow = true))
             prefs!!.edit().putInt("glassPresetRevision", 110).apply()
         }
+        // Adopt the final requested preset once; subsequent manual choices still survive reloads.
+        if (prefs!!.getInt("glassPresetRevision", 0) < 115) {
+            updateGlassEffects(GlassEffects())
+            prefs!!.edit().putInt("glassPresetRevision", 115).apply()
+        }
         repairReadExperiment = prefs!!.getBoolean("repairReadExperiment", false)
         repairPageSize = prefs!!.getInt("repairPageSize", 500).takeIf { it in repairPageSizes } ?: 500
         repairConcurrency = prefs!!.getInt("repairConcurrency", 8).takeIf { it in repairConcurrencyLevels } ?: 8
