@@ -50,12 +50,12 @@ fun LazyListScope.repairPendingSummary(vm: RepairPendingViewModel, openPeople: (
                 Text("按故障发现日期筛选；统计待确认、待复线及已完结。",style=MaterialTheme.typography.bodySmall)
             }
             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                Button(enabled=!vm.loading && (!vm.processed || vm.selectedSpan!=null),onClick=vm::prepare) { Text(if(vm.started) "重新查询" else "查询") }
-                if(vm.loading) TextButton(onClick=vm::pause) { Text("暂停") }
-                else if(vm.started && !vm.showingPrevious && (!snapshot.exhausted || vm.uncheckedExecutors>0)) TextButton(onClick={vm.load()}) { Text("继续") }
-                if(!vm.loading && !vm.showingPrevious && vm.executorFailures>0) TextButton(onClick={vm.load(retryFailures=true)}) { Text("重试失败项") }
+                GlassActionButton(enabled=!vm.loading && (!vm.processed || vm.selectedSpan!=null),onClick=vm::prepare) { Text(if(vm.started) "重新查询" else "查询") }
+                if(vm.loading) GlassTextButton(onClick=vm::pause) { Text("暂停") }
+                else if(vm.started && !vm.showingPrevious && (!snapshot.exhausted || vm.uncheckedExecutors>0)) GlassTextButton(onClick={vm.load()}) { Text("继续") }
+                if(!vm.loading && !vm.showingPrevious && vm.executorFailures>0) GlassTextButton(onClick={vm.load(retryFailures=true)}) { Text("重试失败项") }
             }
-            if(vm.checking) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("正在预估工单数量，尚未逐单读取",style=MaterialTheme.typography.bodySmall) }
+            if(vm.checking) { StatisticsProgressIndicator(Modifier.fillMaxWidth()); Text("正在预估工单数量，尚未逐单读取",style=MaterialTheme.typography.bodySmall) }
             if(vm.started && !vm.showingPrevious) {
                 val total=vm.expectedTotal
                 val checked=snapshot.executorChecks.size
@@ -63,8 +63,8 @@ fun LazyListScope.repairPendingSummary(vm: RepairPendingViewModel, openPeople: (
                 val workTotal=total?.let { it * if(vm.processed) 1 else 2 }
                 Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
                 if(vm.loading) {
-                    if(workTotal!=null) LinearProgressIndicator(progress={if(workTotal==0L) 1f else (workDone.toFloat()/workTotal).coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
-                    else LinearProgressIndicator(Modifier.fillMaxWidth())
+                    if(workTotal!=null) StatisticsProgressIndicator(progress={if(workTotal==0L) 1f else (workDone.toFloat()/workTotal).coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
+                    else StatisticsProgressIndicator(Modifier.fillMaxWidth())
                 }
                 Text("列表已读 ${snapshot.readCount} / ${total?.toString() ?: "总数未知"}" + if(!vm.processed) " · 详情已核对 $checked / ${vm.detailTotal}" else "",style=MaterialTheme.typography.bodySmall)
                 val complete=snapshot.complete && !vm.loading && vm.uncheckedExecutors==0 && vm.executorFailures==0
@@ -93,13 +93,10 @@ fun LazyListScope.repairPendingSummary(vm: RepairPendingViewModel, openPeople: (
     item {
         Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Text(if(vm.processed) "已到待确认 ${people.sumOf { it.processed }}单" else "待签到${people.sumOf { it.sign }} · 待完成${people.sumOf { it.finish }}",style=MaterialTheme.typography.titleSmall)
-        if(vm.processed) Button(enabled=!vm.checking && !vm.legacyPrevious,onClick=openTrends) {
+        if(vm.processed) GlassActionButton(enabled=!vm.checking && !vm.legacyPrevious,onClick=openTrends) {
             Text("统计图与统计表")
         }
-        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            ChoiceChip(!vm.ascending,{vm.sort(false)},"数量降序")
-            ChoiceChip(vm.ascending,{vm.sort(true)},"数量升序")
-        }
+        SingleChoiceGroup(listOf("数量降序", "数量升序"), if(vm.ascending) 1 else 0, { vm.sort(it == 1) })
         if(!vm.processed && !vm.legacyPrevious) Text("点击人员查看工单",style=MaterialTheme.typography.bodySmall)
         }
     }
@@ -152,7 +149,7 @@ fun RepairPersonOrders(vm:RepairPendingViewModel,onBack:()->Unit,openOrder:(Stri
     val documents=vm.snapshot.documents.filter { it.key in vm.snapshot.executorChecks && it.personKey==vm.personKey && it.phase in vm.phases }
     val name=vm.snapshot.documents.firstOrNull{it.personKey==vm.personKey}?.personName ?: "人员工单"
     val navigationBottom=WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    Scaffold(contentWindowInsets=WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),topBar={AppTopBar("人员维修工单",subtitle=name,onBack=onBack,loading=vm.loading)}) { padding ->
+    GlassScaffold(contentWindowInsets=WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),topBar={AppTopBar("人员维修工单",subtitle=name,onBack=onBack,loading=vm.loading)}) { padding ->
         LazyColumn(Modifier.padding(padding).fillMaxSize(),contentPadding=PaddingValues(start=16.dp,end=16.dp,top=16.dp,bottom=16.dp+navigationBottom),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             if(vm.showingPrevious) item { Text("上次数据 · 非最新 · ${vm.queriedAt}",color=MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.bodySmall) }
             if(vm.message.startsWith("打开工单失败")) item { Text(vm.message,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall) }

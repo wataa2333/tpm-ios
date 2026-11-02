@@ -11,7 +11,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -46,21 +45,22 @@ import org.json.JSONObject
  * [onSaved] gets the server's answer (the order's id).
  */
 @Composable
-fun ErpFormScreen(existingId: String?, referenceSn: String?, onClose: () -> Unit, onSaved: (Jv) -> Unit) {
+fun ErpFormScreen(existingId: String?, referenceSn: String?, onClose: () -> Unit, interceptBack: Boolean = false, onSaved: (Jv) -> Unit) {
     val session = LocalSession.current
     val prefs = LocalPickerPrefs.current
     val store = LocalDrafts.current
     val scope = rememberCoroutineScope()
     val form = remember { FormState(OrderKind.Erp) }
     val snackbar = remember { SnackbarHostState() }
-    val scopeKey = session.erpDraftScope
+    val scopeKey = remember { session.erpDraftScope }
     var request by remember { mutableStateOf<PickRequest?>(null) }
     var failure by remember { mutableStateOf<String?>(null) }
     var draftId by remember { mutableStateOf<String?>(null) }
     val target = if (existingId == null) DraftTarget.NewReport else DraftTarget.Order(existingId)
     val draftsAllowed = existingId == null || existingId.isNotBlank()
 
-    LaunchedEffect(existingId) {
+    LaunchedEffect(existingId, session.accountKey) {
+        if (form.ready) { form.refreshActor(session, existingId, referenceSn); return@LaunchedEffect }
         form.load(session, existingId, referenceSn)
         if (existingId == null && form.ready) form.applyDefaults(session, prefs)
         if (draftsAllowed && form.ready) store.drafts(scopeKey, target).firstOrNull()?.let { draft ->
@@ -99,12 +99,12 @@ fun ErpFormScreen(existingId: String?, referenceSn: String?, onClose: () -> Unit
     }
 
     FormPage(
-        title = "ERP 出库", busy = form.loading || form.saving, onClose = { if (!form.saving) onClose() }, snackbar = snackbar, backEnabled = !form.saving,
+        title = "ERP 出库", busy = form.loading || form.saving, onClose = { if (!form.saving) onClose() }, snackbar = snackbar, backEnabled = !form.saving, interceptBack = interceptBack,
         bottomBar = { FormActionBar(busy = form.saving, enabled = form.ready, onSave = { keepDraft() }, onSubmit = { submit() }) },
     ) {
         if (form.error != null && !form.ready) {
             AnimatedLabel(form.error ?: "", color = MaterialTheme.colorScheme.error)
-            TextButton(onClick = { scope.launch { form.load(session, existingId, referenceSn) } }) { Text("重试") }
+            GlassTextButton(onClick = { scope.launch { form.load(session, existingId, referenceSn) } }) { Text("重试") }
             return@FormPage
         }
         FormTitle("领料申请")
@@ -141,7 +141,7 @@ fun ErpFormScreen(existingId: String?, referenceSn: String?, onClose: () -> Unit
                             AnimatedLabel(material["materialDesc"].text, style = MaterialTheme.typography.titleSmall)
                             AnimatedLabel(listOf(material["materialCode"].text, "库存 " + materialQuantity(material["onhandQty"].text, material), material["lot"].text, material["subInv"].text).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        IconButton(onClick = { form.removeLine(index) }) { Icon(Icons.Filled.Delete, contentDescription = "删除明细", tint = MaterialTheme.colorScheme.error) }
+                        GlassIconButton(onClick = { form.removeLine(index) }) { Icon(Icons.Filled.Delete, contentDescription = "删除明细", tint = MaterialTheme.colorScheme.error) }
                     }
                     InputRow("申请数量", text, { text = it; form.setQuantity(index, it.toDoubleOrNull() ?: 0.0) }, required = true, suffix = materialUnit(material), maximum = if(material["onhandQty"].isNull) null else material["onhandQty"].number.coerceAtLeast(0.0))
                 }

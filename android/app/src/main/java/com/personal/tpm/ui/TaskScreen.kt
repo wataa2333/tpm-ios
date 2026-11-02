@@ -15,13 +15,9 @@ import androidx.compose.foundation.rememberScrollState
 import com.personal.tpm.ui.pageVerticalScroll as verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.Button
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -69,7 +65,7 @@ fun TaskActionBar(kind: OrderKind, order: Jv, includeNavigationPadding: Boolean 
     var canSubmit by remember(taskId) { mutableStateOf(false) }
     var canReturn by remember(taskId) { mutableStateOf(false) }
     var canHandoff by remember(taskId) { mutableStateOf(false) }
-    LaunchedEffect(taskId, changed) {
+    LaunchedEffect(taskId, changed, session.accountKey) {
         try {
             val (state, form) = coroutineScope {
                 val s = async { session.request("workflow/getWorkflowTaskState", mapOf("processInstanceId" to task["processInstanceId"].text)) }
@@ -83,10 +79,10 @@ fun TaskActionBar(kind: OrderKind, order: Jv, includeNavigationPadding: Boolean 
         catch (e: Exception) { canSubmit = false; canReturn = false; canHandoff = false }
     }
     if (!canSubmit && !canHandoff) return
-    Surface(Modifier.fadeAbove(MaterialTheme.colorScheme.background), color = MaterialTheme.colorScheme.background, shadowElevation = 0.dp) {
+    GlassBottomSurface() {
         Row(Modifier.fillMaxWidth().then(if(includeNavigationPadding) Modifier.navigationBarsPadding() else Modifier).padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical), horizontalArrangement = Arrangement.spacedBy(BarSpec.Gap)) {
             if (canReturn) SoftButton(onClick = { onOpen(true) }, Modifier.weight(1f).height(BarSpec.ButtonHeight)) { Text("退单") }
-            Button(onClick = { onOpen(false) }, Modifier.weight(1f).height(BarSpec.ButtonHeight)) { AnimatedLabel(taskActionTitle(task, kind)) }
+            GlassActionButton(onClick = { onOpen(false) }, Modifier.weight(1f).height(BarSpec.ButtonHeight)) { AnimatedLabel(taskActionTitle(task, kind)) }
         }
     }
 }
@@ -161,7 +157,7 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
         } finally { if (mine == assignmentTicket) assignmentsLoading = false }
     }
 
-    LaunchedEffect(id) {
+    LaunchedEffect(id, session.accountKey) {
         try {
             val order = session.request(kind.detailPath, mapOf(kind.idKey to id))
             detail = order
@@ -250,7 +246,7 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
     }
     val processingDefault = !startReturn && loadError == null && failure == null && (!autoSubmitAttempted || submitting) && (loading || assignmentsLoading || !assignmentsReady || state["canSubmit"].bool)
     if (processingDefault) {
-        Scaffold(contentWindowInsets = appContentInsets(), containerColor = MaterialTheme.colorScheme.background) { padding ->
+        GlassScaffold(contentWindowInsets = appContentInsets(), containerColor = MaterialTheme.colorScheme.background) { padding ->
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     androidx.compose.material3.CircularProgressIndicator()
@@ -260,15 +256,15 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
         }
         return
     }
-    Scaffold(contentWindowInsets = appContentInsets(),
+    GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppTopBar(
-                title = if (task.isNull) "处理" else taskActionTitle(task, kind), onBack = onBack, loading = loading || assignmentsLoading || submitting,
+                title = if (task.isNull) "处理" else taskActionTitle(task, kind), onBack = onBack, loading = loading || assignmentsLoading || submitting, operationLocked = loading || assignmentsLoading || submitting,
                 actions = {
                     // Handing the task to someone else: transfer, delegate, or finish a delegated one.
                     if (state["canDelegate"].bool || state["canResolveDelegate"].bool) Box {
-                        IconButton(onClick = { moreMenu = true }, enabled = !submitting && !loading) { Icon(Icons.Filled.MoreVert, contentDescription = "更多") }
+                        GlassIconButton(onClick = { moreMenu = true }, enabled = !submitting && !loading) { Icon(Icons.Filled.MoreVert, contentDescription = "更多") }
                         AppOptionSheet(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                             if (state["canDelegate"].bool) {
                                 AppOptionItem(text = { Text("转办") }, onClick = { moreMenu = false; handoff = "transfer" })
@@ -281,8 +277,8 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
             )
         },
         bottomBar = {
-            Surface(Modifier.fadeAbove(MaterialTheme.colorScheme.background), color = MaterialTheme.colorScheme.background, shadowElevation = 0.dp) {
-                Button(
+            GlassBottomSurface() {
+                GlassActionButton(
                     onClick = { submit() }, enabled = ready,
                     modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical).height(BarSpec.ButtonHeight),
                 ) { AnimatedLabel(if (submitting) "正在提交…" else if (category == "SIGNED" && condition == "agree") "签到" else "提交") }
@@ -304,9 +300,8 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
                         }
                         if (conditions.isNotEmpty()) {
                             FormTitle("操作类型")
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                conditions.forEach { c -> ChoiceChip(c["value"].text == condition, { condition = c["value"].text }, c["name"].text) }
-                            }
+                            SingleChoiceGroup(conditions.map { it["name"].text }, conditions.indexOfFirst { it["value"].text == condition },
+                                { condition = conditions[it]["value"].text }, scrollable = conditions.size > 3)
                         }
                         // Only when there is something to fill in: accepting (the group and the date) or assigning (who repairs). Claiming has nothing to ask.
                         val assigningNow = condition == "assign" || condition == "appoint"
@@ -395,7 +390,7 @@ private fun HandoffSheet(taskId: String, operation: String, onDismiss: () -> Uni
             AnimatedLabel(title, style = MaterialTheme.typography.titleLarge)
             if (operation != "resolve") GroupCard { PickRow(if (operation == "transfer") "转办人" else "委派给", user.label, true) { picking = true } }
             TextEntry(if (operation == "resolve") "处理说明" else "原因", reason, { reason = it }, limit = 255, minLines = 3, required = true, placeholder = "请输入")
-            Button(
+            GlassActionButton(
                 onClick = {
                     saving = true
                     scope.launch {

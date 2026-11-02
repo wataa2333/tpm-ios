@@ -1,5 +1,7 @@
 package com.personal.tpm.ui
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import android.os.Build
 import android.provider.Settings
 import androidx.compose.animation.core.animateFloatAsState
@@ -19,9 +21,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.personal.tpm.ui.pageVerticalScroll as verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,30 +39,14 @@ import com.personal.tpm.ui.theme.ThemeConfig
 import kotlin.math.roundToInt
 
 /**
- * The developer page (opened from 我的 → 其他 after password verification): the motion scale, the state of the predictive back gesture,
+ * The developer page (opened from 我的 → 其他 without a local password challenge): the motion scale, the state of the predictive back gesture,
  * what the screen and the frame rate are, the numbers of the interface size, and the older loading animations.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun DeveloperPasswordDialog(onDismiss: () -> Unit, onVerified: () -> Unit) {
-    var password by remember { mutableStateOf("") }
-    var wrong by remember { mutableStateOf(false) }
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = onDismiss, title = { Text("开发者验证") },
-            text = { androidx.compose.material3.OutlinedTextField(value = password, onValueChange = { password = it.take(16); wrong = false },
-                label = { AnimatedLabel(if (wrong) "密码不正确" else "请输入密码") }, isError = wrong,
-                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword), singleLine = true) },
-            confirmButton = { androidx.compose.material3.TextButton(onClick = { if (password == "1331") { password = ""; onVerified() } else wrong = true }) { Text("验证") } },
-            dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("取消") } },
-        )
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
 fun DevScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    Scaffold(contentWindowInsets = appContentInsets(),
+    GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(title = "开发者", onBack = onBack) },
     ) { padding ->
@@ -74,6 +57,21 @@ fun DevScreen(onBack: () -> Unit) {
                         Modifier.verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        SectionTitle("液态玻璃")
+                        GroupCard {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("启用液态玻璃", style = MaterialTheme.typography.titleSmall)
+                                        Text("沉浸式渐变顶栏、悬浮底栏与玻璃按钮", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    GlassSwitch(checked = AppPreferences.liquidGlass, onCheckedChange = AppPreferences::updateLiquidGlass,
+                                        modifier = Modifier.semantics { contentDescription = "启用液态玻璃" })
+                                }
+                                Text("即时生效并记住选择。Android 13 及以上支持折射，Android 12 使用背景模糊，旧系统或软件绘制使用半透明材质。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Reveal(AppPreferences.liquidGlass) { GlassEffectSettings() }
+                            }
+                        }
                         SectionTitle("精密度接口验证")
                         PrecisionApiProbe()
                         // ---- motion ----
@@ -82,18 +80,16 @@ fun DevScreen(onBack: () -> Unit) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text("自定义读取档位", Modifier.weight(1f))
-                                    Switch(AppPreferences.repairReadExperiment, AppPreferences::updateRepairReadExperiment)
+                                    GlassSwitch(AppPreferences.repairReadExperiment, AppPreferences::updateRepairReadExperiment)
                                 }
                                 Reveal(AppPreferences.repairReadExperiment) {
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Text("每页工单数量", style = MaterialTheme.typography.titleSmall)
-                                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            AppPreferences.repairPageSizes.forEach { size -> ChoiceChip(AppPreferences.repairPageSize == size, { AppPreferences.updateRepairPageSize(size) }, "$size 单") }
-                                        }
+                                        SingleChoiceGroup(AppPreferences.repairPageSizes.map { "$it 单" }, AppPreferences.repairPageSizes.indexOf(AppPreferences.repairPageSize),
+                                            { AppPreferences.updateRepairPageSize(AppPreferences.repairPageSizes[it]) })
                                         Text("详情核对并发", style = MaterialTheme.typography.titleSmall)
-                                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            AppPreferences.repairConcurrencyLevels.forEach { count -> ChoiceChip(AppPreferences.repairConcurrency == count, { AppPreferences.updateRepairConcurrency(count) }, "$count 单") }
-                                        }
+                                        SingleChoiceGroup(AppPreferences.repairConcurrencyLevels.map { "$it 单" }, AppPreferences.repairConcurrencyLevels.indexOf(AppPreferences.repairConcurrency),
+                                            { AppPreferences.updateRepairConcurrency(AppPreferences.repairConcurrencyLevels[it]) })
                                     }
                                 }
                                 AnimatedLabel("当前：每页${AppPreferences.effectiveRepairPageSize}单，详情同时核对${AppPreferences.effectiveRepairConcurrency}单。", style = MaterialTheme.typography.bodySmall)
@@ -108,7 +104,7 @@ fun DevScreen(onBack: () -> Unit) {
                                         AnimatedLabel(Motion.tierTitles[index], Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                                         AnimatedLabel("${Motion.length(index)} ms", style = MaterialTheme.typography.bodyMedium, color = accentInk())
                                     }
-                                    Slider(
+                                    GlassSlider(
                                         value = Motion.length(index).toFloat(), onValueChange = { Motion.setLength(index, (it / 10f).roundToInt() * 10) },
                                         valueRange = 40f..1000f,
                                     )
@@ -173,7 +169,7 @@ fun DevScreen(onBack: () -> Unit) {
                                     Text("请求最高刷新率", style = MaterialTheme.typography.titleSmall)
                                     Text("向系统申请屏幕支持的最高刷新率；手机的省电策略有最终决定权", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                Switch(checked = ThemeConfig.highRefresh, onCheckedChange = { ThemeConfig.highRefresh = it; (context as? MainActivity)?.applyRefreshRate() })
+                                GlassSwitch(checked = ThemeConfig.highRefresh, onCheckedChange = { ThemeConfig.highRefresh = it; (context as? MainActivity)?.applyRefreshRate() })
                             }
                         }
 
@@ -193,18 +189,7 @@ fun DevScreen(onBack: () -> Unit) {
                             FactRow("显示区域留白（dp）", "上 ${ThemeConfig.displayTop}  下 ${ThemeConfig.displayBottom}  左 ${ThemeConfig.displayStart}  右 ${ThemeConfig.displayEnd}")
                         }
 
-                        // ---- loading animations ----
-                        SectionTitle("加载动画（含旧样式）")
-                        GroupCard {
-                            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    ThemeConfig.LoadingStyle.entries.forEach { style ->
-                                        ChoiceChip(ThemeConfig.loadingStyle == style, { ThemeConfig.loadingStyle = style }, style.title + if (style.extra) "（旧）" else "")
-                                    }
-                                }
-                                LoadingStylePreview(ThemeConfig.loadingStyle)
-                            }
-                        }
+
                     }
                 }
             }

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -51,13 +52,10 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalContentColor
@@ -66,15 +64,11 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import kotlin.math.roundToInt
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -109,7 +103,7 @@ import com.personal.tpm.ui.theme.ThemeConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-private data class Tab(val title: String, val icon: ImageVector)
+private typealias Tab = GlassTab
 
 /**
  * The four tabs of the iOS app: 主页、我的待办、工作台、我的(账号名). Material 3 parts: a big tinted title that folds into the top bar with the
@@ -119,7 +113,7 @@ private data class Tab(val title: String, val icon: ImageVector)
 @Composable
 fun MainShell(
     openList: (String) -> Unit, openPool: (PoolKind) -> Unit, openOrder: (OrderKind, String) -> Unit,
-    openWork: (WorkList) -> Unit, openQuery: (com.personal.tpm.data.FaultSearchField, String) -> Unit, openDrafts: () -> Unit, openNew: () -> Unit, openDev: () -> Unit, openDashboard: () -> Unit, openPrecision: () -> Unit, openQuerySettings: () -> Unit,
+    openWork: (WorkList) -> Unit, openQuery: (com.personal.tpm.data.FaultSearchField, String) -> Unit, openDrafts: () -> Unit, openNew: () -> Unit, openQuick: () -> Unit, openDev: () -> Unit, openDashboard: () -> Unit, openPrecision: () -> Unit, openQuerySettings: () -> Unit,
 ) {
     val session = LocalSession.current
     val auth by session.auth.collectAsState()
@@ -157,32 +151,73 @@ fun MainShell(
         when (selected) { 0 -> homeVm.reload(pull = true); 1 -> todoVm.reload(pull = true); 2 -> workspaceVm.reload(pull = true) }
     }
 
-    Scaffold(contentWindowInsets = appContentInsets(),
-        containerColor = MaterialTheme.colorScheme.background,
+    GlassMainFrame(
+        topBar = {
+            val working = switching || mineBusy ||
+                (selected == 0 && (homeVm.loading || homeVm.refreshing)) || (selected == 1 && (todoVm.loading || todoVm.refreshing)) ||
+                (selected == 2 && (workspaceVm.loading || workspaceVm.refreshing))
+            val pulling = if ((selected == 0 && homeVm.refreshing) || (selected == 1 && todoVm.refreshing) || (selected == 2 && workspaceVm.refreshing)) 0f else if (selected <= 2) pull.distanceFraction else 0f
+            CollapsingTopBar(
+                title = if (selected == 3) "我的" else tabs[selected].title, state = bar, loading = working, pull = pulling,
+                onTitleClick = null,
+                actions = {
+                    if (selected == 1) SelectButton(todoVm.batch.active) { if (todoVm.batch.active) todoVm.batch.end() else todoVm.batch.begin() }
+                    // The factory: its name, and a tap to change it. Only on 主页 and 我的; the other pages work in the factory chosen there.
+                    if (selected == 0 || selected == 3) GlassTextButton(onClick = { choosingFactory = true }, colors = ButtonDefaults.textButtonColors(contentColor = LocalContentColor.current)) {
+                        AnimatedLabel(session.currentFactoryName, Modifier.widthIn(max = 140.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
+                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "切换厂区")
+                    }
+                    if (selected <= 2) RefreshButton(spinning = working) { refresh() }
+                },
+            )
+        },
         snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
         // A new repair report can be started from every tab of the app, not only from the order lists.
         floatingActionButton = {
-            androidx.compose.animation.AnimatedVisibility(
-                selected <= 2 && !selectingTodos,
-                // After the bar swap has settled (it takes 300 ms), so the button is not carried along while the bar changes height.
-                enter = androidx.compose.animation.scaleIn(tween(Motion.Normal, delayMillis = 320)) + androidx.compose.animation.fadeIn(tween(Motion.Normal, delayMillis = 320)),
-                exit = androidx.compose.animation.scaleOut(tween(Motion.Fast, easing = Motion.Change)) + androidx.compose.animation.fadeOut(tween(Motion.Fast, easing = Motion.Change)),
-            ) { androidx.compose.material3.ExtendedFloatingActionButton(
-                onClick = openNew, containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
-                elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) }, text = { Text("新建报修") },
-            ) }
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) {
+                    androidx.compose.animation.AnimatedVisibility(visible = selected == 1 && !selectingTodos,
+                        enter = androidx.compose.animation.scaleIn(tween(Motion.Normal)) + androidx.compose.animation.fadeIn(tween(Motion.Normal)),
+                        exit = androidx.compose.animation.scaleOut(tween(Motion.Fast)) + androidx.compose.animation.fadeOut(tween(Motion.Fast))) {
+                        GlassTonalButton(onClick = openQuick, modifier = Modifier.heightIn(min = 56.dp)) { Text("快速完成") }
+                    }
+                }
+
+                androidx.compose.animation.AnimatedVisibility(
+                    selected <= 2 && !selectingTodos,
+                    // After the bar swap has settled (it takes 300 ms), so the button is not carried along while the bar changes height.
+                    enter = androidx.compose.animation.scaleIn(tween(Motion.Normal, delayMillis = 320)) + androidx.compose.animation.fadeIn(tween(Motion.Normal, delayMillis = 320)),
+                    exit = androidx.compose.animation.scaleOut(tween(Motion.Fast, easing = Motion.Change)) + androidx.compose.animation.fadeOut(tween(Motion.Fast, easing = Motion.Change)),
+                ) { if (AppPreferences.liquidGlass) {
+                    val tint = MaterialTheme.colorScheme.primaryContainer
+                    GlassActionButton(onClick = openNew,
+                        modifier = Modifier.heightIn(min = 56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = tint, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)) {
+                        Icon(Icons.Filled.Add, contentDescription = null)
+                        androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
+                        Text("新建报修")
+                    }
+                } else androidx.compose.material3.ExtendedFloatingActionButton(
+                    onClick = openNew, containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
+                    elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) }, text = { Text("新建报修") },
+                ) }
+            }
         },
         bottomBar = {
             // While todo tasks are being selected the tab bar gives way to the bar of the batch.
             androidx.compose.animation.AnimatedContent(
-                targetState = selectingTodos, label = "bottomBar", modifier = Modifier.fadeAbove(MaterialTheme.colorScheme.background).background(MaterialTheme.colorScheme.background),
+                targetState = selectingTodos, label = "bottomBar", modifier = if (AppPreferences.liquidGlass) Modifier else Modifier.fadeAbove(MaterialTheme.colorScheme.background).background(MaterialTheme.colorScheme.background),
                 // Both bars sit on the bottom edge of the room they share (the tab bar is the lower one), so while the room grows or shrinks neither leaves a gap below it.
                 contentAlignment = Alignment.BottomCenter,
                 // The tab bar and the batch bar change places by a cross-fade while the room between them grows or shrinks (no slide: a slide down on top
                 // of the shrinking room made the bar fall away).
                 transitionSpec = { (androidx.compose.animation.fadeIn(tween(Motion.Slow, easing = Motion.Arrive)) togetherWith androidx.compose.animation.fadeOut(tween(Motion.Fast, easing = Motion.Leave))).using(androidx.compose.animation.SizeTransform(clip = true) { _, _ -> tween(Motion.Slow, easing = Motion.Change) }) },
-            ) { selectingNow -> if (selectingNow) BatchBar(todoVm.batch) { todoVm.rows.mapNotNull { batchItem(it) } } else
+            ) { selectingNow -> if (selectingNow) BatchBar(todoVm.batch) { todoVm.rows.mapNotNull { batchItem(it) } } else if (AppPreferences.liquidGlass) {
+                GlassBottomBar(tabs, selected, todoVm.badge) { index ->
+                    if (selected != index) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); selected = index }
+                }
+            } else
             // The standard shadow of a bar at the bottom (3 dp) instead of a line above it.
             Surface(color = MaterialTheme.colorScheme.background, shadowElevation = 0.dp) {
             NavigationBar(containerColor = MaterialTheme.colorScheme.background, tonalElevation = 0.dp) {
@@ -202,24 +237,7 @@ fun MainShell(
             }
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(bottom = padding.calculateBottomPadding())) {
-            val working = switching || mineBusy ||
-                (selected == 0 && (homeVm.loading || homeVm.refreshing)) || (selected == 1 && (todoVm.loading || todoVm.refreshing || todoVm.loadingMore)) ||
-                (selected == 2 && (workspaceVm.loading || workspaceVm.refreshing))
-            val pulling = if ((selected == 0 && homeVm.refreshing) || (selected == 1 && todoVm.refreshing) || (selected == 2 && workspaceVm.refreshing)) 0f else if (selected <= 2) pull.distanceFraction else 0f
-            CollapsingTopBar(
-                title = if (selected == 3) "我的" else tabs[selected].title, state = bar, loading = working, pull = pulling,
-                onTitleClick = null,
-                actions = {
-                    if (selected == 1) SelectButton(todoVm.batch.active) { if (todoVm.batch.active) todoVm.batch.end() else todoVm.batch.begin() }
-                    // The factory: its name, and a tap to change it. Only on 主页 and 我的; the other pages work in the factory chosen there.
-                    if (selected == 0 || selected == 3) TextButton(onClick = { choosingFactory = true }, colors = ButtonDefaults.textButtonColors(contentColor = LocalContentColor.current)) {
-                        AnimatedLabel(session.currentFactoryName, Modifier.widthIn(max = 140.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
-                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "切换厂区")
-                    }
-                    if (selected <= 2) RefreshButton(spinning = working) { refresh() }
-                },
-            )
+        Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding())) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 RoundedSheet {
                     Column(Modifier.fillMaxSize()) {
@@ -273,7 +291,7 @@ private val transparentRow @Composable get() = ListItemDefaults.colors(container
 private fun StepSlider(title: String, names: List<String>, selected: Int, onChange: (Int) -> Unit) {
     Column {
         AnimatedLabel(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Slider(value = selected.toFloat(), onValueChange = { onChange(it.roundToInt()) }, valueRange = 0f..names.lastIndex.toFloat(), steps = names.size - 2)
+        GlassSlider(value = selected.toFloat(), onValueChange = { onChange(it.roundToInt()) }, valueRange = 0f..names.lastIndex.toFloat(), steps = names.size - 2)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             names.forEachIndexed { index, name ->
                 Text(
@@ -300,7 +318,7 @@ private fun DisplayAreaSheet(onDismiss: () -> Unit) {
             @Composable fun Edge(name: String, value: Int, set: (Int) -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     AnimatedLabel(name, Modifier.width(32.dp), style = MaterialTheme.typography.titleSmall)
-                    Slider(value = value.toFloat(), onValueChange = { set(it.roundToInt()) }, valueRange = 0f..ThemeConfig.DISPLAY_AREA_MAX.toFloat(), modifier = Modifier.weight(1f))
+                    GlassSlider(value = value.toFloat(), onValueChange = { set(it.roundToInt()) }, valueRange = 0f..ThemeConfig.DISPLAY_AREA_MAX.toFloat(), modifier = Modifier.weight(1f))
                     AnimatedLabel("$value", Modifier.width(36.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.End)
                 }
             }
@@ -354,7 +372,6 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
     var signingInAs by remember { mutableStateOf<String?>(null) }
     var pickingAccent by remember { mutableStateOf(false) }
     var adjustingArea by remember { mutableStateOf(false) }
-    var protect by remember { mutableStateOf(BiometricGate.isEnabled(context)) }
     val scope = rememberCoroutineScope()
     val name = auth["fullName"].text.ifEmpty { auth["name"].text }
     val current = auth["name"].text
@@ -375,18 +392,7 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
         }
     }
 
-    /** Turning the protection off is itself checked. */
-    fun setProtection(on: Boolean) {
-        if (on) { BiometricGate.setEnabled(context, true); protect = true; return }
-        val activity = context.findActivity() ?: return
-        scope.launch {
-            when (val outcome = BiometricGate.authenticate(activity, "关闭对已记住账号的保护", force = true)) {
-                BiometricGate.Outcome.Passed -> { BiometricGate.setEnabled(context, false); protect = false }
-                BiometricGate.Outcome.Cancelled -> protect = true
-                is BiometricGate.Outcome.Failed -> { protect = true; error = "没有关闭保护" to outcome.message }
-            }
-        }
-    }
+
 
     PageWidth {
         Column(
@@ -444,9 +450,9 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
                         supportingContent = { AnimatedLabel(account.username) },
                         leadingContent = { Icon(Icons.Filled.AccountCircle, contentDescription = null, tint = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) },
                         trailingContent = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 if (isCurrent) Icon(Icons.Filled.Check, contentDescription = "当前账号", tint = MaterialTheme.colorScheme.primary)
-                                IconButton(onClick = { vault.remove(account.username) }) { Icon(Icons.Filled.Delete, contentDescription = "移除已记住的账号") }
+                                GlassIconButton(onClick = { vault.remove(account.username) }) { Icon(Icons.Filled.Delete, contentDescription = "移除已记住的账号") }
                             }
                         },
                     )
@@ -463,15 +469,7 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
                     leadingContent = { Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 )
             }
-            GroupCard {
-                ListItem(
-                    colors = transparentRow,
-                    headlineContent = { Text("验证身份后才能使用已记住的账号") },
-                    supportingContent = { Text("打开后，使用已记住的账号前需要指纹、面容或锁屏密码验证。") },
-                    leadingContent = { Icon(Icons.Filled.Fingerprint, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    trailingContent = { Switch(checked = protect, onCheckedChange = { setProtection(it) }) },
-                )
-            }
+
             SectionTitle("外观")
 
             GroupCard {
@@ -513,17 +511,7 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
                 }
             }
 
-            GroupCard {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("加载动画", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ThemeConfig.LoadingStyle.entries.filter { !it.extra }.forEach { style ->
-                            ChoiceChip(ThemeConfig.loadingStyle == style, { ThemeConfig.loadingStyle = style }, style.title)
-                        }
-                    }
-                    LoadingStylePreview(ThemeConfig.loadingStyle)
-                }
-            }
+
 
             SectionTitle("其他")
             GroupCard {
@@ -586,17 +574,17 @@ private fun AccentSheet(onDismiss: () -> Unit) {
                     Text("每次打开随机换色", style = MaterialTheme.typography.titleSmall)
                     Text("开启后，每次启动 App 从上面的颜色里随机选一个", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Switch(checked = ThemeConfig.randomOnLaunch, onCheckedChange = { ThemeConfig.setRandomOnLaunch(it) })
+                GlassSwitch(checked = ThemeConfig.randomOnLaunch, onCheckedChange = { ThemeConfig.setRandomOnLaunch(it) })
             }
             SoftButton(onClick = { ThemeConfig.shuffleAccent() }, Modifier.fillMaxWidth()) { Text("随机换一个") }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 androidx.compose.material3.TextField(colors = blockFieldColors(), shape = MaterialTheme.shapes.medium, 
-                    value = hex, onValueChange = { hex = it.take(7) }, singleLine = true, modifier = Modifier.weight(1f),
+                    value = hex, onValueChange = { hex = it.take(7) }, singleLine = true, modifier = Modifier.weight(1f).glassSearchSurface(MaterialTheme.shapes.medium),
                     label = { Text("自定义颜色（#RRGGBB）") }, prefix = { Text("#") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                 )
                 Box(Modifier.size(40.dp).clip(CircleShape).background(typed ?: MaterialTheme.colorScheme.surfaceContainerHigh))
-                Button(onClick = { typed?.let { choose(it) } }, enabled = typed != null) { Text("使用") }
+                GlassActionButton(onClick = { typed?.let { choose(it) } }, enabled = typed != null) { Text("使用") }
             }
         }
     }

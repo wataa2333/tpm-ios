@@ -72,7 +72,7 @@ const val BATCH_LIMIT = 100
 
 /** The end of today, the date a repair should be done by when nobody says otherwise. */
 fun defaultEstimatedTime(now: Date = Date()): String =
-    serverDate(Calendar.getInstance().apply { time = now; set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59) }.time)
+    serverDate(Calendar.getInstance(businessTimeZone()).apply { time = now; set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59) }.time)
 
 val Jv.isFilled: Boolean get() = isObject && keys.isNotEmpty()
 

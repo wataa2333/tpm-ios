@@ -113,7 +113,7 @@ fun WorkspaceTab(vm: WorkspaceViewModel, gridState: LazyGridState, pullState: Pu
         PageWidth {
             LazyVerticalGrid(
                 state = gridState, columns = GridCells.Adaptive(minSize = 150.dp), modifier = nested.fillMaxSize().scrollEdges(MaterialTheme.colorScheme.background, before = { gridState.canScrollBackward }, after = { gridState.canScrollForward }),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 88.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + LocalGlassContentPadding.current.calculateTopPadding(), bottom = 88.dp + LocalGlassContentPadding.current.calculateBottomPadding()),
                 horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 vm.error?.let { message -> item(span = { GridItemSpan(maxLineSpan) }) { AnimatedLabel(message, color = MaterialTheme.colorScheme.error) } }
@@ -165,11 +165,11 @@ private fun QuickQueryCard(title: String, icon: ImageVector, tint: Color, placeh
                 AnimatedLabel(title, style = MaterialTheme.typography.titleMedium)
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                androidx.compose.material3.TextField(colors = blockFieldColors(onCard = true), shape = MaterialTheme.shapes.medium, 
-                    value = text, onValueChange = { text = it }, singleLine = true, placeholder = { AnimatedLabel(placeholder) }, modifier = Modifier.weight(1f),
+                androidx.compose.material3.TextField(colors = searchFieldColors(onCard = true), shape = MaterialTheme.shapes.medium,
+                    value = text, onValueChange = { text = it }, singleLine = true, placeholder = { AnimatedLabel(placeholder) }, modifier = Modifier.weight(1f).glassSearchSurface(MaterialTheme.shapes.medium),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { go() }),
                 )
-                FilledIconButton(onClick = { go() }, enabled = text.isNotBlank()) { Icon(Icons.Filled.Search, contentDescription = "查询") }
+                GlassIconButton(onClick = { go() }, enabled = text.isNotBlank()) { Icon(Icons.Filled.Search, contentDescription = "查询") }
             }
         }
     }

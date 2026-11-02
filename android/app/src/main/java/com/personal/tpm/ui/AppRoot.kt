@@ -30,7 +30,7 @@ import androidx.compose.runtime.key
 private enum class Screen { Login, Main }
 
 /** Sign in, then open the app. Each change is a plain cross-fade. */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.PickerPrefs, drafts: com.personal.tpm.data.DraftStore) {
     TransparentSystemBars()
@@ -47,6 +47,7 @@ fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.
     CompositionLocalProvider(
         LocalSession provides session, LocalVault provides vault, LocalPickerPrefs provides prefs, LocalDrafts provides drafts,
         LocalQueryAccounts provides queries,
+        androidx.compose.material3.LocalRippleConfiguration provides if (AppPreferences.liquidGlass) null else androidx.compose.material3.LocalRippleConfiguration.current,
     ) {
         // The keyboard pushes the whole page up, so a text box that is being typed in is never under it.
         // The area of the screen the owner chose (see 我的 > 显示区域): the app lies inside it, the rest is plain background.
@@ -67,6 +68,7 @@ fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.
             }
         }
         }
+        GlassIntroduction()
     }
 }
 

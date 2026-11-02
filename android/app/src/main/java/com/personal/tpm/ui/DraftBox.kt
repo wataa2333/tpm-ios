@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import com.personal.tpm.ui.pageVerticalScroll as verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,7 +23,7 @@ import com.personal.tpm.data.DraftTarget
 fun DraftBoxScreen(onBack: () -> Unit, onOpenNew: (String) -> Unit) {
     val session = LocalSession.current
     var notice by remember { mutableStateOf<String?>(null) }
-    Scaffold(contentWindowInsets = appContentInsets(),
+    GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(title = "草稿箱", onBack = onBack) },
     ) { padding ->

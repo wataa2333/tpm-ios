@@ -34,19 +34,14 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.animation.core.tween
@@ -110,6 +105,7 @@ class PresetRequest(val action: BatchAction, val operation: BatchOperation, val 
  */
 @Stable
 class BatchSelection {
+    val operationKey = "batch:" + java.util.UUID.randomUUID()
     var active by mutableStateOf(false); private set
     val items = mutableStateListOf<BatchItem>()
     /** Said in a snackbar: why a card cannot be selected. */
@@ -201,7 +197,10 @@ fun NewButton(visible: Boolean, label: String, onClick: () -> Unit) {
             enter = androidx.compose.animation.scaleIn(tween(Motion.Normal, delayMillis = 200)) + androidx.compose.animation.fadeIn(tween(Motion.Normal, delayMillis = 200)),
             exit = androidx.compose.animation.scaleOut(tween(Motion.Fast, easing = Motion.Change)) + androidx.compose.animation.fadeOut(tween(Motion.Fast, easing = Motion.Change)),
         ) {
-            androidx.compose.material3.ExtendedFloatingActionButton(
+            if (AppPreferences.liquidGlass) GlassButton(onClick, prominent = true) {
+                Icon(Icons.Filled.Add, contentDescription = null)
+                androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp)); AnimatedLabel(label)
+            } else androidx.compose.material3.ExtendedFloatingActionButton(
                 onClick = onClick, containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
                 elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
                 icon = { Icon(Icons.Filled.Add, contentDescription = null) }, text = { AnimatedLabel(label) },
@@ -227,7 +226,7 @@ fun BatchBarHost(active: Boolean, content: @Composable () -> Unit) {
     // color, owns everything behind it while selection is entering, visible or leaving.
     // Draw before padding so the surface includes the navigation inset; buttons do not.
     Box(Modifier.fillMaxWidth()
-        .background(if (present) MaterialTheme.colorScheme.background else Color.Transparent)
+        .background(if (present && !AppPreferences.liquidGlass) MaterialTheme.colorScheme.background else Color.Transparent)
         .then(if (present) Modifier.navigationBarsPadding() else Modifier)) {
         androidx.compose.runtime.CompositionLocalProvider(LocalBarInsetsHandled provides true) {
             // Keep the content alive through the complete exit, including quick reversals.
@@ -236,7 +235,8 @@ fun BatchBarHost(active: Boolean, content: @Composable () -> Unit) {
                     // Preserve the top fade, but do not let exiting buttons slide into
                     // the gesture area, which belongs to the opaque host surface.
                     val contentScope = this
-                    clipRect(top = -22.dp.toPx(), bottom = size.height) { contentScope.drawContent() }
+                    if (progress < 1f) clipRect(top = -22.dp.toPx(), bottom = size.height) { contentScope.drawContent() }
+                    else drawContent()
                 }.layout { measurable, constraints ->
                     val child = measurable.measure(constraints.copy(minHeight = 0))
                     layout(child.width, (child.height * progress).roundToInt()) {
@@ -262,15 +262,19 @@ class CardSelecting(val selected: Boolean, val enabled: Boolean, val toggle: () 
 /** The bar at the bottom of a list in selection mode: the count and the status, "全选", and the two ways out of the step as full-width buttons. */
 @Composable
 fun BatchBar(batch: BatchSelection, candidates: () -> List<BatchItem>) {
+    OperationAccountScope(batch.operationKey) { BatchBarContent(batch, candidates) }
+}
+@Composable
+private fun BatchBarContent(batch: BatchSelection, candidates: () -> List<BatchItem>) {
     val session = LocalSession.current
     val prefs = LocalPickerPrefs.current
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
-    Surface(Modifier.fadeAbove(MaterialTheme.colorScheme.background), color = MaterialTheme.colorScheme.background, shadowElevation = 0.dp) {
+    GlassBottomSurface() {
         Column {
         // While the first order is read (who approves next, the ERP form), a thin bar runs here. The buttons keep their look: greying them out and
         // changing their words for that second was the flash on tapping 批量完成.
-        Box(Modifier.fillMaxWidth().height(2.dp)) { if (batch.preparing) LinearProgressIndicator(Modifier.fillMaxWidth()) }
+        Box(Modifier.fillMaxWidth()) { if (batch.preparing) AppProgressIndicator(Modifier.fillMaxWidth()) }
         Column(Modifier.fillMaxWidth().then(if (LocalBarInsetsHandled.current) Modifier else Modifier.navigationBarsPadding()).padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f)) {
@@ -279,6 +283,7 @@ fun BatchBar(batch: BatchSelection, candidates: () -> List<BatchItem>) {
                         AnimatedLabel(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
+                OperationAccountAction(locked = batch.preparing || batch.run != null)
                 Box {
                     SoftButton(onClick = { menu = true }) { Text("全选") }
                     AppOptionSheet(expanded = menu, onDismissRequest = { menu = false }) {
@@ -299,7 +304,7 @@ fun BatchBar(batch: BatchSelection, candidates: () -> List<BatchItem>) {
                     enabled = batch.items.isNotEmpty(), modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight),
                     contentColor = MaterialTheme.colorScheme.error,
                 ) { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null, Modifier.padding(end = 6.dp)); AnimatedLabel(action?.rejectTitle ?: "批量退单", maxLines = 1) }
-                Button(
+                GlassActionButton(
                     onClick = { scope.launch { batch.prepare(BatchOperation.Proceed, session, prefs) } },
                     enabled = batch.items.isNotEmpty(), modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight),
                 ) { AnimatedLabel(action?.title ?: "批量处理", maxLines = 1) }
@@ -314,21 +319,29 @@ fun BatchBar(batch: BatchSelection, candidates: () -> List<BatchItem>) {
 /** Put once in a list screen that has a [BatchSelection]: the preset sheet, the progress of a run, the read-only peek. */
 @Composable
 fun BatchOverlays(batch: BatchSelection) {
+    OperationAccountScope(batch.operationKey) { BatchOverlaysContent(batch) }
+}
+@Composable
+private fun BatchOverlaysContent(batch: BatchSelection) {
     val session = LocalSession.current
+    val accounts = LocalOperationAccounts.current
+    LaunchedEffect(batch.active) { if (!batch.active && batch.run == null) accounts?.clear(batch.operationKey) }
+    DisposableEffect(batch.operationKey) { onDispose { accounts?.clear(batch.operationKey) } }
     batch.presetting?.let { request ->
         CompactTheme { BatchPresetSheet(
             request, request.items.size, onDismiss = { batch.presetting = null },
             onStart = { preset -> batch.presetting = null; batch.run = BatchRun(request.action, request.operation, request.items, preset) },
         ) }
     }
-    batch.run?.let { run ->
-        CompactTheme { BatchRunDialog(run) {
+    SlideUpOverlayFor(batch.run) { run ->
+        androidx.compose.runtime.CompositionLocalProvider(LocalOperationLocked provides true) { CompactTheme { BatchRunDialog(run) {
             // The orders that went through leave the selection; the ones that failed stay selected for another try.
             batch.remove(run.succeeded.toSet())
             if (batch.items.isEmpty()) batch.end()
             batch.run = null
+            accounts?.clear(batch.operationKey)
             if (run.succeeded.isNotEmpty()) session.notifyChanged()
-        } }
+        } } }
     }
     // Laid over the page inside the same window (a dialog window has its own insets and put the buttons under the navigation bar). It slides in and
     // out like every other page.
@@ -394,7 +407,7 @@ private fun BatchPresetSheet(request: PresetRequest, count: Int, onDismiss: () -
             }
             val sheetColor = MaterialTheme.colorScheme.background
             Box(Modifier.zIndex(1f).fadeAbove(sheetColor).background(sheetColor)) {
-            Button(
+            GlassActionButton(
                 onClick = { scope.launch { sheetState.hide(); onStart(preset) } }, enabled = preset.isComplete(action, operation),
                 colors = if (operation == BatchOperation.Reject) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error) else ButtonDefaults.buttonColors(),
                 modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical).height(BarSpec.ButtonHeight),
@@ -500,7 +513,7 @@ private fun QuantityLine(title: String, subtitle: String, label: String, quantit
                 AnimatedLabel(title, style = MaterialTheme.typography.titleSmall)
                 AnimatedLabel(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error) }
+            GlassIconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error) }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.weight(1f)) { InputRow(label, text, { text = it; onQuantity(it.toDoubleOrNull() ?: 0.0) }, suffix = unit) }
@@ -516,6 +529,7 @@ private fun QuantityLine(title: String, subtitle: String, label: String, quantit
 private fun BatchRunDialog(run: BatchRun, onClose: () -> Unit) {
     val session = LocalSession.current
     val prefs = LocalPickerPrefs.current
+    var closing by remember(run) { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
     val view = LocalView.current
     DisposableEffect(Unit) { view.keepScreenOn = true; onDispose { view.keepScreenOn = false } }
@@ -523,14 +537,18 @@ private fun BatchRunDialog(run: BatchRun, onClose: () -> Unit) {
     // The page is laid over the screen inside the same window, so the status bar and the navigation bar are handled as everywhere else. No way
     // out with the back key while it runs: the "完成" button is the way out.
     androidx.activity.compose.BackHandler(enabled = true) {}
-    SlideUpOverlay {
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.fillMaxSize()) {
-                AppTopBar(title = run.title, loading = run.running)
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Box(Modifier.fillMaxSize()) {
+        GlassScaffold(topBar = { AppTopBar(title = run.title) },
+            bottomBar = { GlassBottomSurface {
+                Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (run.running) SoftButton(onClick = { run.stop() }, Modifier.weight(1f).height(48.dp)) { Text("停止") }
+                    GlassActionButton(onClick = { closing = true; onClose() }, enabled = !run.running && !closing, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight)) { Text("完成") }
+                }
+            } }) { padding ->
+                Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     GroupCard {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            LinearProgressIndicator(progress = { run.processed.toFloat() / maxOf(run.total, 1) }, Modifier.fillMaxWidth())
+                            AppProgressIndicator(progress = { run.processed.toFloat() / maxOf(run.total, 1) }, Modifier.fillMaxWidth())
                             Row {
                                 AnimatedLabel(runHeadline(run), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                                 AnimatedLabel("${run.processed}/${run.total}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -561,29 +579,24 @@ private fun BatchRunDialog(run: BatchRun, onClose: () -> Unit) {
                         GroupCard { run.failures.forEach { item -> ResultRow(item.name, item.reference, item.message, MaterialTheme.colorScheme.error) { clipboard.setText(AnnotatedString(item.name + "：" + item.message)) } } }
                     }
                 }
-                Row(Modifier.zIndex(1f).fadeAbove(MaterialTheme.colorScheme.background).background(MaterialTheme.colorScheme.background).fillMaxWidth().navigationBarsPadding().padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (run.running) SoftButton(onClick = { run.stop() }, Modifier.weight(1f).height(48.dp)) { Text("停止") }
-                    Button(onClick = onClose, enabled = !run.running, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight)) { Text("完成") }
-                }
-            }
         }
         run.problem?.let { problem ->
             var applyToRest by remember(problem) { mutableStateOf(false) }
             Dialog(onDismissRequest = {}, properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)) { TransparentSystemBars(); EnsureScaled {
-                Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                GlassPanelSurface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         AnimatedLabel(problem.title, style = MaterialTheme.typography.titleLarge)
                         AnimatedLabel(problem.order.name + if (problem.order.reference.isEmpty()) "" else " · ${problem.order.reference}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         SelectionContainer { AnimatedLabel(problem.message, Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodyLarge) }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("后面遇到同样的情况，都这样处理", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                            Switch(checked = applyToRest, onCheckedChange = { applyToRest = it })
+                            GlassSwitch(checked = applyToRest, onCheckedChange = { applyToRest = it })
                         }
                         if (problem.canSkipShort) {
-                            Button(onClick = { run.answer(BatchChoice.SkipShortages, applyToRest) }, Modifier.fillMaxWidth().height(48.dp)) { Text("跳过不够的物料，其余照常领料") }
+                            GlassActionButton(onClick = { run.answer(BatchChoice.SkipShortages, applyToRest) }, Modifier.fillMaxWidth().height(48.dp)) { Text("跳过不够的物料，其余照常领料") }
                             SoftButton(onClick = { run.answer(BatchChoice.WithoutMaterials, applyToRest) }, Modifier.fillMaxWidth().height(48.dp)) { Text("这张单都不领料，继续完成") }
                         } else {
-                            Button(onClick = { run.answer(BatchChoice.WithoutMaterials, applyToRest) }, Modifier.fillMaxWidth().height(48.dp)) { Text("不领料，继续完成这张单") }
+                            GlassActionButton(onClick = { run.answer(BatchChoice.WithoutMaterials, applyToRest) }, Modifier.fillMaxWidth().height(48.dp)) { Text("不领料，继续完成这张单") }
                         }
                         SoftButton(onClick = { run.answer(BatchChoice.Skip, applyToRest) }, Modifier.fillMaxWidth().height(48.dp)) { Text("跳过这张单") }
                         SoftButton(
@@ -609,12 +622,12 @@ private fun runHeadline(run: BatchRun): String {
 
 @Composable
 private fun ResultRow(name: String, reference: String, message: String, color: androidx.compose.ui.graphics.Color, onCopy: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.Top) {
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             AnimatedLabel(name, style = MaterialTheme.typography.titleSmall)
             if (reference.isNotEmpty()) AnimatedLabel(reference, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SelectionContainer { AnimatedLabel(message, style = MaterialTheme.typography.bodyMedium, color = color) }
         }
-        IconButton(onClick = onCopy) { Icon(Icons.Filled.ContentCopy, contentDescription = "复制") }
+        GlassIconButton(onClick = onCopy) { Icon(Icons.Filled.ContentCopy, contentDescription = "复制") }
     }
 }

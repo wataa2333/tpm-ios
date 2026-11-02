@@ -25,7 +25,13 @@ fun filter(field: String, value: String, operator: String = "eq"): JSONObject =
  * `LiveSession`: the same addresses, the same Bearer token, the token renewed from the response header, answers that
  * arrive after the account or factory changed thrown away. The server speaks plain HTTP (see network_security_config).
  */
-class Session(context: Context, private val queryOnly: Boolean = false) {
+class Session(context: Context, private val queryOnly: Boolean = false, private val transient: Boolean = false) {
+    private var operationOwner: Session? = null
+    private var operationOwnerScope: Int = -1
+    fun bindOperationOwner(owner: Session) { operationOwner = owner; operationOwnerScope = owner.scope.value }
+    private fun checkOperationOwner() {
+        operationOwner?.let { if (!it.signedIn || it.scope.value != operationOwnerScope) throw CancellationException("主账号或厂区已改变，本次操作已停止") }
+    }
     private var fallbackOwner: Session? = null
     private var fallbackScope = -1
     private var fallbackActive = false
@@ -82,9 +88,9 @@ class Session(context: Context, private val queryOnly: Boolean = false) {
     /** Counts up whenever something was changed on the server (a task was taken forward): lists and details reload. */
     private val _changed = MutableStateFlow(0)
     val changed: StateFlow<Int> = _changed.asStateFlow()
-    fun notifyChanged() { _changed.value += 1 }
+    fun notifyChanged() { _changed.value += 1; operationOwner?.notifyChanged() }
 
-    init { if (!queryOnly) store.read()?.let { _auth.value = Jv.parse(it) } }
+    init { if (!queryOnly && !transient) store.read()?.let { _auth.value = Jv.parse(it) } }
 
     val signedIn: Boolean get() = _auth.value["token"].text.isNotEmpty()
     private val token: String get() = _auth.value["token"].text
@@ -107,13 +113,13 @@ class Session(context: Context, private val queryOnly: Boolean = false) {
 
     private fun update(value: JSONObject) {
         _auth.value = Jv(value)
-        if (!queryOnly) store.write(value.toString())
+        if (!queryOnly && !transient) store.write(value.toString())
     }
 
     fun signOut() {
         fallbackOwner = null; fallbackActive = false; onFallback = null
         _auth.value = Jv.NULL
-        if (!queryOnly) store.write(null)
+        if (!queryOnly && !transient) store.write(null)
         _scope.value += 1
     }
 
@@ -124,7 +130,7 @@ class Session(context: Context, private val queryOnly: Boolean = false) {
         if (value == null || Jv(value)["token"].text.isEmpty()) throw ApiException("服务器没有返回有效登录会话", status = 401)
         update(value)
         _scope.value += 1
-        if (!queryOnly) restoreLastFactory()
+        if (!queryOnly && !transient) restoreLastFactory()
     }
 
     suspend fun refreshFactories() {
@@ -148,7 +154,7 @@ class Session(context: Context, private val queryOnly: Boolean = false) {
             current.put("factoryId", factories.firstOrNull { it["factoryId"].text == factoryId }?.get("factoryId")?.raw ?: factoryId)
             update(current)
             _scope.value += 1
-            if (!queryOnly) prefs.edit().putString("lastFactory.$accountKey", currentFactoryId).apply()
+            if (!queryOnly && !transient) prefs.edit().putString("lastFactory.$accountKey", currentFactoryId).apply()
         } finally { _switching.value = false }
     }
 
@@ -185,6 +191,7 @@ class Session(context: Context, private val queryOnly: Boolean = false) {
         form: Boolean = false, allowPlainText: Boolean = false, signOutOnUnauthorized: Boolean = true, authorized: Boolean = true,
         rawBody: ByteArray? = null, contentType: String? = null,
     ): Any? = withContext(Dispatchers.IO) {
+        checkOperationOwner()
         val scopeAtStart = _scope.value
         val connection = URL(root + pathAndQuery).openConnection() as HttpURLConnection
         try {
@@ -205,6 +212,7 @@ class Session(context: Context, private val queryOnly: Boolean = false) {
             val text = bytes.toString(Charsets.UTF_8)
             // The page that asked may be gone by now (the account or the factory changed): its answer is thrown away.
             if (scopeAtStart != _scope.value) throw CancellationException("scope changed")
+            checkOperationOwner()
             if (status !in 200..299) {
                 if (status == 401 && signOutOnUnauthorized) signOut()
                 val detail = errorSummary(text)
