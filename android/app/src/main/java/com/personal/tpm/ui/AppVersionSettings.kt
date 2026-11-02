@@ -52,7 +52,7 @@ private fun ReleaseHistoryDialog(onDismiss: () -> Unit) {
         catch (e: Exception) { error = e.message ?: "读取日志失败" }
         finally { loading = false }
     }
-    Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+    GlassPanelSurface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
         Column(Modifier.fillMaxWidth().height(dialogHeight).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("历史更新日志", style = MaterialTheme.typography.headlineSmall)
             Text("点版本展开查看更新内容", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

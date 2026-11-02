@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -43,7 +42,7 @@ val LocalDrafts = compositionLocalOf<com.personal.tpm.data.DraftStore> { error("
 /** A plain message dialog. */
 @Composable
 fun ErrorDialog(title: String, message: String, onClose: () -> Unit) {
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onClose,
         title = { AnimatedLabel(title) },
         text = { AnimatedLabel(message) },
@@ -96,7 +95,7 @@ fun SearchField(value: String, onValueChange: (String) -> Unit, placeholder: Str
         placeholder = { AnimatedLabel(placeholder) },
         leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Search, contentDescription = null) },
         trailingIcon = {
-            if (value.isNotEmpty()) androidx.compose.material3.IconButton(onClick = { onValueChange("") }) {
+            if (value.isNotEmpty()) GlassIconButton(onClick = { onValueChange("") }) {
                 androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Close, contentDescription = "清空")
             }
         },
@@ -119,6 +118,10 @@ fun SoftButton(
     onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, contentColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface,
     content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
 ) {
+    if (AppPreferences.liquidGlass) {
+        GlassButton(onClick, modifier, enabled, contentColor = contentColor, content = content)
+        return
+    }
     androidx.compose.material3.FilledTonalButton(
         onClick = onClick, modifier = modifier, enabled = enabled,
         colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = contentColor),
@@ -139,7 +142,7 @@ fun AssetReportButton(onClick: () -> Unit, modifier: Modifier = Modifier, enable
 fun BlockChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, selected: Boolean = false, trailing: (@Composable () -> Unit)? = null) {
     val fill = if (selected) androidx.compose.ui.graphics.lerp(MaterialTheme.colorScheme.surfaceContainerLowest, MaterialTheme.colorScheme.primary, 0.2f) else MaterialTheme.colorScheme.surfaceContainerHigh
     androidx.compose.foundation.layout.Row(
-        modifier.clip(androidx.compose.foundation.shape.CircleShape).background(fill).clickable(onClick = onClick).padding(start = 14.dp, end = if (trailing != null) 8.dp else 14.dp, top = 8.dp, bottom = 8.dp),
+        modifier.clip(androidx.compose.foundation.shape.CircleShape).then(if (AppPreferences.liquidGlass) Modifier.glassSurface(backdrop = null, shape = androidx.compose.foundation.shape.CircleShape, tint = fill, prominent = selected) else Modifier.background(fill)).clickable(onClick = onClick).padding(start = 14.dp, end = if (trailing != null) 8.dp else 14.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
     ) {
         // The same ink as the capsules next to it (the second level of the text tones), also for the icon.
@@ -160,7 +163,7 @@ fun BlockSegmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit
             val fill by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "segFill")
             val ink by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "segInk")
             androidx.compose.foundation.layout.Box(
-                Modifier.weight(1f).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(fill).clickable { onSelect(index) }.padding(vertical = 10.dp),
+                Modifier.weight(1f).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).then(if (AppPreferences.liquidGlass) Modifier.glassSurface(backdrop = null, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp), tint = fill, prominent = on) else Modifier.background(fill)).clickable { onSelect(index) }.padding(vertical = 10.dp),
                 androidx.compose.ui.Alignment.Center,
             ) { AnimatedLabel(name, style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 1) }
         }

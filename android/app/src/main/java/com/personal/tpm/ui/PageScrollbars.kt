@@ -104,13 +104,16 @@ fun ScrollableLazyColumn(modifier:Modifier=Modifier,state:LazyListState=remember
     val surface = LocalScrollSurface.current ?: MaterialTheme.colorScheme.background
     val direction = LocalLayoutDirection.current
     val sheetBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val glassPadding = LocalGlassContentPadding.current
     val listPadding = PaddingValues(start = contentPadding.calculateStartPadding(direction), end = contentPadding.calculateEndPadding(direction),
-        top = contentPadding.calculateTopPadding(), bottom = contentPadding.calculateBottomPadding() + sheetBottom)
+        top = contentPadding.calculateTopPadding() + glassPadding.calculateTopPadding(), bottom = contentPadding.calculateBottomPadding() + maxOf(sheetBottom, glassPadding.calculateBottomPadding()))
     Box(modifier.scrollEdges(surface, before = { if (reverseLayout) state.canScrollForward else state.canScrollBackward },
         after = { if (reverseLayout) state.canScrollBackward else state.canScrollForward }),propagateMinConstraints=true) {
-        NativeLazyColumn(state=state,contentPadding=listPadding,reverseLayout=reverseLayout,
-            verticalArrangement=verticalArrangement,horizontalAlignment=horizontalAlignment,
-            flingBehavior=flingBehavior,userScrollEnabled=userScrollEnabled,content=content)
+        CompositionLocalProvider(LocalGlassContentPadding provides PaddingValues(0.dp)) {
+            NativeLazyColumn(state=state,contentPadding=listPadding,reverseLayout=reverseLayout,
+                verticalArrangement=verticalArrangement,horizontalAlignment=horizontalAlignment,
+                flingBehavior=flingBehavior,userScrollEnabled=userScrollEnabled,content=content)
+        }
         Box(Modifier.matchParentSize()) {
             Box(Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(20.dp).pageScrollbar(
                 position={
@@ -146,5 +149,6 @@ fun Modifier.pageVerticalScroll(state:ScrollState,enabled:Boolean=true,flingBeha
         canScroll={enabled && state.maxValue in 1 until Int.MAX_VALUE},
         seek={value->state.scrollTo(((if(reverseScrolling) 1-value else value)*state.maxValue).toInt())}
     ).nativeVerticalScroll(state,enabled,flingBehavior,reverseScrolling)
-        .navigationBarsPadding()
+        .padding(top = LocalGlassContentPadding.current.calculateTopPadding(),
+            bottom = maxOf(LocalGlassContentPadding.current.calculateBottomPadding(), WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()))
 }

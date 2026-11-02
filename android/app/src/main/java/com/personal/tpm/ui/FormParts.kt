@@ -25,15 +25,11 @@ import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -97,7 +93,7 @@ fun ChoiceChip(selected: Boolean, onClick: () -> Unit, label: String, enabled: B
     val background by androidx.compose.animation.animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "chipFill")
     val content by androidx.compose.animation.animateColorAsState(if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "chipText")
     Row(
-        Modifier.clip(androidx.compose.foundation.shape.CircleShape).background(if(enabled) background else background.copy(alpha=.38f)).clickable(enabled=enabled,onClick = onClick)
+        Modifier.clip(androidx.compose.foundation.shape.CircleShape).then(if (AppPreferences.liquidGlass) Modifier.glassSurface(backdrop = null, shape = androidx.compose.foundation.shape.CircleShape, tint = if (enabled) background else background.copy(alpha=.38f), prominent = selected) else Modifier.background(if(enabled) background else background.copy(alpha=.38f))).clickable(enabled=enabled,onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -213,7 +209,7 @@ fun DateTimeField(label: String, value: String, dateOnly: Boolean, required: Boo
     }
     if (step == 2) {
         val time = rememberTimePickerState(initialHour = current.hour, initialMinute = current.minute, is24Hour = true)
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { step = 0 },
             title = { Text("选择时间") },
             text = { TimePicker(time) },
@@ -269,7 +265,7 @@ fun PhotosField(albums: Jv, onChange: (JSONArray) -> Unit, directory: String, on
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Filled.Image, contentDescription = null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                 AnimatedLabel(image["name"].text.ifEmpty { "照片 ${index + 1}" }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                IconButton(onClick = { onChange(JSONArray().also { a -> list.forEachIndexed { i, v -> if (i != index) a.put(v.raw) } }) }) { Icon(Icons.Filled.Delete, contentDescription = "删除照片", tint = MaterialTheme.colorScheme.error) }
+                GlassIconButton(onClick = { onChange(JSONArray().also { a -> list.forEachIndexed { i, v -> if (i != index) a.put(v.raw) } }) }) { Icon(Icons.Filled.Delete, contentDescription = "删除照片", tint = MaterialTheme.colorScheme.error) }
             }
         }
         Row(
@@ -292,13 +288,13 @@ fun PhotosField(albums: Jv, onChange: (JSONArray) -> Unit, directory: String, on
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FormActionBar(busy: Boolean, enabled: Boolean, onSave: (() -> Unit)?, onSubmit: () -> Unit, submitLabel: String = "提交") {
-    Surface(Modifier.fadeAbove(MaterialTheme.colorScheme.background), color = MaterialTheme.colorScheme.background, shadowElevation = 0.dp) {
+    GlassBottomSurface() {
         Row(
             Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical),
             horizontalArrangement = Arrangement.spacedBy(BarSpec.Gap), verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onSave != null) SoftButton(onClick = onSave, enabled = enabled && !busy, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight)) { Text("保存") }
-            Button(onClick = onSubmit, enabled = enabled && !busy, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight)) { AnimatedLabel(if (busy) "请稍候…" else submitLabel) }
+            GlassActionButton(onClick = onSubmit, enabled = enabled && !busy, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight)) { AnimatedLabel(if (busy) "请稍候…" else submitLabel) }
         }
     }
 }
@@ -360,7 +356,7 @@ fun FormPage(
     androidx.activity.compose.BackHandler(enabled = !backEnabled) { }
     androidx.activity.compose.BackHandler(enabled = backEnabled && interceptBack) { onBackGesture() }
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
-    CompactTheme { androidx.compose.material3.Scaffold(contentWindowInsets = appContentInsets(),
+    CompactTheme { GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(title = title, onBack = onClose, loading = busy, actions = actions) },
         bottomBar = bottomBar,
@@ -398,7 +394,7 @@ fun DraftList(scopeKey: String, target: com.personal.tpm.data.DraftTarget, onPic
                 headlineContent = { AnimatedLabel(draft.title) },
                 supportingContent = { AnimatedLabel(draft.subtitle, maxLines = 2) },
                 trailingContent = {
-                    IconButton(onClick = { drafts.remove(draft.id, scopeKey); list = drafts.drafts(scopeKey, target) }) { Icon(Icons.Filled.Delete, contentDescription = "删除草稿", tint = MaterialTheme.colorScheme.error) }
+                    GlassIconButton(onClick = { drafts.remove(draft.id, scopeKey); list = drafts.drafts(scopeKey, target) }) { Icon(Icons.Filled.Delete, contentDescription = "删除草稿", tint = MaterialTheme.colorScheme.error) }
                 },
             )
         }

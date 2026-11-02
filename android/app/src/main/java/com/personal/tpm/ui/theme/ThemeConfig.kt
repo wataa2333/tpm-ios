@@ -40,13 +40,6 @@ import com.personal.tpm.R
 object ThemeConfig {
     enum class Mode(val title: String) { System("跟随系统"), Light("浅色"), Dark("深色") }
 
-    /** How loading is shown in the top bar. */
-    /** [extra]: the older styles, kept for the developer page only (the 我的 page offers the first four). */
-    enum class LoadingStyle(val title: String, val extra: Boolean = false) {
-        Bar("横条"), Spread("扩散"), Shimmer("流光"), Comet("彗星"),
-        Ring("旋转圆环"), Chase("追逐圆点"), Grid("九宫格"), Plane("翻转方块"), Bounce("双球脉冲"), Equalizer("律动音柱"),
-        Dots("点点", true), Dashes("断线", true), Wave("波浪", true), Meet("对撞", true), Twinkle("闪烁", true), Ecg("心电", true), Breath("呼吸", true),
-    }
 
     /**
      * The colours on offer. The first six have names of their own (and values chosen to look like their names); the rest are the Material Design
@@ -94,7 +87,6 @@ object ThemeConfig {
     private var accentArgb by mutableIntStateOf(presets[0].color.toArgb())
     private var sizeStep by mutableIntStateOf(1)
     private var modeName by mutableStateOf(Mode.System.name)
-    private var loadingName by mutableStateOf(LoadingStyle.Grid.name)
 
     val accent: Color get() = Color(accentArgb)
     var mode: Mode
@@ -139,9 +131,6 @@ object ThemeConfig {
     /** The theme colour as chosen (the surfaces are always black and white; this is the only colour besides the order states). */
     val effectiveAccent: Color get() = accent
 
-    var loadingStyle: LoadingStyle
-        get() = LoadingStyle.entries.firstOrNull { it.name == loadingName } ?: LoadingStyle.Grid
-        set(value) { loadingName = value.name; prefs?.edit()?.putString("loading", value.name)?.apply() }
 
     /** Choosing a colour by hand: it is kept, and the random colour at each start is switched off. */
     fun setAccent(color: Color) {
@@ -183,7 +172,6 @@ object ThemeConfig {
         highRefreshValue = saved.getBoolean("highRefresh", true)
         sizeStep = saved.getInt("size5", sizeStep).coerceIn(0, sizeLevels.lastIndex)
         modeName = saved.getString("mode", Mode.System.name) ?: Mode.System.name
-        loadingName = saved.getString("loading", LoadingStyle.Grid.name) ?: LoadingStyle.Grid.name
     }
 
     // ---- colour arithmetic ----

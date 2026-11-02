@@ -75,7 +75,7 @@ fun PrecisionDeviceScreen(assetId: String, onBack: () -> Unit) {
             finally { loadingRecords = false }
         }
     }
-    Scaffold(contentWindowInsets = appContentInsets(), topBar = { AppTopBar("逐项精度数据", onBack = onBack, loading = loadingPage || loadingOrders || loadingRecords) }) { padding ->
+    GlassScaffold(contentWindowInsets = appContentInsets(), topBar = { AppTopBar("逐项精度数据", onBack = onBack, loading = loadingPage || loadingOrders || loadingRecords) }) { padding ->
         PageWidth {
             ScrollableLazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
@@ -92,7 +92,7 @@ fun PrecisionDeviceScreen(assetId: String, onBack: () -> Unit) {
                 workOrders.forEach { order ->
                     item(key = "precise-${order["preciseId"].text}") {
                         if (workOrders.size == 1) AnimatedLabel("工单：${order["sn"].text}", style = MaterialTheme.typography.bodySmall)
-                        else FilterChip(selected = selectedPrecise == order["preciseId"].text, onClick = { selectedPrecise = order["preciseId"].text },
+                        else GlassFilterChip(selected = selectedPrecise == order["preciseId"].text, onClick = { selectedPrecise = order["preciseId"].text },
                             label = { AnimatedLabel("${order["planStartDate"].dateText}\n${order["sn"].text}") })
                     }
                 }
@@ -104,7 +104,7 @@ fun PrecisionDeviceScreen(assetId: String, onBack: () -> Unit) {
                     }
                     executions.forEach { execution ->
                         if (executions.size == 1) AnimatedLabel("检测时间：${execution["endTime"].dateText.ifEmpty { execution["createTime"].dateText }}\n检测人：${execution["user"].label.ifEmpty { "未记录" }}", style = MaterialTheme.typography.bodyMedium)
-                        else FilterChip(selected = selectedExecution == execution["orderId"].text, onClick = { selectedExecution = execution["orderId"].text },
+                        else GlassFilterChip(selected = selectedExecution == execution["orderId"].text, onClick = { selectedExecution = execution["orderId"].text },
                             label = { AnimatedLabel("${execution["endTime"].dateText.ifEmpty { execution["createTime"].dateText }} · ${execution["user"].label}") })
                     }
                     if (!loadingOrders && selectedPrecise.isNotEmpty() && executions.isEmpty() && detailError.isEmpty()) Text("该工单暂无检查执行记录。")

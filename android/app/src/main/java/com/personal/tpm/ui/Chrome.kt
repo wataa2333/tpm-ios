@@ -2,14 +2,9 @@ package com.personal.tpm.ui
 
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import com.personal.tpm.ui.theme.ThemeConfig
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.animation.core.tween
@@ -23,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -39,7 +35,6 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -119,25 +114,15 @@ fun Modifier.fadeAbove(color: Color, height: androidx.compose.ui.unit.Dp = 22.dp
 /** The refresh button: while [spinning] it turns round and round; when the work ends it finishes the turn it is in and rests at its starting place. */
 @Composable
 fun RefreshButton(spinning: Boolean, onClick: () -> Unit) {
-    val turn = remember { androidx.compose.animation.core.Animatable(0f) }
-    LaunchedEffect(spinning) {
-        if (spinning) {
-            while (true) turn.animateTo(turn.value + 360f, tween(900, easing = androidx.compose.animation.core.LinearEasing))
-        } else if (turn.value != 0f) {
-            val rest = kotlin.math.ceil(turn.value / 360f) * 360f
-            turn.animateTo(rest, tween(Motion.Slow, easing = Motion.Change))
-            turn.snapTo(0f)
-        }
-    }
-    IconButton(onClick = onClick) {
-        Icon(androidx.compose.material.icons.Icons.Filled.Refresh, contentDescription = "刷新", Modifier.graphicsLayer { rotationZ = turn.value })
+    GlassIconButton(onClick = onClick, enabled = !spinning) {
+        Icon(androidx.compose.material.icons.Icons.Filled.Refresh, contentDescription = "刷新")
     }
 }
 
 /** The multi-select button: an icon (a checklist; a cross while selecting). */
 @Composable
 fun SelectButton(active: Boolean, onClick: () -> Unit) {
-    IconButton(onClick = onClick) {
+    GlassIconButton(onClick = onClick) {
         androidx.compose.animation.Crossfade(active, animationSpec = tween(Motion.Fast, easing = Motion.Change), label = "selectIcon") { on ->
             if (on) Icon(androidx.compose.material.icons.Icons.Filled.Close, contentDescription = "取消选择")
             else Icon(androidx.compose.material.icons.Icons.Filled.Checklist, contentDescription = "选择")
@@ -157,15 +142,7 @@ fun Modifier.fadeInOnShow(): Modifier {
 @Composable private fun headerColor() = MaterialTheme.colorScheme.background
 @Composable private fun headerContent() = MaterialTheme.colorScheme.onBackground
 
-/**
- * The one loading animation of the app, along the bottom edge of the top bar, in the style chosen on the 我的 page. While something loads
- * it runs; while the page is being pulled down it fills in step with the finger ([pull] 0..1), so the pull has feedback without a spinner
- * of its own. All the motion is eased, none linear.
- *
- * Two things keep it quiet at the end: the look it had while loading stays until it has faded away (it used to switch to the "pull" look
- * for that moment), and the pull that is still springing back after a refresh is ignored (it used to draw one more sweep from left to
- * right, as the pull value ran back down to 0).
- */
+/** Native circular loading/pull feedback, shared by every top bar. */
 data class LoadingReveal(val fraction: Float, val pull: Float, val pulling: Boolean)
 
 /** One transition controls opacity and reserved height, including interruption by a second request. */
@@ -182,289 +159,20 @@ fun rememberLoadingReveal(loading: Boolean, pull: Float): LoadingReveal {
 @Composable
 fun BoxScope.TopLoadingBar(reveal: LoadingReveal) {
     if (reveal.fraction <= 0f) return
-    val modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-        .then(if (ThemeConfig.loadingStyle.iconStyle) Modifier.height(28.dp * reveal.fraction).clipToBounds() else Modifier)
-        .graphicsLayer {
-        alpha = reveal.fraction
-        scaleY = .85f + .15f * reveal.fraction
-        transformOrigin = TransformOrigin(.5f, 1f)
-    }
-    LoadingStrip(ThemeConfig.loadingStyle, !reveal.pulling, reveal.pull, MaterialTheme.colorScheme.primary, modifier)
-}
-
-/** One style drawn by its own composable; [running] is the loop, otherwise [pull] (0..1) fills it in step with the finger. */
-@Composable
-private fun LoadingStrip(style: ThemeConfig.LoadingStyle, running: Boolean, pull: Float, color: Color, modifier: Modifier) {
-    when (style) {
-        ThemeConfig.LoadingStyle.Ring, ThemeConfig.LoadingStyle.Chase, ThemeConfig.LoadingStyle.Grid, ThemeConfig.LoadingStyle.Plane, ThemeConfig.LoadingStyle.Bounce, ThemeConfig.LoadingStyle.Equalizer -> SpinKitStrip(style, running, pull, color, modifier)
-        ThemeConfig.LoadingStyle.Bar -> {
-            if (running) LinearProgressIndicator(modifier.height(3.dp), color = color, trackColor = Color.Transparent)
-            else LinearProgressIndicator(progress = { pull.coerceIn(0f, 1f) }, modifier = modifier.height(3.dp), color = color, trackColor = Color.Transparent)
-        }
-        ThemeConfig.LoadingStyle.Spread -> SpreadStrip(running, pull, color, modifier)
-        ThemeConfig.LoadingStyle.Comet -> CometStrip(running, pull, color, modifier)
-        ThemeConfig.LoadingStyle.Dots -> DotsStrip(running, pull, color, modifier)
-        ThemeConfig.LoadingStyle.Dashes -> DashesStrip(running, pull, color, modifier)
-        ThemeConfig.LoadingStyle.Wave -> WaveStrip(running, pull, color, modifier)
-        ThemeConfig.LoadingStyle.Meet -> MeetStrip(running, pull, color, modifier)
-        ThemeConfig.LoadingStyle.Twinkle -> TwinkleStrip(running, pull, color, modifier)
-        ThemeConfig.LoadingStyle.Ecg -> EcgStrip(running, pull, color, modifier)
-        ThemeConfig.LoadingStyle.Breath -> BreathStrip(running, pull, color, modifier)
-        ThemeConfig.LoadingStyle.Shimmer -> ShimmerStrip(running, pull, color, modifier)
+    Box(Modifier.align(Alignment.BottomCenter).height(28.dp * reveal.fraction).fillMaxWidth()
+        .graphicsLayer { alpha = reveal.fraction }, Alignment.Center) {
+        if (reveal.pulling) androidx.compose.material3.CircularProgressIndicator(progress = { reveal.pull.coerceIn(0f, 1f) },
+            modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+        else androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
     }
 }
 
-/** One loading style running by itself, as it will look in the top bar: the preview under the choices on the 我的 page. */
 @Composable
-fun LoadingStylePreview(style: ThemeConfig.LoadingStyle, modifier: Modifier = Modifier) {
-    val color = MaterialTheme.colorScheme.primary
-    Box(modifier.fillMaxWidth().height(22.dp).clip(RoundedCornerShape(11.dp)).background(MaterialTheme.colorScheme.surfaceContainer), Alignment.Center) {
-        androidx.compose.animation.AnimatedContent(
-            targetState = style, label = "preview",
-            transitionSpec = { androidx.compose.animation.fadeIn(tween(Motion.Normal, easing = Motion.Change)) togetherWith androidx.compose.animation.fadeOut(tween(Motion.Fast, easing = Motion.Change)) },
-        ) { which ->
-            LoadingStrip(which, true, 0f, color, Modifier.fillMaxWidth())
-        }
-    }
-}
-
-/** The eased 0..1 loop every style runs on; [millis] long. */
-@Composable
-private fun loopPhase(millis: Int, seamless: Boolean = false): Float {
-    // A strip that is the same picture at phase 0 and at phase 1 (a wave, a row of twinkling dots) must not ease: easing stops it at the end of
-    // every round and starts it again, which showed as a stutter. The ones that sweep across and fade out keep the eased curve.
-    val transition = rememberInfiniteTransition(label = "loop")
-    val phase by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(millis, easing = if (seamless) androidx.compose.animation.core.LinearEasing else FastOutSlowInEasing), RepeatMode.Restart), label = "phase")
-    return phase
-}
-
-/** 0 outside [reach] of [position], rising to 1 on it along a cosine: the swell that travels along a strip. */
-private fun swell(index: Float, position: Float, reach: Float): Float {
-    val distance = kotlin.math.abs(index - position)
-    return if (distance < reach) ((kotlin.math.cos(distance / reach * Math.PI) + 1) / 2).toFloat() else 0f
-}
-
-/** A bright head with a tail behind it runs across the width, slow at the ends and quick in the middle; the tail thins away. */
-@Composable
-private fun CometStrip(loading: Boolean, pull: Float, color: Color, modifier: Modifier) {
-    val phase = loopPhase(1500)
-    androidx.compose.foundation.Canvas(modifier.height(4.dp)) {
-        val thick = 3.dp.toPx()
-        val top = (size.height - thick) / 2
-        if (!loading) {
-            val width = size.width * pull.coerceIn(0f, 1f)
-            drawRoundRect(color, Offset(0f, top), androidx.compose.ui.geometry.Size(width, thick), androidx.compose.ui.geometry.CornerRadius(thick / 2))
-            return@Canvas
-        }
-        val tail = size.width * 0.32f
-        val head = phase * (size.width + tail)
-        val left = (head - tail).coerceAtLeast(0f)
-        val right = head.coerceAtMost(size.width)
-        if (right > left) drawRoundRect(
-            Brush.horizontalGradient(listOf(color.copy(alpha = 0f), color), startX = head - tail, endX = head), Offset(left, top),
-            androidx.compose.ui.geometry.Size(right - left, thick), androidx.compose.ui.geometry.CornerRadius(thick / 2),
-        )
-    }
-}
-
-/** One bar that grows from the middle to both edges and thins away as it gets there. */
-@Composable
-private fun SpreadStrip(loading: Boolean, pull: Float, color: Color, modifier: Modifier) {
-    val phase = loopPhase(1300)
-    androidx.compose.foundation.Canvas(modifier.height(4.dp)) {
-        val thick = 3.dp.toPx()
-        val fraction = if (loading) phase else pull.coerceIn(0f, 1f)
-        val alpha = if (loading) 1f - phase * phase else 1f
-        val width = size.width * fraction
-        drawRoundRect(
-            color.copy(alpha = alpha), Offset((size.width - width) / 2, (size.height - thick) / 2), androidx.compose.ui.geometry.Size(width, thick),
-            androidx.compose.ui.geometry.CornerRadius(thick / 2),
-        )
-    }
-}
-
-/** A faint track with a soft band of light gliding along it, like light over brushed metal. */
-@Composable
-private fun ShimmerStrip(loading: Boolean, pull: Float, color: Color, modifier: Modifier) {
-    val phase = loopPhase(1800)
-    androidx.compose.foundation.Canvas(modifier.height(4.dp)) {
-        val thick = 3.dp.toPx()
-        val top = (size.height - thick) / 2
-        val corner = androidx.compose.ui.geometry.CornerRadius(thick / 2)
-        drawRoundRect(color.copy(alpha = 0.18f), Offset(0f, top), androidx.compose.ui.geometry.Size(size.width, thick), corner)
-        if (!loading) {
-            drawRoundRect(color, Offset(0f, top), androidx.compose.ui.geometry.Size(size.width * pull.coerceIn(0f, 1f), thick), corner)
-            return@Canvas
-        }
-        val band = size.width * 0.4f
-        val centre = phase * (size.width + band) - band / 2
-        drawRoundRect(
-            Brush.horizontalGradient(listOf(color.copy(alpha = 0f), color, color.copy(alpha = 0f)), startX = centre - band / 2, endX = centre + band / 2),
-            Offset(0f, top), androidx.compose.ui.geometry.Size(size.width, thick), corner,
-        )
-    }
-}
-
-// ---- the older loading styles (offered on the developer page only) ----
-
-/** A row of small dots across the whole width; a swell of bigger, brighter dots runs along it. */
-@Composable
-private fun DotsStrip(loading: Boolean, pull: Float, color: Color, modifier: Modifier) {
-    val phase = loopPhase(1500)
-    androidx.compose.foundation.Canvas(modifier.height(10.dp)) {
-        val count = 30
-        val step = size.width / count
-        val base = 1.6.dp.toPx()
-        val grow = 2.6.dp.toPx()
-        val reach = 4.5f
-        val position = phase * (count + 2 * reach) - reach
-        for (i in 0 until count) {
-            val bump = if (loading) swell(i.toFloat(), position, reach) else if (i < pull.coerceIn(0f, 1f) * count) 1f else 0f
-            drawCircle(color.copy(alpha = 0.22f + 0.78f * bump), base + grow * bump, Offset(step * (i + 0.5f), size.height / 2))
-        }
-    }
-}
-
-/** A row of short dashes with gaps between them; a swell of longer, brighter dashes runs along it. */
-@Composable
-private fun DashesStrip(loading: Boolean, pull: Float, color: Color, modifier: Modifier) {
-    val phase = loopPhase(1600)
-    androidx.compose.foundation.Canvas(modifier.height(8.dp)) {
-        val count = 18
-        val step = size.width / count
-        val thick = 3.dp.toPx()
-        val reach = 3.5f
-        val position = phase * (count + 2 * reach) - reach
-        for (i in 0 until count) {
-            val bump = if (loading) swell(i.toFloat(), position, reach) else if (i < pull.coerceIn(0f, 1f) * count) 1f else 0f
-            val length = step * (0.42f + 0.28f * bump)
-            val centre = step * (i + 0.5f)
-            drawRoundRect(
-                color.copy(alpha = 0.22f + 0.78f * bump), Offset(centre - length / 2, (size.height - thick) / 2), androidx.compose.ui.geometry.Size(length, thick),
-                androidx.compose.ui.geometry.CornerRadius(thick / 2),
-            )
-        }
-    }
-}
-
-/** A row of thin upright bars whose heights ripple along it like a sound wave. */
-@Composable
-private fun WaveStrip(loading: Boolean, pull: Float, color: Color, modifier: Modifier) {
-    val phase = loopPhase(1400, seamless = true)
-    androidx.compose.foundation.Canvas(modifier.height(14.dp)) {
-        val count = 36
-        val step = size.width / count
-        val barWidth = 2.dp.toPx()
-        val low = 2.dp.toPx()
-        val high = 11.dp.toPx()
-        for (i in 0 until count) {
-            val lift = if (loading) {
-                val wave = kotlin.math.sin((phase * 2.0 - i / 9.0) * Math.PI).toFloat()
-                wave * wave
-            } else if (i < pull.coerceIn(0f, 1f) * count) 1f else 0f
-            val height = low + (high - low) * lift
-            drawRoundRect(
-                color.copy(alpha = 0.25f + 0.75f * lift), Offset(step * (i + 0.5f) - barWidth / 2, size.height - height), androidx.compose.ui.geometry.Size(barWidth, height),
-                androidx.compose.ui.geometry.CornerRadius(barWidth / 2),
-            )
-        }
-    }
-}
-
-/** Two heads run in from the two edges, meet in the middle and fade there, then start again. */
-@Composable
-private fun MeetStrip(loading: Boolean, pull: Float, color: Color, modifier: Modifier) {
-    val phase = loopPhase(1400)
-    androidx.compose.foundation.Canvas(modifier.height(4.dp)) {
-        val thick = 3.dp.toPx()
-        val top = (size.height - thick) / 2
-        val corner = androidx.compose.ui.geometry.CornerRadius(thick / 2)
-        if (!loading) {
-            val each = size.width / 2f * pull.coerceIn(0f, 1f)
-            drawRoundRect(color, Offset(0f, top), androidx.compose.ui.geometry.Size(each, thick), corner)
-            drawRoundRect(color, Offset(size.width - each, top), androidx.compose.ui.geometry.Size(each, thick), corner)
-            return@Canvas
-        }
-        val reach = size.width / 2f * phase
-        val length = size.width * 0.22f
-        val alpha = if (phase > 0.85f) (1f - phase) / 0.15f else 1f
-        val head = reach.coerceAtMost(size.width / 2f)
-        val from = (head - length).coerceAtLeast(0f)
-        drawRoundRect(color.copy(alpha = alpha), Offset(from, top), androidx.compose.ui.geometry.Size(head - from, thick), corner)
-        drawRoundRect(color.copy(alpha = alpha), Offset(size.width - head, top), androidx.compose.ui.geometry.Size(head - from, thick), corner)
-    }
-}
-
-/** A row of small dots that brighten and dim out of step with one another, like lights on a string. */
-@Composable
-private fun TwinkleStrip(loading: Boolean, pull: Float, color: Color, modifier: Modifier) {
-    val phase = loopPhase(1800, seamless = true)
-    androidx.compose.foundation.Canvas(modifier.height(10.dp)) {
-        val count = 26
-        val step = size.width / count
-        val radius = 2.2.dp.toPx()
-        for (i in 0 until count) {
-            val lit = if (loading) {
-                val offset = ((i * 0.6180339f) % 1f)
-                val t = (phase + offset) % 1f
-                val wave = kotlin.math.sin(t * Math.PI).toFloat()
-                wave * wave
-            } else if (i < pull.coerceIn(0f, 1f) * count) 1f else 0f
-            drawCircle(color.copy(alpha = 0.15f + 0.85f * lit), radius * (0.7f + 0.5f * lit), Offset(step * (i + 0.5f), size.height / 2))
-        }
-    }
-}
-
-/** A heartbeat line: a thin baseline, and a beat travels along it and fades behind. */
-@Composable
-private fun EcgStrip(loading: Boolean, pull: Float, color: Color, modifier: Modifier) {
-    val phase = loopPhase(1700)
-    androidx.compose.foundation.Canvas(modifier.height(16.dp)) {
-        val mid = size.height / 2
-        val line = 1.dp.toPx()
-        drawLine(color.copy(alpha = 0.25f), Offset(0f, mid), Offset(size.width, mid), line)
-        if (!loading) {
-            drawLine(color, Offset(0f, mid), Offset(size.width * pull.coerceIn(0f, 1f), mid), line * 2)
-            return@Canvas
-        }
-        val shape = listOf(0f to 0f, 0.15f to 0f, 0.20f to -0.15f, 0.25f to 0f, 0.35f to 0f, 0.40f to 0.25f, 0.47f to -1f, 0.54f to 0.6f, 0.60f to 0f, 0.75f to 0f, 0.82f to -0.25f, 0.90f to 0f, 1f to 0f)
-        fun at(u: Float): Float {
-            for (i in 1 until shape.size) if (u <= shape[i].first) {
-                val (x0, y0) = shape[i - 1]; val (x1, y1) = shape[i]
-                return y0 + (y1 - y0) * ((u - x0) / (x1 - x0))
-            }
-            return 0f
-        }
-        val span = size.width * 0.34f
-        val head = phase * (size.width + span)
-        val path = androidx.compose.ui.graphics.Path()
-        var started = false
-        var x = (head - span).coerceAtLeast(0f)
-        val end = head.coerceAtMost(size.width)
-        while (x <= end) {
-            val u = (x - (head - span)) / span
-            val y = mid + at(u) * (size.height / 2 - 1.dp.toPx())
-            if (!started) { path.moveTo(x, y); started = true } else path.lineTo(x, y)
-            x += 2.dp.toPx()
-        }
-        if (started) drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.6.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
-    }
-}
-
-/** One line from the middle that widens and brightens as if breathing in, and narrows as it breathes out. */
-@Composable
-private fun BreathStrip(loading: Boolean, pull: Float, color: Color, modifier: Modifier) {
-    val phase = loopPhase(2600, seamless = true)
-    androidx.compose.foundation.Canvas(modifier.height(4.dp)) {
-        val thick = 3.dp.toPx()
-        val breath = kotlin.math.sin(phase * Math.PI).toFloat().let { it * it }
-        val fraction = if (loading) 0.18f + 0.82f * breath else pull.coerceIn(0f, 1f)
-        val alpha = if (loading) 0.35f + 0.65f * breath else 1f
-        val width = size.width * fraction
-        drawRoundRect(
-            color.copy(alpha = alpha), Offset((size.width - width) / 2, (size.height - thick) / 2), androidx.compose.ui.geometry.Size(width, thick),
-            androidx.compose.ui.geometry.CornerRadius(thick / 2),
-        )
+fun NativeLoadingPreview(modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        androidx.compose.material3.CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+        Text("原生圆形旋转", style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -474,12 +182,12 @@ private fun BreathStrip(loading: Boolean, pull: Float, color: Color, modifier: M
 @Composable
 fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = null, loading: Boolean = false, pull: Float = 0f, onBack: (() -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
     val loadingReveal = rememberLoadingReveal(loading, pull)
-    val loadingSpace = if (ThemeConfig.loadingStyle.iconStyle) 28.dp * loadingReveal.fraction else 0.dp
+    val loadingSpace = 28.dp * loadingReveal.fraction
     StatusBarIcons(dark = headerColor().luminance() > 0.5f)
-    Surface(modifier.zIndex(1f).fadeBelow(headerColor()).fillMaxWidth(), color = headerColor(), contentColor = headerContent()) {
+    HeaderSurface(modifier.zIndex(1f)) {
         Box {
             Row(Modifier.padding(bottom = loadingSpace).statusBarsPadding().height(64.dp).padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
+                if (onBack != null) GlassIconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
                 else Spacer(Modifier.width(20.dp))
                 // The title changes by sliding up out and in; the line under it (the number of orders) opens and closes with its own motion, and since the
                 // two are centred together the title glides up when the line appears and back down when it goes, instead of jumping.
@@ -518,6 +226,10 @@ fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = 
  */
 @Composable
 fun RoundedSheet(modifier: Modifier = Modifier, color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.background, content: @Composable () -> Unit) {
+    if (AppPreferences.liquidGlass) {
+        Box(modifier.fillMaxSize().background(color)) { content() }
+        return
+    }
     Box(modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().height(28.dp).background(headerColor()))
         Surface(Modifier.fillMaxSize(), shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp), color = color) { content() }
@@ -590,13 +302,13 @@ private val CollapsedRange = 56.dp
 @Composable
 fun CollapsingTopBar(title: String, state: CollapsingBarState, modifier: Modifier = Modifier, loading: Boolean = false, pull: Float = 0f, onTitleClick: (() -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
     val loadingReveal = rememberLoadingReveal(loading, pull)
-    val loadingSpace = if (ThemeConfig.loadingStyle.iconStyle) 28.dp * loadingReveal.fraction else 0.dp
+    val loadingSpace = 28.dp * loadingReveal.fraction
     StatusBarIcons(dark = headerColor().luminance() > 0.5f)
-    Surface(modifier.draggable(
+    HeaderSurface(modifier.draggable(
         orientation = Orientation.Vertical,
         state = rememberDraggableState { state.dragBy(it) },
         onDragStopped = { state.settle() },
-    ).zIndex(1f).fadeBelow(headerColor()).fillMaxWidth(), color = headerColor(), contentColor = headerContent()) {
+    ).zIndex(1f)) {
       Box {
         Box(
             Modifier.padding(bottom = loadingSpace).statusBarsPadding().fillMaxWidth().clipToBounds().layout { measurable, constraints ->
@@ -670,7 +382,7 @@ fun Modifier.scrollHide(state: ScrollHideState): Modifier = this
  * pickers already come out at the right size and nothing has to be put right here.
  */
 @Composable
-fun EnsureScaled(content: @Composable () -> Unit) = content()
+fun EnsureScaled(content: @Composable () -> Unit) = GlassWindowContent(content)
 
 /**
  * Sheets and dialogs are windows of their own, and a window made by the system gets the phone's own translucent shade behind the navigation bar
@@ -706,11 +418,11 @@ fun AppSheet(
         override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource) = Offset(0f, available.y)
         override suspend fun onPostFling(consumed: Velocity, available: Velocity) = Velocity(0f, available.y)
     } }
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismissRequest, sheetState = sheetState, containerColor = containerColor,
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismissRequest, sheetState = sheetState, containerColor = if (AppPreferences.liquidGlass) Color.Transparent else containerColor,
         contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) }) {
         TransparentSystemBars()
-        androidx.compose.runtime.CompositionLocalProvider(LocalScrollSurface provides containerColor) {
-            Column(Modifier.nestedScroll(scrollBoundary)) { EnsureScaled { content() } }
+        androidx.compose.runtime.CompositionLocalProvider(LocalScrollSurface provides containerColor, LocalGlassBackdrop provides null, LocalGlassContentPadding provides androidx.compose.foundation.layout.PaddingValues(0.dp)) {
+            Column(Modifier.nestedScroll(scrollBoundary).then(if (AppPreferences.liquidGlass) Modifier.glassSurface(backdrop = null, shape = RoundedCornerShape(28.dp), tint = containerColor, prominent = true) else Modifier)) { EnsureScaled { content() } }
         }
     }
 }

@@ -135,7 +135,7 @@ fun HomeTab(vm: HomeViewModel, gridState: LazyGridState, pullState: PullToRefres
                 state = gridState,
                 columns = GridCells.Adaptive(minSize = 150.dp),
                 modifier = nested.fillMaxSize().scrollEdges(MaterialTheme.colorScheme.background, before = { gridState.canScrollBackward }, after = { gridState.canScrollForward }),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 104.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + LocalGlassContentPadding.current.calculateTopPadding(), bottom = 104.dp + LocalGlassContentPadding.current.calculateBottomPadding()),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {

@@ -52,7 +52,7 @@ internal fun QueryAccountSettings() {
 
 @Composable
 fun QueryAccountSettingsScreen(onBack: () -> Unit) {
-    Scaffold(contentWindowInsets = appContentInsets(), topBar = { AppTopBar("独立查询账号", onBack = onBack) }) { padding ->
+    GlassScaffold(contentWindowInsets = appContentInsets(), topBar = { AppTopBar("独立查询账号", onBack = onBack) }) { padding ->
         PageWidth { Column(Modifier.padding(padding).pageVerticalScroll(rememberScrollState()).padding(16.dp)) { QueryAccountSettings() } }
     }
 }

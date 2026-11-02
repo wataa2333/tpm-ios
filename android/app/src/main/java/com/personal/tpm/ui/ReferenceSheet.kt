@@ -27,14 +27,11 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Snackbar
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -318,7 +315,7 @@ fun ReferenceSheet(
             if (source == RefSource.Users) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("按姓名", "按班组").forEachIndexed { index, title -> ChoiceChip(userMode == index, { userMode = index }, title) }
             }
-            Box(Modifier.fillMaxWidth().padding(vertical = 2.dp)) { if (loading || selecting) LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            Box(Modifier.fillMaxWidth().padding(vertical = 2.dp)) { if (loading || selecting) AppProgressIndicator(Modifier.fillMaxWidth()) }
             if (source.hasMenu) Text(
                 if (defaultField != null) "长按某一项，可以置顶，或设为默认。" else "长按某一项，可以置顶。",
                 Modifier.padding(horizontal = 24.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -339,7 +336,7 @@ fun ReferenceSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("隐藏已领用完物料", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                Switch(checked = hideUsedUp, onCheckedChange = { hideUsedUp = it })
+                GlassSwitch(checked = hideUsedUp, onCheckedChange = { hideUsedUp = it })
             }
             LazyColumn(Modifier.weight(1f)) {
                 if (source.hasMenu && !searching && lists.pins.isNotEmpty()) {
@@ -403,8 +400,8 @@ fun ReferenceSheet(
                 }
                 if (!loading && error == null && (if (treeSource) tree.isEmpty() else if (source == RefSource.Users && userMode == 1) userGroups.isEmpty() else shown.isEmpty())) item(key = "empty") { EmptyState("没有匹配的内容") }
             }
-            if (multiple) androidx.compose.material3.Surface(Modifier.fadeAbove(MaterialTheme.colorScheme.surfaceContainerLowest), color = MaterialTheme.colorScheme.surfaceContainerLowest) {
-                Button(onClick = { finish() }, modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) { AnimatedLabel(if (picked.isEmpty()) "完成" else "完成（已选 ${picked.size} 项）") }
+            if (multiple) GlassBottomSurface() {
+                GlassActionButton(onClick = { finish() }, modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) { AnimatedLabel(if (picked.isEmpty()) "完成" else "完成（已选 ${picked.size} 项）") }
             }
             notice?.let {
                 Snackbar(Modifier.padding(16.dp), action = { TextButton(onClick = { notice = null }) { Text("好") } }) { AnimatedLabel(it) }

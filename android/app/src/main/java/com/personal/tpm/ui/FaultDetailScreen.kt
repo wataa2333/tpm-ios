@@ -25,9 +25,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.filled.Edit
@@ -145,7 +143,7 @@ fun FaultDetailScreen(
     LaunchedEffect(id, changed, if (independent) queryAccounts.revision else 0) { load() }
 
     Box(Modifier.fillMaxSize()) {
-    Scaffold(contentWindowInsets = appContentInsets(),
+    GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             // Looking at an order from a selection is reading only: no buttons to take it forward.
@@ -162,7 +160,7 @@ fun FaultDetailScreen(
                 title = "报修详情", subtitle = detail?.get("sn")?.text?.ifEmpty { null }, onBack = onBack, loading = loading,
                 actions = {
                     if (!peeking && onEdit != null && operationDetail?.get("faultState")?.text == "UNTREATED" && operationDetail?.get("taskInfo")?.get("id")?.text.orEmpty().isNotEmpty()) {
-                        IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "编辑") }
+                        GlassIconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "编辑") }
                     }
                     RefreshButton(spinning = loading) { load() }
                 },

@@ -81,7 +81,7 @@ fun CardLayoutEditor(onBack: () -> Unit) {
                 )
             }
     }
-    Scaffold(contentWindowInsets = appContentInsets(), topBar = { AppTopBar("卡片自定义", onBack = onBack) }) { padding ->
+    GlassScaffold(contentWindowInsets = appContentInsets(), topBar = { AppTopBar("卡片自定义", onBack = onBack) }) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Box {
                 TextButton(onClick = { typesOpen = true }) { AnimatedLabel("${type.title} ▾") }
@@ -148,7 +148,7 @@ fun CardLayoutEditor(onBack: () -> Unit) {
                 BlockSegmented(FieldPosition.entries.map { it.title }, position.ordinal, { CardPreferences.setPosition(type, field, FieldPosition.entries[it]) })
                 if (place == FieldPlace.Compact) Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("显示字段名称", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                    Switch(CardPreferences.showLabel(type, field), { CardPreferences.setShowLabel(type, field, it) })
+                    GlassSwitch(CardPreferences.showLabel(type, field), { CardPreferences.setShowLabel(type, field, it) })
                 }
             }
             }

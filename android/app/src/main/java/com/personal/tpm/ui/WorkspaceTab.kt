@@ -113,7 +113,7 @@ fun WorkspaceTab(vm: WorkspaceViewModel, gridState: LazyGridState, pullState: Pu
         PageWidth {
             LazyVerticalGrid(
                 state = gridState, columns = GridCells.Adaptive(minSize = 150.dp), modifier = nested.fillMaxSize().scrollEdges(MaterialTheme.colorScheme.background, before = { gridState.canScrollBackward }, after = { gridState.canScrollForward }),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 88.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + LocalGlassContentPadding.current.calculateTopPadding(), bottom = 88.dp + LocalGlassContentPadding.current.calculateBottomPadding()),
                 horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 vm.error?.let { message -> item(span = { GridItemSpan(maxLineSpan) }) { AnimatedLabel(message, color = MaterialTheme.colorScheme.error) } }

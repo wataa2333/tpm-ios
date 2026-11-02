@@ -11,7 +11,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -141,7 +140,7 @@ fun ErpFormScreen(existingId: String?, referenceSn: String?, onClose: () -> Unit
                             AnimatedLabel(material["materialDesc"].text, style = MaterialTheme.typography.titleSmall)
                             AnimatedLabel(listOf(material["materialCode"].text, "库存 " + materialQuantity(material["onhandQty"].text, material), material["lot"].text, material["subInv"].text).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        IconButton(onClick = { form.removeLine(index) }) { Icon(Icons.Filled.Delete, contentDescription = "删除明细", tint = MaterialTheme.colorScheme.error) }
+                        GlassIconButton(onClick = { form.removeLine(index) }) { Icon(Icons.Filled.Delete, contentDescription = "删除明细", tint = MaterialTheme.colorScheme.error) }
                     }
                     InputRow("申请数量", text, { text = it; form.setQuantity(index, it.toDoubleOrNull() ?: 0.0) }, required = true, suffix = materialUnit(material), maximum = if(material["onhandQty"].isNull) null else material["onhandQty"].number.coerceAtLeast(0.0))
                 }

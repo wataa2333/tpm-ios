@@ -45,10 +45,8 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -118,7 +116,19 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
         vm.reload(pull = true)
     }
 
-    Scaffold(contentWindowInsets = appContentInsets(),
+    val filtersOrderListScreen: @Composable () -> Unit = {
+                        Column(Modifier.then(if (AppPreferences.liquidGlass) Modifier else Modifier.scrollHide(hide))) {
+                            SearchRow(vm, input, { input = it }, focus)
+                            if (!vm.searchMode) StatusStrip(vm)
+                            vm.span?.let { span ->
+                                BlockChip(
+                                    "日期 " + span.summary, { choosingDates = true }, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), selected = true,
+                                    trailing = { Icon(Icons.Filled.Close, contentDescription = "清除日期", Modifier.size(18.dp).clickable { vm.changeSpan(null) }) },
+                                )
+                            }
+                        }
+    }
+    GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = { BatchBarHost(batch.active) { BatchBar(batch) { vm.rows.map { batchItem(com.personal.tpm.data.OrderKind.Fault, it) } } } },
@@ -130,7 +140,7 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
                 actions = {
                     SelectButton(batch.active) { if (batch.active) batch.end() else batch.begin() }
                     RefreshButton(spinning = vm.loading || vm.refreshing) { refreshFromTop() }
-                    IconButton(onClick = { choosingDates = true }) { Icon(Icons.Filled.DateRange, contentDescription = "按日期筛选") }
+                    GlassIconButton(onClick = { choosingDates = true }) { Icon(Icons.Filled.DateRange, contentDescription = "按日期筛选") }
                 },
             )
         },
@@ -141,16 +151,7 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
                     Column(Modifier.fillMaxSize()) {
                         // The search box, the way of searching, the status tabs and the date chip fold away while the list is
                         // scrolled towards its end and come back at the first scroll the other way.
-                        Column(Modifier.scrollHide(hide)) {
-                            SearchRow(vm, input, { input = it }, focus)
-                            if (!vm.searchMode) StatusStrip(vm)
-                            vm.span?.let { span ->
-                                BlockChip(
-                                    "日期 " + span.summary, { choosingDates = true }, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), selected = true,
-                                    trailing = { Icon(Icons.Filled.Close, contentDescription = "清除日期", Modifier.size(18.dp).clickable { vm.changeSpan(null) }) },
-                                )
-                            }
-                        }
+                        if (!AppPreferences.liquidGlass) filtersOrderListScreen()
                         // Another status slides in from the side it lies on in the strip (the next one from the right), with grey cards while it loads.
                         val statusOrder = FaultState.entries.map { it.code }
                         androidx.compose.animation.AnimatedContent(
@@ -169,12 +170,13 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
                         PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.reload(pull = true) }, state = pull, indicator = {}, modifier = Modifier.fillMaxSize()) {
                             // While a search or a date is loading, the old rows stay but dim; they fade out as the new ones fade in.
                             val dim by animateFloatAsState(if (vm.loading && vm.rows.isNotEmpty()) 0.45f else 1f, tween(Motion.Fast, easing = Motion.Change), label = "dim")
-                            Box(Modifier.fillMaxSize().nestedScroll(hide.connection)) {
+                            Box(Modifier.fillMaxSize().then(if (AppPreferences.liquidGlass) Modifier else Modifier.nestedScroll(hide.connection))) {
                                 LazyColumn(
                                     state = listState, modifier = Modifier.fillMaxSize().then(if (dim < 1f) Modifier.graphicsLayer { alpha = dim } else Modifier),
                                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = if (onNew != null) 88.dp else 24.dp),
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
+                                    if (AppPreferences.liquidGlass) item(key = "glass-filters") { filtersOrderListScreen() }
                                     if (vm.loading && vm.rows.isEmpty()) {
                                         items(4, key = { "skeleton$it" }, contentType = { "skeleton" }) { SkeletonCard(fadeItem(skeleton = true)) }
                                     }
@@ -227,7 +229,7 @@ private fun SearchRow(vm: OrderListViewModel, input: String, onInput: (String) -
             value = input, onValueChange = onInput, singleLine = true, modifier = Modifier.fillMaxWidth(),
             placeholder = { AnimatedLabel("搜索" + vm.field.label) },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-            trailingIcon = { if (input.isNotEmpty()) IconButton(onClick = { onInput(""); if (vm.searchMode) vm.search("") }) { Icon(Icons.Filled.Close, contentDescription = "清空") } },
+            trailingIcon = { if (input.isNotEmpty()) GlassIconButton(onClick = { onInput(""); if (vm.searchMode) vm.search("") }) { Icon(Icons.Filled.Close, contentDescription = "清空") } },
             shape = CircleShape,
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh, unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,

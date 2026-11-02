@@ -18,11 +18,9 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.filled.Edit
@@ -86,7 +84,7 @@ fun ErpDetailScreen(id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit
     LaunchedEffect(id, changed, if (independent) queryAccounts.revision else 0) { load() }
 
     Box(Modifier.fillMaxSize()) {
-    Scaffold(contentWindowInsets = appContentInsets(),
+    GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = { if (!peeking) operatorDetail?.let { TaskActionBar(com.personal.tpm.data.OrderKind.Erp, it, onOpen=onOpenTask) } },
         topBar = {
@@ -94,7 +92,7 @@ fun ErpDetailScreen(id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit
                 title = "出库详情", subtitle = detail?.get("outNumber")?.text?.ifEmpty { null }, onBack = onBack, loading = loading,
                 actions = {
                     if (!peeking && operatorDetail != null && onEdit != null && detail?.get("processInstanceId")?.text.orEmpty().isEmpty() && detail?.get("createBy")?.text == session.accountName) {
-                        IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "编辑") }
+                        GlassIconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "编辑") }
                     }
                     RefreshButton(spinning = loading) { load() }
                 },

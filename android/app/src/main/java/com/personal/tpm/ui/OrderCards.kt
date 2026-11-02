@@ -17,11 +17,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.Constraints
 import kotlin.math.roundToInt
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -44,10 +40,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -205,7 +199,7 @@ fun OrderCard(model: CardModel, expanded: Boolean, onToggle: () -> Unit, modifie
                         FactsGrid(shownModel.facts, model.cardType, editing)
                     }
                     if (editing == null) SelectionContainer { facts() } else facts()
-                    if (onOpen != null && selecting == null) Button(onClick = onOpen, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) { Text("打开工单", maxLines = 1) }
+                    if (onOpen != null && selecting == null) GlassActionButton(onClick = onOpen, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) { Text("打开工单", maxLines = 1) }
                     if(selecting==null && editing==null) bottomAction?.invoke()
                 }
             }
@@ -267,7 +261,7 @@ private fun CompactCardGrid(cells: List<CompactCell>, type: CardType, editing: C
 @Composable
 private fun DetailToggle(expanded: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val turn by animateFloatAsState(if (expanded) 180f else 0f, tween(Motion.Normal, easing = Motion.Change), label = "chevron")
-    FilledTonalButton(onClick = onClick, contentPadding = PaddingValues(start = 14.dp, end = 10.dp), modifier = modifier.height(CardMetrics.footerHeight)) {
+    GlassTonalButton(onClick = onClick, contentPadding = PaddingValues(start = 14.dp, end = 10.dp), modifier = modifier.height(CardMetrics.footerHeight)) {
         AnimatedLabel(if (expanded) "收起详情" else "展开详情", style = MaterialTheme.typography.labelLarge, maxLines = 1, softWrap = false)
         Icon(Icons.Filled.ExpandMore, contentDescription = null, Modifier.size(18.dp).graphicsLayer { rotationZ = turn })
     }
@@ -372,7 +366,7 @@ private fun PlainFact(label: String, value: String, modifier: Modifier = Modifie
     }
 }
 
-/** A grey stand-in for a card while the first page loads: a soft light sweeps across it, and it fades out as the real cards come in. */
+/** Static placeholders reserve card geometry; only the native circular indicator animates loading. */
 @Composable
 fun SkeletonCard(modifier: Modifier = Modifier, cardType: CardType = CardType.Fault) {
     val plan = skeletonPlan(cardType, { CardPreferences.position(cardType, it) }, CardPreferences.orderedFields(cardType), CardPreferences.detailButtonPosition(cardType)) { field, default -> CardPreferences.placement(cardType, field, default) }
@@ -381,19 +375,14 @@ fun SkeletonCard(modifier: Modifier = Modifier, cardType: CardType = CardType.Fa
         listOfNotNull(preview.time.takeIf { it.isNotEmpty() }?.let { "时间" to it })
     val grid = compactLayout(body, preview.facts.isNotEmpty(), CardPreferences.detailButtonSlot(cardType), { CardPreferences.slot(cardType, it) }, { CardPreferences.position(cardType, it) })
     val bodyRows = (grid.cells.maxOfOrNull { it.slot / 2 } ?: -1) + 1
-    val transition = rememberInfiniteTransition(label = "shimmer")
-    val x by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Restart), label = "x")
     val base = MaterialTheme.colorScheme.surfaceContainerHigh
-    val light = MaterialTheme.colorScheme.surfaceContainerLowest
     // Everything is measured like the real card: the height of a line is the line height of the text it stands for (so it follows the interface
     // size and the font size), and the sweep of light is measured in dp, not pixels.
     val density = androidx.compose.ui.platform.LocalDensity.current
     val titleLine = with(density) { MaterialTheme.typography.titleMedium.lineHeight.toDp() }
     val bodyLine = with(density) { MaterialTheme.typography.bodyMedium.lineHeight.toDp() }
-    val band = with(density) { 220.dp.toPx() }
-    val travel = with(density) { 440.dp.toPx() }
     fun bar(width: Float, height: androidx.compose.ui.unit.Dp) = Modifier.fillMaxWidth(width).height(height).clip(RoundedCornerShape(6.dp))
-        .background(Brush.horizontalGradient(listOf(base, light, base), startX = -band + travel * x, endX = band + travel * x))
+        .background(base)
     Card(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), elevation = CardDefaults.cardElevation(0.dp)) {
         Column(Modifier.padding(CardMetrics.padding), verticalArrangement = Arrangement.spacedBy(CardMetrics.lineGap)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -115,7 +114,7 @@ fun FaultFormScreen(existingId: String?, startDraftId: String?, onClose: () -> U
     FormPage(
         title = if (existingId == null) "故障报修" else "编辑报修", busy = form.loading || form.saving || photoBusy, onClose = { if (!form.saving && !photoBusy) close() }, snackbar = snackbar, backEnabled = !form.saving && !photoBusy, interceptBack = worthKeeping, onBackGesture = { close() },
         actions = {
-            if (draftsAllowed) IconButton(onClick = { showDrafts = true }) { Icon(Icons.Filled.Inbox, contentDescription = if (draftCount > 0) "草稿箱（$draftCount）" else "草稿箱") }
+            if (draftsAllowed) GlassIconButton(onClick = { showDrafts = true }) { Icon(Icons.Filled.Inbox, contentDescription = if (draftCount > 0) "草稿箱（$draftCount）" else "草稿箱") }
         },
         bottomBar = { FormActionBar(busy = form.saving || form.loading, enabled = form.ready && !form.loading && !photoBusy, onSave = { if (draftsAllowed) keepDraft() else submit(false) }, onSubmit = { submit(true) }) },
     ) {

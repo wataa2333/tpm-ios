@@ -30,7 +30,7 @@ fun PrecisionDashboard(onBack: () -> Unit, openAsset: (String) -> Unit) {
     LaunchedEffect(scope, queries.revision) { vm.ensureLoaded(scope, queries.revision) }
     val colors = listOf(Color(0xFF167D8D), Color(0xFF4388C7), Color(0xFF8B86AF), Color(0xFFC68A30), Color(0xFFBC5360))
     val matching = remember(vm.snapshot, vm.search, vm.grade) { vm.matching() }
-    Scaffold(contentWindowInsets = appContentInsets(), topBar = { AppTopBar("精密度检查看板", onBack = onBack, loading = vm.loading) }) { padding ->
+    GlassScaffold(contentWindowInsets = appContentInsets(), topBar = { AppTopBar("精密度检查看板", onBack = onBack, loading = vm.loading) }) { padding ->
         PageWidth {
             ScrollableLazyColumn(Modifier.padding(padding).fillMaxSize(), state = vm.listState,
                 contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -54,7 +54,7 @@ fun PrecisionDashboard(onBack: () -> Unit, openAsset: (String) -> Unit) {
                             val total = data.total
                             if (total != null && total > 0) {
                                 AnimatedLabel("总数：${total}台 · 未检：${total - data.rows.size}台")
-                                LinearProgressIndicator(progress = { data.rows.size.toFloat() / total }, modifier = Modifier.fillMaxWidth().clip(CircleShape))
+                                AppProgressIndicator(progress = { data.rows.size.toFloat() / total }, modifier = Modifier.fillMaxWidth().clip(CircleShape))
                                 AnimatedLabel("覆盖率：${percent(data.rows.size, total)}")
                             }
                             if (data.totalNotice.isNotEmpty()) AnimatedLabel(data.totalNotice, color = MaterialTheme.colorScheme.error)

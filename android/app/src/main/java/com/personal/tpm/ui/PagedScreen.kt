@@ -20,9 +20,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -152,7 +150,18 @@ fun PagedScreen(
     }
     LaunchedEffect(batch.notice) { batch.notice?.let { snackbar.showSnackbar(it); batch.notice = null } }
     androidx.activity.compose.BackHandler(enabled = batch.active) { batch.end() }
-    Scaffold(contentWindowInsets = appContentInsets(),
+    val filtersPagedScreen: @Composable () -> Unit = {
+                        Column(Modifier.then(if (AppPreferences.liquidGlass) Modifier else Modifier.scrollHide(hide)).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SearchField(input, { input = it }, "搜索" + vm.searches[vm.choice].label, onSearch = { vm.search(input); focus.clearFocus() })
+                            if (vm.searches.size > 1) Box {
+                                BlockChip("按" + vm.searches[vm.choice].label + "搜索", { menu = true }, trailing = { Icon(Icons.Filled.ExpandMore, contentDescription = null, Modifier.size(18.dp)) })
+                                AppOptionSheet(expanded = menu, onDismissRequest = { menu = false }, title = "搜索方式") {
+                                    vm.searches.forEachIndexed { index, option -> AppOptionItem(text = { AnimatedLabel(option.label) }, selected = index == vm.choice, onClick = { menu = false; vm.choose(index) }) }
+                                }
+                            }
+                        }
+    }
+    GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = { if (batchKind != null) BatchBarHost(batch.active) { BatchBar(batch) { vm.rows.map { batchItem(batchKind, it) } } } },
@@ -174,23 +183,16 @@ fun PagedScreen(
             RoundedSheet {
                 PageWidth {
                     Column(Modifier.fillMaxSize()) {
-                        Column(Modifier.scrollHide(hide).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SearchField(input, { input = it }, "搜索" + vm.searches[vm.choice].label, onSearch = { vm.search(input); focus.clearFocus() })
-                            if (vm.searches.size > 1) Box {
-                                BlockChip("按" + vm.searches[vm.choice].label + "搜索", { menu = true }, trailing = { Icon(Icons.Filled.ExpandMore, contentDescription = null, Modifier.size(18.dp)) })
-                                AppOptionSheet(expanded = menu, onDismissRequest = { menu = false }, title = "搜索方式") {
-                                    vm.searches.forEachIndexed { index, option -> AppOptionItem(text = { AnimatedLabel(option.label) }, selected = index == vm.choice, onClick = { menu = false; vm.choose(index) }) }
-                                }
-                            }
-                        }
+                        if (!AppPreferences.liquidGlass) filtersPagedScreen()
                         PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.reload(pull = true) }, state = pull, indicator = {}, modifier = Modifier.weight(1f).fillMaxWidth()) {
                             val dim by animateFloatAsState(if (vm.loading && vm.rows.isNotEmpty()) 0.45f else 1f, tween(Motion.Fast, easing = Motion.Change), label = "dim")
-                            Box(Modifier.fillMaxSize().nestedScroll(hide.connection)) {
+                            Box(Modifier.fillMaxSize().then(if (AppPreferences.liquidGlass) Modifier else Modifier.nestedScroll(hide.connection))) {
                                 LazyColumn(
                                     state = listState, modifier = Modifier.fillMaxSize().then(if (dim < 1f) Modifier.graphicsLayer { alpha = dim } else Modifier),
                                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = if (onNew != null) 88.dp else 24.dp),
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
+                                    if (AppPreferences.liquidGlass) item(key = "glass-filters") { filtersPagedScreen() }
                                     if (vm.loading && vm.rows.isEmpty()) items(4, key = { "skeleton$it" }, contentType = { "skeleton" }) { SkeletonCard(fadeItem(skeleton = true), cardType) }
                                     // The key is the position: a page that shifts under the list can repeat a row, and a repeated key crashes a lazy list (and building a card just for its key was slow).
                                     items(vm.rows.size, key = { "row#$it" }, contentType = { "card" }) { index ->
@@ -228,7 +230,7 @@ fun PagedScreen(
     // the button dropped with it. Here it stays where it is, and shows itself once the bar is on its way out.
     if (onNew != null) NewButton(visible = !batch.active, label = "新建领料单", onClick = onNew)
     BatchOverlays(batch)
-    if (noticeShown) androidx.compose.material3.AlertDialog(
+    if (noticeShown) GlassAlertDialog(
         onDismissRequest = { noticeShown = false },
         title = { Text("提示") }, text = { AnimatedLabel(openNotice.orEmpty()) },
         confirmButton = { androidx.compose.material3.TextButton(onClick = { noticeShown = false }) { Text("确认") } },

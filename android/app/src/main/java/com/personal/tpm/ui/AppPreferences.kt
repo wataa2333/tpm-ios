@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 
 object AppPreferences {
     private var prefs: android.content.SharedPreferences? = null
+    var liquidGlass by mutableStateOf(false); private set
+    fun updateLiquidGlass(on: Boolean) { liquidGlass = on; prefs?.edit()?.putBoolean("liquidGlass", on)?.apply() }
     val repairPageSizes = listOf(50, 100, 200, 500)
     val repairConcurrencyLevels = listOf(1, 3, 5, 8)
     var repairReadExperiment by mutableStateOf(false); private set
@@ -17,6 +19,7 @@ object AppPreferences {
     fun load(context: Context) {
         prefs = context.getSharedPreferences("ui_options", Context.MODE_PRIVATE)
         prefs!!.edit().remove("repairExcelMode").apply()
+        liquidGlass = prefs!!.getBoolean("liquidGlass", false)
         repairReadExperiment = prefs!!.getBoolean("repairReadExperiment", false)
         repairPageSize = prefs!!.getInt("repairPageSize", 500).takeIf { it in repairPageSizes } ?: 500
         repairConcurrency = prefs!!.getInt("repairConcurrency", 8).takeIf { it in repairConcurrencyLevels } ?: 8

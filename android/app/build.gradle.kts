@@ -13,14 +13,14 @@ fun queryConfigLiteral(value: String) = "\"" + value.replace("\\", "\\\\").repla
 
 android {
     namespace = "com.personal.tpm"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.personal.tpm"
         minSdk = 29            // Android 10
         targetSdk = 35
-        versionCode = 103
-        versionName = "1.103.0"
+        versionCode = 104
+        versionName = "1.104.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEFAULT_QUERY_USERNAME", queryConfigLiteral("C0382522"))
         buildConfigField("String", "DEFAULT_QUERY_PASSWORD", queryConfigLiteral(queryLocalSettings.getProperty("tpm.defaultQueryPassword", "")))
@@ -50,10 +50,10 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
-    kotlinOptions { jvmTarget = "17" }
+    kotlinOptions { jvmTarget = "21" }
     buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests.isReturnDefaultValues = true }
 }
@@ -83,8 +83,9 @@ android.sourceSets.getByName("main").assets.srcDir(generatedReleaseAssets)
 tasks.named("preBuild") { dependsOn(bundleReleaseNotes) }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
+    val composeBom = platform("androidx.compose:compose-bom:2025.11.00")
     implementation(composeBom)
+    implementation("io.github.kyant0:backdrop:1.0.0")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui")

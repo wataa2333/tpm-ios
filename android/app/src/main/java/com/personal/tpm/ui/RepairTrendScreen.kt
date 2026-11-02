@@ -64,12 +64,12 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
             Text("日期范围",style=MaterialTheme.typography.titleSmall)
             RepairDateControls(vm)
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                Button(enabled=!vm.loading && vm.selectedSpan!=null,onClick=vm::prepare){AnimatedLabel(if(vm.started) "重新查询" else "查询")}
+                GlassActionButton(enabled=!vm.loading && vm.selectedSpan!=null,onClick=vm::prepare){AnimatedLabel(if(vm.started) "重新查询" else "查询")}
                 if(vm.loading) TextButton(onClick=vm::pause){Text("暂停")}
                 else if(vm.started && !vm.showingPrevious && !vm.snapshot.exhausted) TextButton(onClick={vm.load()}){Text("继续")}
             }
             if(vm.loading) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
+                AppProgressIndicator(Modifier.fillMaxWidth())
                 AnimatedLabel(if(vm.checking) "正在预估数量" else "已读${vm.snapshot.readCount} / ${vm.expectedTotal?.toString() ?: "未知"}",style=MaterialTheme.typography.bodySmall)
             }
             } }
@@ -94,7 +94,7 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
                 item { controls() }
                 item { GroupCard { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                     Text("人员对比",style=MaterialTheme.typography.titleSmall)
-                    OutlinedButton(onClick={picker=true},modifier=Modifier.fillMaxWidth(),border=BorderStroke(1.dp,accent.copy(alpha=.55f))){AnimatedLabel("选择对比人员 · 已选${shown.count{it.key!=ALL_REPAIR_TREND}}人")}
+                    GlassOutlinedButton(onClick={picker=true},modifier=Modifier.fillMaxWidth(),border=BorderStroke(1.dp,accent.copy(alpha=.55f))){AnimatedLabel("选择对比人员 · 已选${shown.count{it.key!=ALL_REPAIR_TREND}}人")}
                 } } }
             }
             item {
@@ -112,7 +112,7 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
             item { RepairTrendTable(table,focus,{focus=it},monthly,complete,colors) }
         }
     }
-    Scaffold(contentWindowInsets=WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),topBar={AppTopBar("${days}天处理趋势",onBack=onBack,loading=vm.loading,actions={
+    GlassScaffold(contentWindowInsets=WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),topBar={AppTopBar("${days}天处理趋势",onBack=onBack,loading=vm.loading,actions={
         if(!landscape) TextButton(onClick={manualLandscape=true}){Text("横屏")}
     })}){padding->
         if(landscape) Row(Modifier.padding(padding).fillMaxSize()){

@@ -13,7 +13,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -187,7 +186,7 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        IconButton(onClick = { setRows(rows().filterIndexed { i, _ -> i != index }.map { it.raw }) }) { Icon(Icons.Filled.Delete, contentDescription = "删除明细", tint = MaterialTheme.colorScheme.error) }
+                        GlassIconButton(onClick = { setRows(rows().filterIndexed { i, _ -> i != index }.map { it.raw }) }) { Icon(Icons.Filled.Delete, contentDescription = "删除明细", tint = MaterialTheme.colorScheme.error) }
                     }
                     InputRow("使用数量", use, { use = it; setRows(rows().mapIndexed { i, r -> if (i == index) JSONObject(r.raw.toString()).put("useNum", it.toDoubleOrNull() ?: 0.0) else r.raw }) }, required = true, suffix = materialUnit(material), maximum = maximum)
                 }

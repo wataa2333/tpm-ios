@@ -48,7 +48,7 @@ fun AppOptionItem(
     selected: Boolean = false,
 ) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-        .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLowest)
+        .then(if (AppPreferences.liquidGlass) Modifier.glassSurface(backdrop = null, shape = RoundedCornerShape(18.dp), tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLowest, prominent = selected) else Modifier.background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLowest))
         .semantics { this.selected = selected }
         .clickable(role = Role.Button, onClick = onClick)
         .heightIn(min = 56.dp).padding(horizontal = 18.dp, vertical = 14.dp),

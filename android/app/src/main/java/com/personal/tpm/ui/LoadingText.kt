@@ -1,15 +1,18 @@
 package com.personal.tpm.ui
 
-import androidx.compose.runtime.*
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import kotlinx.coroutines.delay
+import androidx.compose.ui.unit.dp
 
 @Composable
-fun LoadingText(prefix: String = "加载中", style: TextStyle = androidx.compose.material3.MaterialTheme.typography.bodyMedium, color: Color = androidx.compose.material3.LocalContentColor.current) {
-    var step by remember { mutableIntStateOf(1) }
-    LaunchedEffect(Unit) { while (true) { delay(400); step = step % 3 + 1 } }
-    // Fixed three-character suffix prevents neighbouring text from moving on each tick.
-    Text(prefix + ".".repeat(step) + "\u00a0".repeat(3 - step), style = style, color = color)
+fun LoadingText(prefix: String = "加载中", style: TextStyle = MaterialTheme.typography.bodyMedium, color: Color = LocalContentColor.current) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+        Text(prefix, style = style, color = color)
+    }
 }
