@@ -15,6 +15,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -250,26 +251,16 @@ fun ReferenceSheet(
     }
 
     @Composable
-    fun treeGuides(depth: Int): Modifier {
-        val color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f)
-        return Modifier.drawBehind {
-            repeat(depth) { level ->
-                val x = (20 + level * 22).dp.toPx()
-                drawLine(color, Offset(x, 0f), Offset(x, size.height), 1.dp.toPx())
-            }
-        }
-    }
-    @Composable
     fun PickerRow(entry: PickerEntry, depth: Int = 0) {
         val key = entry.key
         val lines = subtitleLines(entry.value)
         // Each choice is a block of its own on the white sheet (a tinted one when it is ticked), so the rows never run together.
-        Box(Modifier.fillMaxWidth().then(treeGuides(depth)).padding(start = (20 + depth * 22).dp, end = 12.dp, top = 3.dp, bottom = 3.dp)) {
+        Box(Modifier.fillMaxWidth().padding(start = (20 + depth.coerceAtMost(4) * 16).dp, end = 12.dp, top = 3.dp, bottom = 3.dp)) {
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                    .background(if (key in picked) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else if (treeSource) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer)
+                    .background(if (key in picked) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else if (treeSource) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainer)
                     .combinedClickable(onClick = { choose(entry.value) }, onLongClick = { if (source.hasMenu) menuFor = key })
-                    .padding(start = 14.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+                    .heightIn(min = 44.dp).padding(start = 14.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -373,7 +364,7 @@ fun ReferenceSheet(
                             val toggle = { if (row.path in opened) opened.remove(row.path) else opened.add(row.path); Unit }
                             // A branch: a block with an arrow that opens and closes it. Where a branch can be chosen itself (a division), the name chooses it and only
                             // the arrow opens; otherwise the whole block opens it.
-                            Box(Modifier.fillMaxWidth().then(treeGuides(row.depth)).padding(start = (20 + row.depth * 22).dp, end = 12.dp, top = 3.dp, bottom = 3.dp)) {
+                            Box(Modifier.fillMaxWidth().padding(start = (20 + row.depth.coerceAtMost(4) * 16).dp, end = 12.dp, top = 3.dp, bottom = 3.dp)) {
                                 Row(
                                     Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
                                         .then(if (row.choosable) Modifier else Modifier.clickable(onClick = toggle)),

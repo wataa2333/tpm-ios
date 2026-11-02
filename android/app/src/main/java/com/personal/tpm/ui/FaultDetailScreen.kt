@@ -186,7 +186,7 @@ fun FaultDetailScreen(
                     FactRow("报修名称", order["faultName"].text)
                     FactRow("单号", order["sn"].text)
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("状态", Modifier.width(96.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("状态", Modifier.width(112.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         AnimatedLabel(faultStateLabel(order), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = stateColor(order["faultState"].text))
                     }
                     FactRow("故障时间", order["faultTime"].dateText)
@@ -234,7 +234,7 @@ fun FaultDetailScreen(
                     SectionTitle("维修退单说明")
                     GroupCard {
                         if (returnLoading) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Text("退单人", Modifier.width(96.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("退单人", Modifier.width(112.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             LoadingText()
                         } else FactRow("退单人", returnPerson.ifEmpty { if (returnError) "获取失败" else "流程未提供退单人" })
                         if (returnError) GlassTextButton(onClick = { returnRetry++ }) { Text("重新获取退单人") }

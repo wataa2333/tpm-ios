@@ -1,5 +1,8 @@
 package com.personal.tpm.ui
 
+import androidx.compose.animation.*
+import androidx.compose.foundation.shape.CircleShape
+import kotlinx.coroutines.delay
 import androidx.compose.animation.core.animateIntOffsetAsState
 import androidx.compose.animation.core.animateIntSizeAsState
 import androidx.compose.animation.core.tween
@@ -30,15 +33,17 @@ import kotlin.math.roundToInt
 @Composable
 fun SingleChoiceGroup(options: List<String>, selected: Int, onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier, enabled: Boolean = true, scrollable: Boolean = false,
-    columns: Int = options.size.coerceAtLeast(1)) {
+    columns: Int = options.size.coerceAtLeast(1), counts: List<Int?>? = null) {
     if (options.isEmpty()) return
-    val shape = RoundedCornerShape(18.dp)
+    val shape = CircleShape
     val density = LocalDensity.current
     val scroll = rememberScrollState()
     val bounds = remember { mutableStateMapOf<Int, Pair<IntOffset, IntSize>>() }
     val target = bounds[selected]
-    LaunchedEffect(selected, target, scroll.viewportSize) {
-        if (scrollable && target != null) {
+    LaunchedEffect(selected, options.size, counts, target != null, scroll.viewportSize) {
+        if (scrollable) {
+            delay(Motion.Normal.toLong())
+            val target = bounds[selected] ?: return@LaunchedEffect
             val left = target.first.x
             val right = left + target.second.width
             val visibleLeft = scroll.value
@@ -75,6 +80,7 @@ fun SingleChoiceGroup(options: List<String>, selected: Int, onSelect: (Int) -> U
                                 val p = coordinates.positionInParent() + Offset(0f, rowY)
                                 bounds[index] = IntOffset(p.x.roundToInt(), p.y.roundToInt()) to coordinates.size
                             }
+                            .then(if (counts != null) Modifier.animateContentSize(tween(Motion.Normal, easing = Motion.Change)) else Modifier)
                             .heightIn(min = 44.dp).selectable(active, enabled = enabled, role = Role.RadioButton, onClick = { onSelect(index) })
                             .padding(horizontal = if (scrollable) 14.dp else 8.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -84,6 +90,16 @@ fun SingleChoiceGroup(options: List<String>, selected: Int, onSelect: (Int) -> U
                             Text(options[index], style = MaterialTheme.typography.labelLarge,
                                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                                 color = content.copy(alpha = if (enabled) 1f else .55f), maxLines = if (scrollable) 1 else 2)
+                            if (counts != null) {
+                                Spacer(Modifier.width(5.dp))
+                                AnimatedContent(counts.getOrNull(index), transitionSpec = {
+                                    (slideInVertically(tween(Motion.Normal, easing = Motion.Change)) { it / 2 } + fadeIn(tween(Motion.Normal))) togetherWith
+                                        (slideOutVertically(tween(Motion.Normal, easing = Motion.Change)) { -it / 2 } + fadeOut(tween(Motion.Fast)))
+                                }, label = "filter count") { count ->
+                                    Text(count?.toString().orEmpty(), style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
+                                        color = content, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal)
+                                }
+                            }
                         }
                     }
                     if (!scrollable && indices.size < columns) repeat(columns - indices.size) { Spacer(Modifier.weight(1f)) }

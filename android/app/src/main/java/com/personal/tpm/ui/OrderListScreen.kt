@@ -251,8 +251,9 @@ private fun SearchRow(vm: OrderListViewModel, input: String, onInput: (String) -
 private fun StatusStrip(vm: OrderListViewModel) {
     val states = FaultState.entries
     val selected = states.indexOfFirst { it.code == vm.state }
-    val labels = states.map { st -> st.title + if (st.hasCount) vm.counts[st.code]?.let { " $it" }.orEmpty() else "" }
+    val labels = states.map { it.title }
     SingleChoiceGroup(labels, selected, { vm.select(states[it].code) }, scrollable = true,
+        counts = states.map { if(it.hasCount) vm.counts[it.code] else null },
         modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
 }
 

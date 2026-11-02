@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -193,7 +194,7 @@ fun TextEntry(
 fun DateTimeField(label: String, value: String, dateOnly: Boolean, required: Boolean, onChange: (String) -> Unit) {
     var step by remember { mutableStateOf(0) } // 0 closed, 1 date, 2 time
     var pickedDate by remember { mutableStateOf<LocalDate?>(null) }
-    val current = remember(value) { parsedDate(Jv(value)).toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime() }
+    val current = remember(value) { parsedDate(Jv(value)).toInstant().atZone(com.personal.tpm.data.BusinessZone).toLocalDateTime() }
     PickRow(label, value, required) { step = 1 }
     if (step == 1) {
         val state = rememberDatePickerState(initialSelectedDateMillis = current.toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
@@ -217,7 +218,7 @@ fun DateTimeField(label: String, value: String, dateOnly: Boolean, required: Boo
             confirmButton = {
                 GlassTextButton(onClick = {
                     val moment = LocalDateTime.of(pickedDate ?: LocalDate.now(), LocalTime.of(time.hour, time.minute))
-                    onChange(serverDate(java.util.Date.from(moment.atZone(ZoneId.systemDefault()).toInstant()))); step = 0
+                    onChange(serverDate(java.util.Date.from(moment.atZone(com.personal.tpm.data.BusinessZone).toInstant()))); step = 0
                 }) { Text("确定") }
             },
             dismissButton = { GlassTextButton(onClick = { step = 0 }) { Text("取消") } },
@@ -458,16 +459,17 @@ fun InputRow(
     }
 }
 
-/** A page laid over the screen that rises from the bottom (as long as a page slides, on the curve of arriving) and swallows touches meanwhile. */
+/** Keep the last item composed until the native vertical exit transition completes. */
 @Composable
-fun SlideUpOverlay(content: @Composable () -> Unit) {
-    val progress = remember { androidx.compose.animation.core.Animatable(0f) }
-    LaunchedEffect(Unit) { progress.animateTo(1f, androidx.compose.animation.core.tween(Motion.Page, easing = Motion.Arrive)) }
-    androidx.compose.foundation.layout.Box(
-        Modifier.fillMaxSize()
-            .graphicsLayer { translationY = (1f - progress.value) * size.height }
-            .pointerInput(Unit) { detectTapGestures { } },
-    ) { content() }
+fun <T : Any> SlideUpOverlayFor(item: T?, content: @Composable (T) -> Unit) {
+    var shown by remember { mutableStateOf(item) }
+    if (item != null) shown = item
+    androidx.compose.animation.AnimatedVisibility(visible = item != null,
+        enter = androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(Motion.Page, easing = Motion.Arrive)) { it },
+        exit = androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.tween(Motion.Page, easing = Motion.Leave)) { it },
+        modifier = Modifier.fillMaxSize()) {
+        shown?.let { last -> Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { } }) { content(last) } }
+    }
 }
 
 /** A page laid over the screen that slides in from the right, like every other page with a back arrow (same length, same curve), and swallows touches meanwhile. */

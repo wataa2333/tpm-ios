@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -196,7 +197,8 @@ fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = 
                 var lastSubtitle by remember { mutableStateOf(subtitle) }
                 if (subtitle != null) lastSubtitle = subtitle
                 val curve = FastOutSlowInEasing
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                Box(Modifier.weight(1f).fillMaxHeight()) {
+                Column(Modifier.align(Alignment.CenterStart), verticalArrangement = Arrangement.Center) {
                     androidx.compose.animation.AnimatedContent(
                         targetState = title, label = "title",
                         transitionSpec = {
@@ -214,7 +216,8 @@ fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = 
                             transitionSpec = { (androidx.compose.animation.slideInVertically(tween(Motion.Normal, easing = Motion.Change)) { it } + androidx.compose.animation.fadeIn(tween(Motion.Normal, easing = Motion.Change))) togetherWith (androidx.compose.animation.slideOutVertically(tween(Motion.Fast, easing = Motion.Change)) { -it } + androidx.compose.animation.fadeOut(tween(Motion.Fast, easing = Motion.Change))) },
                         ) { text -> AnimatedLabel(text.orEmpty(), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = headerContent().copy(alpha = 0.75f)) }
                     }
-                    Box(Modifier.height(18.dp)) { QuickQueueCapsule() }
+                }
+                    Box(Modifier.align(Alignment.BottomStart).offset(y = 8.dp)) { QuickQueueCapsule() }
                 }
                 Row(Modifier.padding(start = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     OperationAccountAction(operationLocked)
@@ -338,8 +341,10 @@ fun CollapsingTopBar(title: String, state: CollapsingBarState, modifier: Modifie
                     translationY = -state.offset + f * (size.height / 2f - 16.dp.toPx())
                 },
             ) {
-                Box(Modifier.height(18.dp)) { QuickQueueCapsule() }
-                Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Box {
+                    Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Box(Modifier.align(Alignment.TopStart).offset(y = (-20).dp)) { QuickQueueCapsule() }
+                }
             }
         }
         TopLoadingBar(loadingReveal)

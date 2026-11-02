@@ -114,7 +114,7 @@ fun ErpDetailScreen(id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit
                             FactRow("出库单号", order["outNumber"].text)
                             FactRow("单号", order["sn"].text)
                             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                Text("状态", Modifier.width(96.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("状态", Modifier.width(112.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 AnimatedLabel(approvalStateName(order["approvalState"].text), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = approvalColor(order["approvalState"].text))
                             }
                             FactRow("申请人", order["user"]["realName"].text)

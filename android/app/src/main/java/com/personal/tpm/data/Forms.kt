@@ -14,18 +14,30 @@ import java.util.Locale
 fun allowsApproverDefault(node: Jv): Boolean = usernames(node["assignees"]).isEmpty()
 
 /** The date as the server sends it: "yyyy-MM-dd HH:mm[:ss]", "yyyy-MM-dd", or [y, m, d, h, min, s]. Unreadable text reads as now. */
-fun parsedDate(value: Jv): Date {
+fun parsedDate(value: Jv): Date = parsedBusinessDateOrNull(value) ?: Date()
+
+internal fun parsedBusinessDateOrNull(value: Jv): Date? {
     val parts = value.array
-    if (parts.size >= 5) {
+    if (parts.size >= 3) {
         val v = parts.map { it.number.toInt() }
-        return Calendar.getInstance().apply { clear(); set(v[0], v[1] - 1, v[2], v[3], v[4], if (v.size > 5) v[5] else 0) }.time
+        return try {
+            Calendar.getInstance(businessTimeZone()).apply {
+                isLenient = false; clear()
+                set(v[0], v[1] - 1, v[2], v.getOrElse(3) { 0 }, v.getOrElse(4) { 0 }, v.getOrElse(5) { 0 })
+            }.time
+        } catch (_: Exception) { null }
     }
     val text = value.text.trim()
+    if (text.isEmpty()) return null
+    // Parse zoned ISO values before the unzoned patterns, without discarding their time component.
+    try { return Date.from(java.time.Instant.parse(text)) } catch (_: Exception) { }
+    try { return Date.from(java.time.OffsetDateTime.parse(text).toInstant()) } catch (_: Exception) { }
     for (format in listOf("yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd")) {
-        try { return SimpleDateFormat(format, Locale.US).apply { isLenient = false }.parse(text) ?: continue } catch (e: Exception) { /* next format */ }
+        val position = java.text.ParsePosition(0)
+        val parsed = SimpleDateFormat(format, Locale.US).apply { isLenient = false; timeZone = businessTimeZone() }.parse(text, position)
+        if (parsed != null && position.index == text.length) return parsed
     }
-    try { return Date.from(java.time.Instant.parse(text)) } catch (e: Exception) { /* not ISO either */ }
-    return Date()
+    return null
 }
 
 private fun isBlank(value: Jv): Boolean = when {

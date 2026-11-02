@@ -95,8 +95,8 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
             val repair = try { session.request("fault/getLatestRepairByFaultId", mapOf("faultId" to faultId)) } catch (e: CancellationException) { throw e } catch (e: Exception) { throw IllegalStateException(stageFailure("加载维修任务", e)) }
             val copy = JSONObject(repair.raw.toString())
             if (!copy.has("spend") || copy.isNull("spend")) copy.put("spend", 0)
-            copy.put("startTime", serverDate(parsedDate(if (repair["signTime"].isNull) repair["createTime"] else repair["signTime"])))
-            copy.put("endTime", serverDate(Date()))
+            val times = com.personal.tpm.data.repairTimeRange(repair)
+            copy.put("startTime", times.first).put("endTime", times.second)
             copy.put("erpRepairMaterials", try { session.request("erpOutbound/getErpRepairMaterialsByRepairId", mapOf("repairId" to repair["repairId"].text)).raw ?: JSONArray() } catch (e: CancellationException) { throw e } catch (e: Exception) { throw IllegalStateException(stageFailure("加载维修领料", e)) })
             data = copy
             loaded = true
@@ -116,6 +116,9 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
                 approvers = com.personal.tpm.data.inheritedQuickApprovers(prepared!!.nodes, approvers,
                     prepared!!.nodes.associate { com.personal.tpm.data.quickApproverKey(it) to edit.choices[it["variableName"].text].orEmpty() })
             }
+            // Repair old drafts generated in the phone's timezone as well as fresh defaults.
+            val corrected = com.personal.tpm.data.repairTimeRange(repair, Date(), Jv(data)["startTime"], Jv(data)["endTime"])
+            data = JSONObject(data.toString()).put("startTime", corrected.first).put("endTime", corrected.second)
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) { failure = "加载失败" to (e.message ?: "未知错误") }
         finally { loading = false }
@@ -198,10 +201,10 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
                 Text(prepared?.item?.reference.orEmpty(), style = MaterialTheme.typography.bodySmall)
             }
         }
-        FormTitle(if (quick == null) "维修任务信息" else "预填信息 · 可修改")
+        FormTitle(if (quick == null) "维修任务信息" else "预填信息")
         GroupCard {
 
-            PickRow("维修故障类型", jv["faultType"].label, true) { request = PickRequest(RefSource.FaultTypes, { update("faultType", it.raw) }) }
+            if (quick == null) PickRow("维修故障类型", jv["faultType"].label, true) { request = PickRequest(RefSource.FaultTypes, { update("faultType", it.raw) }) }
             var spend by remember(loaded) { mutableStateOf(quantityText(jv["spend"].number)) }
             InputRow("维修花费", spend, { spend = it; update("spend", it.toDoubleOrNull() ?: 0) }, suffix = "元")
             DateTimeField("维修开始时间", jv["startTime"].text, dateOnly = false, required = true) { update("startTime", it) }
@@ -267,8 +270,11 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
         }
         }
         }
-        FormTitle("工作说明")
-        TextEntry("工作说明", jv["content"].text, { update("content", it) }, limit = 255, minLines = 2, required = true, placeholder = "请输入说明")
+        FormTitle(if (quick == null) "工作说明" else "必填信息")
+        if (quick != null) GroupCard {
+            PickRow("故障类型", jv["faultType"].label, true) { request = PickRequest(RefSource.FaultTypes, { update("faultType", it.raw) }) }
+            TextEntry("工作说明", jv["content"].text, { update("content", it) }, limit = 255, minLines = 2, required = true, placeholder = "请输入说明")
+        } else TextEntry("工作说明", jv["content"].text, { update("content", it) }, limit = 255, minLines = 2, required = true, placeholder = "请输入说明")
         FormTitle("图片")
         GroupCard { PhotosField(jv["albums"], { update("albums", it) }, "asset_fault", { photoBusy = it }, { failure = "照片上传失败" to it }) }
     }

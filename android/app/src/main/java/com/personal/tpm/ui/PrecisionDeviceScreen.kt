@@ -75,7 +75,9 @@ fun PrecisionDeviceScreen(assetId: String, onBack: () -> Unit) {
             finally { loadingRecords = false }
         }
     }
-    GlassScaffold(contentWindowInsets = appContentInsets(), topBar = { AppTopBar("逐项精度数据", onBack = onBack, loading = loadingPage || loadingOrders || loadingRecords) }) { padding ->
+    GlassScaffold(contentWindowInsets = appContentInsets(), topBar = { AppTopBar("逐项精度数据", onBack = onBack, loading = loadingPage || loadingOrders || loadingRecords) {
+        RefreshButton(spinning = loadingPage || loadingOrders || loadingRecords, onClick = { retry++ })
+    } }) { padding ->
         PageWidth {
             ScrollableLazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
@@ -85,7 +87,6 @@ fun PrecisionDeviceScreen(assetId: String, onBack: () -> Unit) {
                     AnimatedLabel(asset["assetCode"].text, style = MaterialTheme.typography.bodySmall)
                     AnimatedLabel("查询：${queries.label(owner)} · ${owner.currentFactoryName}", style = MaterialTheme.typography.bodySmall)
                     if (pageError.isNotEmpty()) AnimatedLabel(pageError, color = MaterialTheme.colorScheme.error)
-                    GlassTextButton(onClick = { retry++ }, enabled = !loadingPage) { Text("重新读取") }
                     if (!loadingPage && workOrders.isEmpty() && pageError.isEmpty()) Text("当前查询账号未返回此设备的检查工单，无法从汇总等级还原逐项数据。")
                     if (workOrders.size > 1) SectionTitle("选择检测工单")
                 }

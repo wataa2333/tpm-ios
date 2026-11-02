@@ -333,7 +333,7 @@ private fun BatchOverlaysContent(batch: BatchSelection) {
             onStart = { preset -> batch.presetting = null; batch.run = BatchRun(request.action, request.operation, request.items, preset) },
         ) }
     }
-    batch.run?.let { run ->
+    SlideUpOverlayFor(batch.run) { run ->
         androidx.compose.runtime.CompositionLocalProvider(LocalOperationLocked provides true) { CompactTheme { BatchRunDialog(run) {
             // The orders that went through leave the selection; the ones that failed stay selected for another try.
             batch.remove(run.succeeded.toSet())
@@ -529,6 +529,7 @@ private fun QuantityLine(title: String, subtitle: String, label: String, quantit
 private fun BatchRunDialog(run: BatchRun, onClose: () -> Unit) {
     val session = LocalSession.current
     val prefs = LocalPickerPrefs.current
+    var closing by remember(run) { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
     val view = LocalView.current
     DisposableEffect(Unit) { view.keepScreenOn = true; onDispose { view.keepScreenOn = false } }
@@ -536,12 +537,12 @@ private fun BatchRunDialog(run: BatchRun, onClose: () -> Unit) {
     // The page is laid over the screen inside the same window, so the status bar and the navigation bar are handled as everywhere else. No way
     // out with the back key while it runs: the "完成" button is the way out.
     androidx.activity.compose.BackHandler(enabled = true) {}
-    SlideUpOverlay {
-        GlassScaffold(topBar = { AppTopBar(title = run.title, loading = run.running) },
+    Box(Modifier.fillMaxSize()) {
+        GlassScaffold(topBar = { AppTopBar(title = run.title) },
             bottomBar = { GlassBottomSurface {
                 Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (run.running) SoftButton(onClick = { run.stop() }, Modifier.weight(1f).height(48.dp)) { Text("停止") }
-                    GlassActionButton(onClick = onClose, enabled = !run.running, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight)) { Text("完成") }
+                    GlassActionButton(onClick = { closing = true; onClose() }, enabled = !run.running && !closing, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight)) { Text("完成") }
                 }
             } }) { padding ->
                 Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -621,7 +622,7 @@ private fun runHeadline(run: BatchRun): String {
 
 @Composable
 private fun ResultRow(name: String, reference: String, message: String, color: androidx.compose.ui.graphics.Color, onCopy: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.Top) {
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             AnimatedLabel(name, style = MaterialTheme.typography.titleSmall)
             if (reference.isNotEmpty()) AnimatedLabel(reference, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

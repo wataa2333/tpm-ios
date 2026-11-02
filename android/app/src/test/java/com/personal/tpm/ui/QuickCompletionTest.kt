@@ -4,6 +4,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class QuickCompletionTest {
+    @Test fun completedOrFailedJobsCannotLeaveAnIdleProgressBadge() {
+        assertFalse(quickSubmissionActive(emptyList()))
+        assertFalse(quickSubmissionActive(listOf(QuickJobState.Done, QuickJobState.Failed, QuickJobState.Review)))
+        assertTrue(quickSubmissionActive(listOf(QuickJobState.Done, QuickJobState.Queued)))
+        assertTrue(quickSubmissionActive(listOf(QuickJobState.Running)))
+    }
     @Test fun completionWaitsForTheLastFormAndEveryBackgroundWrite() {
         assertFalse(quickCompletionReady(false, false, false, false))
         assertFalse(quickCompletionReady(true, true, false, false))

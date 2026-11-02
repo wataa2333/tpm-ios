@@ -57,7 +57,7 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
     val badge: String? get() = when {
         loading -> "读取待办…"
         signing -> signProgress
-        !visible -> null
+        !visible || !quickSubmissionActive(jobs.map { it.state }) -> null
         else -> "提交 ${jobs.count { it.state == QuickJobState.Done }}/${jobs.size}" +
             jobs.count { it.state == QuickJobState.Failed || it.state == QuickJobState.Review }.takeIf { it > 0 }?.let { " · 异常$it" }.orEmpty()
     }
@@ -203,6 +203,8 @@ fun QuickQueueCapsule() {
         }
     }
 }
+
+fun quickSubmissionActive(states: List<QuickJobState>) = states.any { it == QuickJobState.Queued || it == QuickJobState.Running }
 
 fun quickCompletionReady(begun: Boolean, hasCurrent: Boolean, busy: Boolean, acknowledged: Boolean) =
     begun && !hasCurrent && !busy && !acknowledged

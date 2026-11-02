@@ -128,20 +128,20 @@ private fun symbolOf(state: FaultState): ImageVector = when (state) {
 @Composable
 fun HomeTab(vm: HomeViewModel, gridState: LazyGridState, pullState: PullToRefreshState, nested: Modifier, openList: (String) -> Unit, openPool: (PoolKind) -> Unit) {
     // The states the home shows, as on iOS (the "报修" draft state has its own place in the list's strip).
-    val cards = listOf(FaultState.Reported, FaultState.Received, FaultState.Signed, FaultState.Repaired, FaultState.Verified, FaultState.Finished)
+    val cards = listOf(FaultState.Reported, FaultState.Received, FaultState.Signed, FaultState.Repaired, FaultState.Verified, FaultState.Resolved, FaultState.Finished)
     PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.reload(pull = true) }, state = pullState, indicator = {}, modifier = Modifier.fillMaxSize()) {
         PageWidth {
             LazyVerticalGrid(
                 state = gridState,
                 columns = GridCells.Adaptive(minSize = 150.dp),
                 modifier = nested.fillMaxSize().scrollEdges(MaterialTheme.colorScheme.background, before = { gridState.canScrollBackward }, after = { gridState.canScrollForward }),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + LocalGlassContentPadding.current.calculateTopPadding(), bottom = 104.dp + LocalGlassContentPadding.current.calculateBottomPadding()),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + LocalGlassContentPadding.current.calculateTopPadding(), bottom = (if (AppPreferences.liquidGlass) 72.dp else 104.dp) + LocalGlassContentPadding.current.calculateBottomPadding()),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("维修工单") }
                 item(span = { GridItemSpan(maxLineSpan) }) { AllOrdersCard { openList("") } }
-                items(cards, key = { it.code }) { st ->
+                items(cards, key = { it.code }, span = { if(it == FaultState.Finished) GridItemSpan(maxLineSpan) else GridItemSpan(1) }) { st ->
                     StateCard(st.title, symbolOf(st), stateColor(st.code), if (st.hasCount) vm.counts[st.code] else null) { openList(st.code) }
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("保养工单") }
@@ -215,7 +215,7 @@ private fun AllOrdersCard(onClick: () -> Unit) {
 @Composable
 fun StateCard(title: String, icon: ImageVector, tint: Color, count: Int?, onClick: () -> Unit) {
     Card(
-        onClick = onClick, modifier = Modifier.fillMaxWidth().height(104.dp), shape = MaterialTheme.shapes.large,
+        onClick = onClick, modifier = Modifier.fillMaxWidth().height(132.dp), shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), elevation = cardElevation,
     ) {
         Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.SpaceBetween) {

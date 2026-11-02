@@ -72,4 +72,4 @@ fun taskActionTitle(task: Jv, kind: OrderKind): String {
 
 /** The server's date format for a time: "yyyy-MM-dd HH:mm". */
 fun serverDate(date: Date, dateOnly: Boolean = false): String =
-    SimpleDateFormat(if (dateOnly) "yyyy-MM-dd" else "yyyy-MM-dd HH:mm", Locale.US).format(date)
+    SimpleDateFormat(if (dateOnly) "yyyy-MM-dd" else "yyyy-MM-dd HH:mm", Locale.US).apply { timeZone = businessTimeZone() }.format(date)

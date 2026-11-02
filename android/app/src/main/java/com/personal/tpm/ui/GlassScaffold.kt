@@ -75,7 +75,7 @@ fun AppProgressIndicator(progress: () -> Float, modifier: Modifier = Modifier,
     val value = progress().coerceIn(0f, 1f)
     Row(modifier.heightIn(min = 32.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically) {
-        CircularProgressIndicator(progress = { value }, modifier = Modifier.size(24.dp), color = color, trackColor = trackColor, strokeWidth = 2.dp)
+        LinearProgressIndicator(progress = { value }, modifier = Modifier.weight(1f), color = color, trackColor = trackColor)
         Text("${(value * 100).toInt()}%", style = MaterialTheme.typography.labelMedium)
     }
 }
