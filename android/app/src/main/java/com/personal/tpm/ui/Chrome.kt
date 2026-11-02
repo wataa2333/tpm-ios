@@ -178,7 +178,7 @@ fun BoxScope.TopLoadingBar(reveal: LoadingReveal, linear: Boolean = false) {
  * The plain top bar of a screen that was opened from another (a list, an order): back arrow, title, a smaller line under it, actions.
  */
 @Composable
-fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = null, loading: Boolean = false, pull: Float = 0f, onBack: (() -> Unit)? = null, linearLoading: Boolean = false, actions: @Composable RowScope.() -> Unit = {}) {
+fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = null, loading: Boolean = false, pull: Float = 0f, onBack: (() -> Unit)? = null, linearLoading: Boolean = false, operationLocked: Boolean = false, actions: @Composable RowScope.() -> Unit = {}) {
     val loadingReveal = rememberLoadingReveal(loading, pull)
     val loadingSpace = if (linearLoading) 4.dp else 28.dp * loadingReveal.fraction
     StatusBarIcons(dark = headerColor().luminance() > 0.5f)
@@ -214,9 +214,12 @@ fun AppTopBar(title: String, modifier: Modifier = Modifier, subtitle: String? = 
                             transitionSpec = { (androidx.compose.animation.slideInVertically(tween(Motion.Normal, easing = Motion.Change)) { it } + androidx.compose.animation.fadeIn(tween(Motion.Normal, easing = Motion.Change))) togetherWith (androidx.compose.animation.slideOutVertically(tween(Motion.Fast, easing = Motion.Change)) { -it } + androidx.compose.animation.fadeOut(tween(Motion.Fast, easing = Motion.Change))) },
                         ) { text -> AnimatedLabel(text.orEmpty(), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = headerContent().copy(alpha = 0.75f)) }
                     }
+                    Box(Modifier.height(18.dp)) { QuickQueueCapsule() }
                 }
-                if (AppPreferences.liquidGlass) Row(Modifier.padding(start = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { actions() }
-                else actions()
+                Row(Modifier.padding(start = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OperationAccountAction(operationLocked)
+                    actions()
+                }
             }
             TopLoadingBar(loadingReveal, linearLoading)
         }
@@ -322,8 +325,7 @@ fun CollapsingTopBar(title: String, state: CollapsingBarState, modifier: Modifie
         ) {
             Row(Modifier.align(Alignment.TopEnd).height(BarRow).padding(end = if (AppPreferences.liquidGlass) 16.dp else 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(if (AppPreferences.liquidGlass) 8.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) { actions() }
-            Text(
-                title,
+            Column(
                 Modifier.align(Alignment.BottomStart).then(
                     // No ripple and no sound: the title only counts taps (see the developer page).
                     if (onTitleClick != null) Modifier.clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = onTitleClick) else Modifier,
@@ -335,8 +337,10 @@ fun CollapsingTopBar(title: String, state: CollapsingBarState, modifier: Modifie
                     // It moves up with the bar's bottom edge; this last part settles it on the middle of the folded bar.
                     translationY = -state.offset + f * (size.height / 2f - 16.dp.toPx())
                 },
-                style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
+            ) {
+                Box(Modifier.height(18.dp)) { QuickQueueCapsule() }
+                Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         TopLoadingBar(loadingReveal)
       }
@@ -422,12 +426,11 @@ fun AppSheet(
         override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource) = Offset(0f, available.y)
         override suspend fun onPostFling(consumed: Velocity, available: Velocity) = Velocity(0f, available.y)
     } }
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismissRequest, sheetState = sheetState, containerColor = if (AppPreferences.liquidGlass) Color.Transparent else containerColor,
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismissRequest, sheetState = sheetState, containerColor = containerColor,
         contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) }) {
         TransparentSystemBars()
         androidx.compose.runtime.CompositionLocalProvider(LocalScrollSurface provides containerColor, LocalGlassBackdrop provides null, LocalGlassContentPadding provides androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-            Column(Modifier.nestedScroll(scrollBoundary).background(containerColor)
-                .padding(top = if (AppPreferences.liquidGlass) 12.dp else 0.dp)) { EnsureScaled { content() } }
+            Column(Modifier.nestedScroll(scrollBoundary).padding(top = 8.dp)) { EnsureScaled { content() } }
         }
     }
 }

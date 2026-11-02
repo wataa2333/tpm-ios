@@ -135,7 +135,7 @@ fun PickRow(label: String, value: String, required: Boolean, onClick: () -> Unit
     // The label keeps its own width on one line (it used to share the row and wrap); what is chosen takes the rest and may take two lines.
     // The press feedback is a rounded shape inside the card (the clip comes before the click), not a rectangle that squares off the card's corners.
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).then(if (AppPreferences.liquidGlass) Modifier.glassSearchSurface(RoundedCornerShape(16.dp)) else Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer)).clickable(onClick = onClick).padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).then(if (AppPreferences.liquidGlass) Modifier.glassSearchSurface(RoundedCornerShape(16.dp), quiet = true) else Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer)).clickable(onClick = onClick).padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
         AnimatedLabel(requiredLabel(label, required), style = MaterialTheme.typography.bodyMedium, maxLines = 1, softWrap = false)
@@ -172,7 +172,7 @@ fun TextEntry(
             AnimatedLabel(requiredLabel(label, required), Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             androidx.compose.material3.TextField(
                 value = value, onValueChange = { onChange(it.take(limit)) },
-                modifier = Modifier.fillMaxWidth().animateContentSize(androidx.compose.animation.core.tween(Motion.Fast, easing = Motion.Change)).glassSearchSurface(RoundedCornerShape(8.dp)),
+                modifier = Modifier.fillMaxWidth().animateContentSize(androidx.compose.animation.core.tween(Motion.Fast, easing = Motion.Change)).glassSearchSurface(RoundedCornerShape(8.dp), quiet = true),
                 shape = RoundedCornerShape(8.dp),
                 placeholder = if (placeholder.isEmpty()) null else ({ AnimatedLabel(placeholder) }),
                 minLines = 1, maxLines = if (multiline) maxOf(maxLines, 8) else 1, singleLine = !multiline,
@@ -359,7 +359,7 @@ fun FormPage(
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
     CompactTheme { GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(title = title, onBack = onClose, loading = busy, actions = actions) },
+        topBar = { AppTopBar(title = title, onBack = onClose, loading = busy, operationLocked = busy, actions = actions) },
         bottomBar = bottomBar,
         snackbarHost = { if (snackbar != null) androidx.compose.material3.SnackbarHost(snackbar) },
     ) { padding ->
@@ -436,7 +436,7 @@ fun InputRow(
         if (maximum != null && maximum.isFinite() && maximum >= 0 && number != null && number.isFinite() && number > maximum)
             onChange(com.personal.tpm.data.quantityText(maximum))
     }
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).then(if (AppPreferences.liquidGlass) Modifier.glassSearchSurface(RoundedCornerShape(16.dp)) else Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer)).padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).then(if (AppPreferences.liquidGlass) Modifier.glassSearchSurface(RoundedCornerShape(16.dp), quiet = true) else Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer)).padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         AnimatedLabel(requiredLabel(label, required), style = style, maxLines = 1, softWrap = false)
         androidx.compose.foundation.text.BasicTextField(
             value = value, onValueChange = { onChange(it.take(limit)) }, singleLine = true, modifier = Modifier.weight(1f).onFocusChanged {

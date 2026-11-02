@@ -12,13 +12,8 @@ sealed interface RememberedSignIn {
     data class Failed(val message: String) : RememberedSignIn
 }
 
-/** A remembered account signs in with its saved password, after the phone has confirmed it is the owner. */
+/** A remembered account signs in with its saved password, without a local unlock challenge. */
 suspend fun signInRemembered(activity: FragmentActivity, session: Session, vault: AccountVault, account: SavedAccount): RememberedSignIn {
-    when (val outcome = BiometricGate.authenticate(activity, "使用已记住的账号 " + account.displayName.ifEmpty { account.username })) {
-        BiometricGate.Outcome.Passed -> {}
-        BiometricGate.Outcome.Cancelled -> return RememberedSignIn.Cancelled
-        is BiometricGate.Outcome.Failed -> return RememberedSignIn.Failed(outcome.message)
-    }
     val password = vault.password(account.username) ?: return RememberedSignIn.Failed("没有找到这个账号保存的密码，请重新登录并打开“记住密码”")
     return try {
         session.login(account.username, password)

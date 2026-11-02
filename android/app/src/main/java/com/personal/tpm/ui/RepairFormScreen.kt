@@ -1,6 +1,8 @@
 package com.personal.tpm.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -54,12 +56,12 @@ import java.util.Date
  * the step's own page ([onSubmitted]). Reading the repair record, the ERP lines and writing it each say in which stage they failed.
  */
 @Composable
-fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Unit) {
+fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Unit, quick: QuickRepairContext? = null) {
     val session = LocalSession.current
     val store = LocalDrafts.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
-    val scopeKey = session.repairDraftScope
+    val scopeKey = remember { quick?.restored?.draft?.scope ?: session.repairDraftScope }
     var data by remember { mutableStateOf(JSONObject()) }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
@@ -69,10 +71,14 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
     var failure by remember { mutableStateOf<Pair<String, String>?>(null) }
     var draftId by remember { mutableStateOf<String?>(null) }
     var loaded by remember { mutableStateOf(false) }
+    var dirty by remember { mutableStateOf(false) }
+    var prepared by remember { mutableStateOf<com.personal.tpm.data.QuickRepairPrepared?>(null) }
+    var approvers by remember { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
+    var extras by remember { mutableStateOf(quick == null) }
     val draftKeys = repairSubmissionKeys + "erpRepairMaterials"
     val jv = Jv(data)
 
-    fun update(key: String, value: Any?) { data = JSONObject(data.toString()).put(key, value ?: JSONObject.NULL) }
+    fun update(key: String, value: Any?) { dirty = true; data = JSONObject(data.toString()).put(key, value ?: JSONObject.NULL) }
     fun rows(): List<Jv> = Jv(data.opt("erpRepairMaterials")).array
     fun setRows(list: List<Any?>) = update("erpRepairMaterials", JSONArray().also { a -> list.forEach { a.put(it) } })
     fun addMaterial(material: Jv, allowUnissued: Boolean = false) {
@@ -85,6 +91,7 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
     suspend fun load() {
         loading = true
         try {
+            if (quick != null) { val q = quick.prepare(); prepared = q; approvers = q.selections }
             val repair = try { session.request("fault/getLatestRepairByFaultId", mapOf("faultId" to faultId)) } catch (e: CancellationException) { throw e } catch (e: Exception) { throw IllegalStateException(stageFailure("加载维修任务", e)) }
             val copy = JSONObject(repair.raw.toString())
             if (!copy.has("spend") || copy.isNull("spend")) copy.put("spend", 0)
@@ -98,20 +105,44 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
                 val merged = JSONObject(data.toString())
                 for (key in draftKeys) if (draft.data.has(key)) merged.put(key, draft.data.get(key))
                 data = merged; draftId = draft.id
+                if (quick != null) approvers = com.personal.tpm.data.inheritedQuickApprovers(prepared!!.nodes, approvers,
+                    prepared!!.nodes.associate { com.personal.tpm.data.quickApproverKey(it) to draft.selections[it["variableName"].text].orEmpty() })
                 scope.launch { snackbar.showSnackbar("已加载上次保存的草稿（" + draft.title + "）") }
+            }
+            quick?.restored?.let { edit ->
+                val merged = JSONObject(data.toString()); val kept = JSONObject(edit.data)
+                for (key in draftKeys) if (kept.has(key)) merged.put(key, kept.get(key))
+                data = merged; draftId = edit.draft?.id ?: draftId; dirty = true
+                approvers = com.personal.tpm.data.inheritedQuickApprovers(prepared!!.nodes, approvers,
+                    prepared!!.nodes.associate { com.personal.tpm.data.quickApproverKey(it) to edit.choices[it["variableName"].text].orEmpty() })
             }
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) { failure = "加载失败" to (e.message ?: "未知错误") }
         finally { loading = false }
     }
-    LaunchedEffect(faultId) { load() }
+    LaunchedEffect(faultId, session.accountKey) {
+        if (!loaded) load()
+        else if (quick != null) {
+            prepared = null
+            try { val q = quick.prepare(); prepared = q; approvers = q.selections }
+            catch (e: CancellationException) { throw e }
+            catch (e: Exception) { failure = "本次账号无法处理" to (e.message ?: "读取权限失败") }
+        }
+    }
+
+    val currentEdit by androidx.compose.runtime.rememberUpdatedState(
+        if (quick != null && loaded) QuickRepairEdit(data.toString(), approvers.mapValues { it.value.toList() }, draftId?.let { QuickDraftRef(it, scopeKey) }) else null)
+    androidx.compose.runtime.DisposableEffect(faultId) {
+        onDispose { currentEdit?.let { quick?.retainEdit?.invoke(it) } }
+    }
 
     fun keepDraft() {
         if (!loaded) return
         val kept = JSONObject()
         for (key in draftKeys) if (data.has(key)) kept.put(key, data.get(key))
         try {
-            store.save(FormDraft(id = draftId ?: java.util.UUID.randomUUID().toString(), data = kept, orderId = faultId, orderSn = jv["assetFault"]["sn"].text.ifEmpty { null }), scopeKey)
+            if (draftId == null) draftId = java.util.UUID.randomUUID().toString()
+            store.save(FormDraft(id = draftId!!, data = kept, selections = approvers, orderId = faultId, orderSn = jv["assetFault"]["sn"].text.ifEmpty { null }), scopeKey)
             onClose()
         } catch (e: Exception) { failure = "提示" to ("草稿没有保存成功：" + (e.message ?: "")) }
     }
@@ -121,9 +152,17 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
         repairValidationError(Jv(capped))?.let { failure = "请检查表单" to it; return }
         if (saving) return
         if (jv["repairId"].isNull) { failure = "保存未完成" to "保存维修结果失败：没有取得维修记录编号，请关闭后重新打开此任务"; return }
+        if (quick != null) {
+            if (prepared == null) { failure = "尚未就绪" to "请先读取当前账号的处理权限"; return }
+            com.personal.tpm.data.missingAssigneeMessage(prepared!!.nodes, approvers)?.let { failure = "请检查审批人" to it; return }
+        }
         saving = true
         scope.launch {
             try {
+                if (quick != null) {
+                    quick.enqueue(prepared!!, capped, approvers, draftId?.let { QuickDraftRef(it, scopeKey) })
+                    return@launch
+                }
                 try { session.request("repair/handleRepair", body = repairPayload(capped, jv["repairId"].raw)) }
                 catch (e: CancellationException) { throw e } catch (e: Exception) { throw IllegalStateException(stageFailure("保存维修结果", e)) }
                 draftId?.let { store.remove(it, scopeKey); draftId = null }
@@ -135,16 +174,49 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
     }
 
     FormPage(
-        title = "完成任务", busy = loading || saving || photoBusy, onClose = { if (!saving && !photoBusy) onClose() }, snackbar = snackbar, backEnabled = !saving && !photoBusy,
-        bottomBar = { FormActionBar(busy = saving, enabled = loaded && !photoBusy, onSave = { keepDraft() }, onSubmit = { submit() }, submitLabel = "提交") },
+        title = if (quick == null) "完成任务" else "快速完成 ${quick.position}", busy = loading || saving || photoBusy, onClose = { if (!saving && !photoBusy) { if (quick != null && loaded && dirty) keepDraft() else onClose() } }, snackbar = snackbar, backEnabled = !saving && !photoBusy,
+        bottomBar = {
+            if (quick == null) FormActionBar(busy = saving, enabled = loaded && !photoBusy, onSave = { keepDraft() }, onSubmit = { submit() }, submitLabel = "提交")
+            else GlassBottomSurface {
+                Row(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SoftButton(onClick = {
+                        if (loaded && dirty) {
+                            try { store.save(FormDraft(id = draftId ?: java.util.UUID.randomUUID().toString(), data = JSONObject(data.toString()), selections = approvers, orderId = faultId), scopeKey) }
+                            catch (e: Exception) { failure = "草稿未保存" to (e.message ?: "请重试"); return@SoftButton }
+                        }
+                        quick.onSkip()
+                    }, enabled = !saving && !photoBusy, modifier = Modifier.weight(1f)) { Text("跳过") }
+                    GlassActionButton(onClick = ::submit, enabled = loaded && !saving && !photoBusy && prepared != null, modifier = Modifier.weight(1f)) { Text("下一条") }
+                }
+            }
+        },
     ) {
-        FormTitle("维修任务信息")
+        if (quick != null) GroupCard {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(prepared?.item?.name ?: "读取工单信息…", style = MaterialTheme.typography.titleMedium)
+                Text(prepared?.detail?.get("sn")?.text.orEmpty(), style = MaterialTheme.typography.bodySmall)
+                Text(prepared?.item?.reference.orEmpty(), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        FormTitle(if (quick == null) "维修任务信息" else "预填信息 · 可修改")
         GroupCard {
+
             PickRow("维修故障类型", jv["faultType"].label, true) { request = PickRequest(RefSource.FaultTypes, { update("faultType", it.raw) }) }
             var spend by remember(loaded) { mutableStateOf(quantityText(jv["spend"].number)) }
             InputRow("维修花费", spend, { spend = it; update("spend", it.toDoubleOrNull() ?: 0) }, suffix = "元")
             DateTimeField("维修开始时间", jv["startTime"].text, dateOnly = false, required = true) { update("startTime", it) }
             DateTimeField("维修结束时间", jv["endTime"].text, dateOnly = false, required = true) { update("endTime", it) }
+            if (quick != null) {
+                prepared?.let { q -> AssigneeRows(q.nodes, approvers, null, update = { key, change ->
+                    approvers = approvers.toMutableMap().also { it[key] = change(it[key].orEmpty()) }
+                    quick.rememberApprovers(q.nodes, approvers)
+                }, pick = { request = it }) }
+            }
+        }
+        if (quick != null) DisclosureToggle(extras, if (extras) "收起选填信息" else "选填：辅助维修人、ERP 出库") { extras = !extras }
+        if (extras) {
+        if (quick != null) FormTitle("选填信息")
+        GroupCard {
             val helpers = jv["repairUsers"].array
             PickRow("辅助维修人", helpers.joinToString("、") { it["realName"].text.ifEmpty { it["userName"].text } }, false) {
                 request = PickRequest(
@@ -158,7 +230,7 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
                     multiple = true, selected = helpers.map { it["userName"].text }.toSet(),
                 )
             }
-        }
+                }
         FormTitle("ERP 出库")
         GroupCard {
             ActionRow(Icons.Filled.Add, "新建出库单") { creatingErp = true }
@@ -191,6 +263,7 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
                     InputRow("使用数量", use, { use = it; setRows(rows().mapIndexed { i, r -> if (i == index) JSONObject(r.raw.toString()).put("useNum", it.toDoubleOrNull() ?: 0.0) else r.raw }) }, required = true, suffix = materialUnit(material), maximum = maximum)
                 }
             }
+        }
         }
         FormTitle("工作说明")
         TextEntry("工作说明", jv["content"].text, { update("content", it) }, limit = 255, minLines = 2, required = true, placeholder = "请输入说明")

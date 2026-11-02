@@ -113,7 +113,7 @@ private typealias Tab = GlassTab
 @Composable
 fun MainShell(
     openList: (String) -> Unit, openPool: (PoolKind) -> Unit, openOrder: (OrderKind, String) -> Unit,
-    openWork: (WorkList) -> Unit, openQuery: (com.personal.tpm.data.FaultSearchField, String) -> Unit, openDrafts: () -> Unit, openNew: () -> Unit, openDev: () -> Unit, openDashboard: () -> Unit, openPrecision: () -> Unit, openQuerySettings: () -> Unit,
+    openWork: (WorkList) -> Unit, openQuery: (com.personal.tpm.data.FaultSearchField, String) -> Unit, openDrafts: () -> Unit, openNew: () -> Unit, openQuick: () -> Unit, openDev: () -> Unit, openDashboard: () -> Unit, openPrecision: () -> Unit, openQuerySettings: () -> Unit,
 ) {
     val session = LocalSession.current
     val auth by session.auth.collectAsState()
@@ -174,25 +174,30 @@ fun MainShell(
         snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
         // A new repair report can be started from every tab of the app, not only from the order lists.
         floatingActionButton = {
-            androidx.compose.animation.AnimatedVisibility(
-                selected <= 2 && !selectingTodos,
-                // After the bar swap has settled (it takes 300 ms), so the button is not carried along while the bar changes height.
-                enter = androidx.compose.animation.scaleIn(tween(Motion.Normal, delayMillis = 320)) + androidx.compose.animation.fadeIn(tween(Motion.Normal, delayMillis = 320)),
-                exit = androidx.compose.animation.scaleOut(tween(Motion.Fast, easing = Motion.Change)) + androidx.compose.animation.fadeOut(tween(Motion.Fast, easing = Motion.Change)),
-            ) { if (AppPreferences.liquidGlass) {
-                val tint = MaterialTheme.colorScheme.primaryContainer
-                GlassActionButton(onClick = openNew,
-                    modifier = Modifier.heightIn(min = 56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = tint, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)) {
-                    Icon(Icons.Filled.Add, contentDescription = null)
-                    androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
-                    Text("新建报修")
-                }
-            } else androidx.compose.material3.ExtendedFloatingActionButton(
-                onClick = openNew, containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
-                elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) }, text = { Text("新建报修") },
-            ) }
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                if (selected == 1 && !selectingTodos) GlassTonalButton(onClick = openQuick, modifier = Modifier.heightIn(min = 56.dp)) { Text("快速完成") }
+                else androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+
+                androidx.compose.animation.AnimatedVisibility(
+                    selected <= 2 && !selectingTodos,
+                    // After the bar swap has settled (it takes 300 ms), so the button is not carried along while the bar changes height.
+                    enter = androidx.compose.animation.scaleIn(tween(Motion.Normal, delayMillis = 320)) + androidx.compose.animation.fadeIn(tween(Motion.Normal, delayMillis = 320)),
+                    exit = androidx.compose.animation.scaleOut(tween(Motion.Fast, easing = Motion.Change)) + androidx.compose.animation.fadeOut(tween(Motion.Fast, easing = Motion.Change)),
+                ) { if (AppPreferences.liquidGlass) {
+                    val tint = MaterialTheme.colorScheme.primaryContainer
+                    GlassActionButton(onClick = openNew,
+                        modifier = Modifier.heightIn(min = 56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = tint, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)) {
+                        Icon(Icons.Filled.Add, contentDescription = null)
+                        androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
+                        Text("新建报修")
+                    }
+                } else androidx.compose.material3.ExtendedFloatingActionButton(
+                    onClick = openNew, containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
+                    elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) }, text = { Text("新建报修") },
+                ) }
+            }
         },
         bottomBar = {
             // While todo tasks are being selected the tab bar gives way to the bar of the batch.
@@ -362,7 +367,6 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
     var signingInAs by remember { mutableStateOf<String?>(null) }
     var pickingAccent by remember { mutableStateOf(false) }
     var adjustingArea by remember { mutableStateOf(false) }
-    var protect by remember { mutableStateOf(BiometricGate.isEnabled(context)) }
     val scope = rememberCoroutineScope()
     val name = auth["fullName"].text.ifEmpty { auth["name"].text }
     val current = auth["name"].text
@@ -383,18 +387,7 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
         }
     }
 
-    /** Turning the protection off is itself checked. */
-    fun setProtection(on: Boolean) {
-        if (on) { BiometricGate.setEnabled(context, true); protect = true; return }
-        val activity = context.findActivity() ?: return
-        scope.launch {
-            when (val outcome = BiometricGate.authenticate(activity, "关闭对已记住账号的保护", force = true)) {
-                BiometricGate.Outcome.Passed -> { BiometricGate.setEnabled(context, false); protect = false }
-                BiometricGate.Outcome.Cancelled -> protect = true
-                is BiometricGate.Outcome.Failed -> { protect = true; error = "没有关闭保护" to outcome.message }
-            }
-        }
-    }
+
 
     PageWidth {
         Column(
@@ -418,7 +411,7 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
             }
             GroupCard {
                 ListItem(
-                    modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable(onClick = onChooseFactory),
+                    modifier = Modifier.clickable(onClick = onChooseFactory),
                     colors = transparentRow,
                     overlineContent = { Text("当前厂区") },
                     headlineContent = { AnimatedLabel(session.currentFactoryName) },
@@ -432,7 +425,7 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
                 var draftCount by remember { mutableStateOf(0) }
                 LaunchedEffect(Unit) { draftCount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { drafts.drafts(session.draftScope).size } }
                 ListItem(
-                    modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable(onClick = openDrafts),
+                    modifier = Modifier.clickable(onClick = openDrafts),
                     colors = transparentRow,
                     headlineContent = { AnimatedLabel(if (draftCount > 0) "草稿箱（$draftCount）" else "草稿箱") },
                     supportingContent = { Text("没填完的报修，保存在这台手机上") },
@@ -446,7 +439,7 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
                 accounts.forEach { account ->
                     val isCurrent = account.username == current
                     ListItem(
-                        modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable(enabled = !isCurrent && signingInAs == null) { switchTo(account) },
+                        modifier = Modifier.clickable(enabled = !isCurrent && signingInAs == null) { switchTo(account) },
                         colors = transparentRow,
                         headlineContent = { AnimatedLabel(account.displayName.ifEmpty { account.username }) },
                         supportingContent = { AnimatedLabel(account.username) },
@@ -465,26 +458,18 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
                     GroupDivider()
                 }
                 ListItem(
-                    modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable { session.signOut() },
+                    modifier = Modifier.clickable { session.signOut() },
                     colors = transparentRow,
                     headlineContent = { Text("添加其他账号") },
                     leadingContent = { Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 )
             }
-            GroupCard {
-                ListItem(
-                    colors = transparentRow,
-                    headlineContent = { Text("验证身份后才能使用已记住的账号") },
-                    supportingContent = { Text("打开后，使用已记住的账号前需要指纹、面容或锁屏密码验证。") },
-                    leadingContent = { Icon(Icons.Filled.Fingerprint, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    trailingContent = { GlassSwitch(checked = protect, onCheckedChange = { setProtection(it) }) },
-                )
-            }
+
             SectionTitle("外观")
 
             GroupCard {
                 ListItem(
-                    modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable { pickingAccent = true },
+                    modifier = Modifier.clickable { pickingAccent = true },
                     colors = transparentRow,
                     headlineContent = { Text("主题色") },
                     supportingContent = { AnimatedLabel(if (ThemeConfig.randomOnLaunch) "每次打开随机；只用于重要信息" else (ThemeConfig.presets.firstOrNull { it.color == ThemeConfig.accent }?.name ?: "自定义") + "；只用于重要信息") },
@@ -499,7 +484,7 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
 
             GroupCard {
                 ListItem(
-                    modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable { adjustingArea = true },
+                    modifier = Modifier.clickable { adjustingArea = true },
                     colors = transparentRow,
                     headlineContent = { Text("显示区域") },
                     supportingContent = { AnimatedLabel(if (ThemeConfig.hasCustomArea) "已自定义：上 ${ThemeConfig.displayTop}  下 ${ThemeConfig.displayBottom}  左 ${ThemeConfig.displayStart}  右 ${ThemeConfig.displayEnd}（dp）" else "屏幕边缘有损坏或被遮挡时，手动留出不用的部分") },
@@ -525,19 +510,19 @@ private fun MineTab(session: Session, nested: Modifier, onBusy: (Boolean) -> Uni
 
             SectionTitle("其他")
             GroupCard {
-                ListItem(modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable(onClick = openDev), colors = transparentRow,
+                ListItem(modifier = Modifier.clickable(onClick = openDev), colors = transparentRow,
                     headlineContent = { Text("开发者选项") },
                     leadingContent = { Icon(Icons.Filled.VerifiedUser, contentDescription = null) },
                     trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) })
                 GroupDivider()
-                ListItem(modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable(onClick = openQuerySettings), colors = transparentRow,
+                ListItem(modifier = Modifier.clickable(onClick = openQuerySettings), colors = transparentRow,
                     headlineContent = { Text("独立查询账号") },
                     leadingContent = { Icon(Icons.Filled.AccountCircle, contentDescription = null) },
                     trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) })
             }
             GroupCard {
                 ListItem(
-                    modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium).clickable { session.signOut() },
+                    modifier = Modifier.clickable { session.signOut() },
                     colors = transparentRow,
                     headlineContent = { Text("退出登录", color = MaterialTheme.colorScheme.error) },
                     leadingContent = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = MaterialTheme.colorScheme.error) },

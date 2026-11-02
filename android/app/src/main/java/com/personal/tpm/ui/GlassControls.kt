@@ -17,17 +17,15 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun GlassFilterChip(selected: Boolean, onClick: () -> Unit, label: @Composable () -> Unit,
     modifier: Modifier = Modifier, enabled: Boolean = true) {
-    val shape = RoundedCornerShape(16.dp)
-    val source = remember { MutableInteractionSource() }
-    val feedback = rememberGlassFeedback(source, AppPreferences.liquidGlass && enabled)
-    FilterChip(selected, onClick, label, modifier = if (AppPreferences.liquidGlass)
-        modifier.then(feedback.input).glassSurface(backdrop = null, shape = shape,
-            tint = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-            layerBlock = feedback.layer, illumination = feedback.illumination, highlightAngle = feedback.highlightAngle) else modifier,
-        enabled = enabled, shape = shape, interactionSource = source,
+    // Dense selectors share the quiet content level; floating actions retain the optical material.
+    FilterChip(selected, onClick, label, modifier = modifier, enabled = enabled,
+        shape = CircleShape,
         border = if (AppPreferences.liquidGlass) null else FilterChipDefaults.filterChipBorder(enabled, selected),
-        colors = if (AppPreferences.liquidGlass) FilterChipDefaults.filterChipColors(containerColor = Color.Transparent,
-            selectedContainerColor = Color.Transparent, disabledContainerColor = Color.Transparent) else FilterChipDefaults.filterChipColors())
+        colors = if (AppPreferences.liquidGlass) FilterChipDefaults.filterChipColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .55f),
+            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ) else FilterChipDefaults.filterChipColors())
 }
 
 @Composable
@@ -42,9 +40,9 @@ fun GlassTextButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled:
 }
 
 @Composable
-fun Modifier.glassSearchSurface(shape: Shape = CircleShape): Modifier = if (AppPreferences.liquidGlass)
+fun Modifier.glassSearchSurface(shape: Shape = CircleShape, quiet: Boolean = false): Modifier = if (AppPreferences.liquidGlass)
     glassSurface(backdrop = null, shape = shape as? RoundedCornerShape ?: RoundedCornerShape(16.dp),
-        tint = MaterialTheme.colorScheme.surfaceContainerHigh) else this
+        tint = MaterialTheme.colorScheme.surfaceContainerHigh, quiet = quiet) else this
 
 @Composable
 fun searchFieldColors(onCard: Boolean = false): TextFieldColors {
@@ -108,17 +106,13 @@ fun GlassSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifie
     }
 }
 
-/** Retain Material's keyboard, accessibility and drag handling on a shared glass capsule. */
+/** Native track and thumb preserve keyboard, accessibility and drag handling. */
 @Composable
 fun GlassSlider(value: Float, onValueChange: (Float) -> Unit, modifier: Modifier = Modifier,
     enabled: Boolean = true, valueRange: ClosedFloatingPointRange<Float> = 0f..1f, steps: Int = 0,
     onValueChangeFinished: (() -> Unit)? = null, colors: SliderColors = SliderDefaults.colors(),
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() }) {
-    if (!AppPreferences.liquidGlass) Slider(value, onValueChange, modifier, enabled, valueRange, steps, onValueChangeFinished, colors, interactionSource)
-    else Box(modifier, contentAlignment = Alignment.Center) {
-        Box(Modifier.fillMaxWidth().height(12.dp).glassSurface(backdrop = null, shape = CircleShape))
-        Slider(value, onValueChange, Modifier, enabled, valueRange, steps, onValueChangeFinished, colors, interactionSource)
-    }
+    Slider(value, onValueChange, modifier, enabled, valueRange, steps, onValueChangeFinished, colors, interactionSource)
 }
 
 @Composable

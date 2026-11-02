@@ -42,11 +42,16 @@ val LocalDrafts = compositionLocalOf<com.personal.tpm.data.DraftStore> { error("
 /** A plain message dialog. */
 @Composable
 fun ErrorDialog(title: String, message: String, onClose: () -> Unit) {
+    val operation = LocalOperationKey.current
+    val accounts = LocalOperationAccounts.current
     GlassAlertDialog(
         onDismissRequest = onClose,
         title = { AnimatedLabel(title) },
         text = { AnimatedLabel(message) },
         confirmButton = { GlassTextButton(onClick = onClose) { Text("好") } },
+        dismissButton = if (operation != null && accounts != null && com.personal.tpm.data.isPermissionFailure(message)) ({
+            GlassTextButton(onClick = { onClose(); accounts.request(operation) }) { Text("选择本次操作账号") }
+        }) else null,
 
     )
 }
@@ -163,21 +168,7 @@ fun BlockChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier,
 /** A row of equal blocks to choose one from (was the outlined segmented row): the chosen one is filled with the theme colour. */
 @Composable
 fun BlockSegmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
-    if (AppPreferences.liquidGlass) {
-        Row(modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            options.forEachIndexed { index, label ->
-                GlassTonalButton(onClick = { onSelect(index) }, modifier = Modifier.weight(1f),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-                    colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
-                        containerColor = if (index == selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
-                        contentColor = MaterialTheme.colorScheme.onSurface),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 10.dp)) {
-                    Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
-                }
-            }
-        }
-        return
-    }
+
 
     androidx.compose.foundation.layout.Row(modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
         options.forEachIndexed { index, name ->
@@ -185,7 +176,7 @@ fun BlockSegmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit
             val fill by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "segFill")
             val ink by androidx.compose.animation.animateColorAsState(if (on && !AppPreferences.liquidGlass) MaterialTheme.colorScheme.onPrimary else if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "segInk")
             androidx.compose.foundation.layout.Box(
-                Modifier.weight(1f).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).then(if (AppPreferences.liquidGlass) Modifier.glassSurface(backdrop = null, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp), tint = fill, prominent = on) else Modifier.background(fill)).clickable { onSelect(index) }.padding(vertical = 10.dp),
+                Modifier.weight(1f).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).then(if (AppPreferences.liquidGlass) Modifier.background(fill, androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) else Modifier.background(fill)).clickable { onSelect(index) }.padding(vertical = 10.dp),
                 androidx.compose.ui.Alignment.Center,
             ) { AnimatedLabel(name, style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 1) }
         }

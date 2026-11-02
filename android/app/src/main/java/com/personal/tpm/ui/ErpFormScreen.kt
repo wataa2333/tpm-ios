@@ -52,14 +52,15 @@ fun ErpFormScreen(existingId: String?, referenceSn: String?, onClose: () -> Unit
     val scope = rememberCoroutineScope()
     val form = remember { FormState(OrderKind.Erp) }
     val snackbar = remember { SnackbarHostState() }
-    val scopeKey = session.erpDraftScope
+    val scopeKey = remember { session.erpDraftScope }
     var request by remember { mutableStateOf<PickRequest?>(null) }
     var failure by remember { mutableStateOf<String?>(null) }
     var draftId by remember { mutableStateOf<String?>(null) }
     val target = if (existingId == null) DraftTarget.NewReport else DraftTarget.Order(existingId)
     val draftsAllowed = existingId == null || existingId.isNotBlank()
 
-    LaunchedEffect(existingId) {
+    LaunchedEffect(existingId, session.accountKey) {
+        if (form.ready) { form.refreshActor(session, existingId, referenceSn); return@LaunchedEffect }
         form.load(session, existingId, referenceSn)
         if (existingId == null && form.ready) form.applyDefaults(session, prefs)
         if (draftsAllowed && form.ready) store.drafts(scopeKey, target).firstOrNull()?.let { draft ->

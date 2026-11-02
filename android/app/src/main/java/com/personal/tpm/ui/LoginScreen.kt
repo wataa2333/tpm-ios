@@ -60,7 +60,7 @@ fun LoginScreen(session: Session, vault: AccountVault) {
     val context = LocalContext.current
     val remembered by vault.accounts.collectAsState()
     val latest = remember { vault.accounts.value.firstOrNull() }
-    val prefillPassword = remember { latest?.takeIf { !BiometricGate.isEnabled(context) }?.let { vault.password(it.username) } }
+    val prefillPassword = remember { latest?.let { vault.password(it.username) } }
     var username by remember { mutableStateOf(latest?.username.orEmpty()) }
     var password by remember { mutableStateOf(prefillPassword.orEmpty()) }
     var showPassword by remember { mutableStateOf(false) }

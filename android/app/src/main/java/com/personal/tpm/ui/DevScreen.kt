@@ -39,25 +39,9 @@ import com.personal.tpm.ui.theme.ThemeConfig
 import kotlin.math.roundToInt
 
 /**
- * The developer page (opened from 我的 → 其他 after password verification): the motion scale, the state of the predictive back gesture,
+ * The developer page (opened from 我的 → 其他 without a local password challenge): the motion scale, the state of the predictive back gesture,
  * what the screen and the frame rate are, the numbers of the interface size, and the older loading animations.
  */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun DeveloperPasswordDialog(onDismiss: () -> Unit, onVerified: () -> Unit) {
-    var password by remember { mutableStateOf("") }
-    var wrong by remember { mutableStateOf(false) }
-        GlassAlertDialog(
-            onDismissRequest = onDismiss, title = { Text("开发者验证") },
-            text = { androidx.compose.material3.OutlinedTextField(modifier = Modifier.glassSearchSurface(MaterialTheme.shapes.medium), colors = glassOutlinedFieldColors(), shape = MaterialTheme.shapes.medium, value = password, onValueChange = { password = it.take(16); wrong = false },
-                label = { AnimatedLabel(if (wrong) "密码不正确" else "请输入密码") }, isError = wrong,
-                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword), singleLine = true) },
-            confirmButton = { GlassTextButton(onClick = { if (password == "1331") { password = ""; onVerified() } else wrong = true }) { Text("验证") } },
-            dismissButton = { GlassTextButton(onClick = onDismiss) { Text("取消") } },
-        )
-}
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DevScreen(onBack: () -> Unit) {

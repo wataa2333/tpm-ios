@@ -81,7 +81,7 @@ fun ErpDetailScreen(id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit
     }
     val queryAccounts = LocalQueryAccounts.current
     val changed by session.changed.collectAsState()
-    LaunchedEffect(id, changed, if (independent) queryAccounts.revision else 0) { load() }
+    LaunchedEffect(id, session.accountKey, changed, if (independent) queryAccounts.revision else 0) { load() }
 
     Box(Modifier.fillMaxSize()) {
     GlassScaffold(contentWindowInsets = appContentInsets(),

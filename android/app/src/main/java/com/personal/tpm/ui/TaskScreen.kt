@@ -65,7 +65,7 @@ fun TaskActionBar(kind: OrderKind, order: Jv, includeNavigationPadding: Boolean 
     var canSubmit by remember(taskId) { mutableStateOf(false) }
     var canReturn by remember(taskId) { mutableStateOf(false) }
     var canHandoff by remember(taskId) { mutableStateOf(false) }
-    LaunchedEffect(taskId, changed) {
+    LaunchedEffect(taskId, changed, session.accountKey) {
         try {
             val (state, form) = coroutineScope {
                 val s = async { session.request("workflow/getWorkflowTaskState", mapOf("processInstanceId" to task["processInstanceId"].text)) }
@@ -157,7 +157,7 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
         } finally { if (mine == assignmentTicket) assignmentsLoading = false }
     }
 
-    LaunchedEffect(id) {
+    LaunchedEffect(id, session.accountKey) {
         try {
             val order = session.request(kind.detailPath, mapOf(kind.idKey to id))
             detail = order
@@ -260,7 +260,7 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppTopBar(
-                title = if (task.isNull) "处理" else taskActionTitle(task, kind), onBack = onBack, loading = loading || assignmentsLoading || submitting,
+                title = if (task.isNull) "处理" else taskActionTitle(task, kind), onBack = onBack, loading = loading || assignmentsLoading || submitting, operationLocked = loading || assignmentsLoading || submitting,
                 actions = {
                     // Handing the task to someone else: transfer, delegate, or finish a delegated one.
                     if (state["canDelegate"].bool || state["canResolveDelegate"].bool) Box {

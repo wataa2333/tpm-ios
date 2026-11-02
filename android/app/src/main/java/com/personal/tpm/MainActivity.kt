@@ -24,32 +24,6 @@ class MainActivity : FragmentActivity() {
             if(Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
         }
     }
-    private var credentialResult: kotlinx.coroutines.CancellableContinuation<com.personal.tpm.ui.BiometricGate.Outcome>? = null
-    @Suppress("DEPRECATION")
-    suspend fun confirmScreenLock(reason: String): com.personal.tpm.ui.BiometricGate.Outcome {
-        val manager = getSystemService(android.app.KeyguardManager::class.java)
-        val intent = manager.createConfirmDeviceCredentialIntent("验证身份", reason)
-            ?: return com.personal.tpm.ui.BiometricGate.Outcome.Failed("请先在系统设置中设置锁屏密码")
-        if (credentialResult?.isActive == true) return com.personal.tpm.ui.BiometricGate.Outcome.Failed("已有身份验证正在进行")
-        return kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
-            credentialResult = continuation
-            continuation.invokeOnCancellation { if (credentialResult === continuation) credentialResult = null }
-            try { startActivityForResult(intent, 7441) }
-            catch (_: Exception) {
-                credentialResult = null
-                continuation.resumeWith(Result.success(com.personal.tpm.ui.BiometricGate.Outcome.Failed("无法打开系统锁屏验证")))
-            }
-        }
-    }
-    @Deprecated("System credential compatibility callback")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 7441) {
-            val pending = credentialResult; credentialResult = null
-            if (pending?.isActive == true) pending.resumeWith(Result.success(if (resultCode == RESULT_OK) com.personal.tpm.ui.BiometricGate.Outcome.Passed else com.personal.tpm.ui.BiometricGate.Outcome.Cancelled))
-        }
-    }
-
     /**
      * The interface size (the owner's step times the fit to the screen width) is applied here, to the density of the Activity's own resources,
      * not by a Compose override: sheets, dialogs and pickers are windows of their own, and all of them take their size from the Activity, so

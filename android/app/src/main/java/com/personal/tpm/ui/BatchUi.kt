@@ -105,6 +105,7 @@ class PresetRequest(val action: BatchAction, val operation: BatchOperation, val 
  */
 @Stable
 class BatchSelection {
+    val operationKey = "batch:" + java.util.UUID.randomUUID()
     var active by mutableStateOf(false); private set
     val items = mutableStateListOf<BatchItem>()
     /** Said in a snackbar: why a card cannot be selected. */
@@ -261,6 +262,10 @@ class CardSelecting(val selected: Boolean, val enabled: Boolean, val toggle: () 
 /** The bar at the bottom of a list in selection mode: the count and the status, "全选", and the two ways out of the step as full-width buttons. */
 @Composable
 fun BatchBar(batch: BatchSelection, candidates: () -> List<BatchItem>) {
+    OperationAccountScope(batch.operationKey) { BatchBarContent(batch, candidates) }
+}
+@Composable
+private fun BatchBarContent(batch: BatchSelection, candidates: () -> List<BatchItem>) {
     val session = LocalSession.current
     val prefs = LocalPickerPrefs.current
     val scope = rememberCoroutineScope()
@@ -278,6 +283,7 @@ fun BatchBar(batch: BatchSelection, candidates: () -> List<BatchItem>) {
                         AnimatedLabel(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
+                OperationAccountAction(locked = batch.preparing || batch.run != null)
                 Box {
                     SoftButton(onClick = { menu = true }) { Text("全选") }
                     AppOptionSheet(expanded = menu, onDismissRequest = { menu = false }) {
@@ -313,7 +319,14 @@ fun BatchBar(batch: BatchSelection, candidates: () -> List<BatchItem>) {
 /** Put once in a list screen that has a [BatchSelection]: the preset sheet, the progress of a run, the read-only peek. */
 @Composable
 fun BatchOverlays(batch: BatchSelection) {
+    OperationAccountScope(batch.operationKey) { BatchOverlaysContent(batch) }
+}
+@Composable
+private fun BatchOverlaysContent(batch: BatchSelection) {
     val session = LocalSession.current
+    val accounts = LocalOperationAccounts.current
+    LaunchedEffect(batch.active) { if (!batch.active && batch.run == null) accounts?.clear(batch.operationKey) }
+    DisposableEffect(batch.operationKey) { onDispose { accounts?.clear(batch.operationKey) } }
     batch.presetting?.let { request ->
         CompactTheme { BatchPresetSheet(
             request, request.items.size, onDismiss = { batch.presetting = null },
@@ -321,13 +334,14 @@ fun BatchOverlays(batch: BatchSelection) {
         ) }
     }
     batch.run?.let { run ->
-        CompactTheme { BatchRunDialog(run) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalOperationLocked provides true) { CompactTheme { BatchRunDialog(run) {
             // The orders that went through leave the selection; the ones that failed stay selected for another try.
             batch.remove(run.succeeded.toSet())
             if (batch.items.isEmpty()) batch.end()
             batch.run = null
+            accounts?.clear(batch.operationKey)
             if (run.succeeded.isNotEmpty()) session.notifyChanged()
-        } }
+        } } }
     }
     // Laid over the page inside the same window (a dialog window has its own insets and put the buttons under the navigation bar). It slides in and
     // out like every other page.

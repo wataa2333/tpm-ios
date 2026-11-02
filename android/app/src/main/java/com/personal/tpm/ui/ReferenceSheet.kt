@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
@@ -248,16 +250,26 @@ fun ReferenceSheet(
     }
 
     @Composable
+    fun treeGuides(depth: Int): Modifier {
+        val color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f)
+        return Modifier.drawBehind {
+            repeat(depth) { level ->
+                val x = (20 + level * 22).dp.toPx()
+                drawLine(color, Offset(x, 0f), Offset(x, size.height), 1.dp.toPx())
+            }
+        }
+    }
+    @Composable
     fun PickerRow(entry: PickerEntry, depth: Int = 0) {
         val key = entry.key
         val lines = subtitleLines(entry.value)
         // Each choice is a block of its own on the white sheet (a tinted one when it is ticked), so the rows never run together.
-        Box(Modifier.fillMaxWidth().padding(start = (12 + depth * 14).dp, end = 12.dp, top = 3.dp, bottom = 3.dp)) {
+        Box(Modifier.fillMaxWidth().then(treeGuides(depth)).padding(start = (20 + depth * 22).dp, end = 12.dp, top = 3.dp, bottom = 3.dp)) {
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                    .background(if (key in picked) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainer)
+                    .background(if (key in picked) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else if (treeSource) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer)
                     .combinedClickable(onClick = { choose(entry.value) }, onLongClick = { if (source.hasMenu) menuFor = key })
-                    .padding(start = 14.dp, end = 12.dp, top = 9.dp, bottom = 9.dp),
+                    .padding(start = 14.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -327,7 +339,7 @@ fun ReferenceSheet(
                 }
             }
             // Open or close every branch at once.
-            if (hasBranches && !searching) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (hasBranches && !searching) Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 GlassTextButton(onClick = { flatten(treeValues, source, emptySet(), true).filter { it.opens }.forEach { if (it.path !in opened) opened.add(it.path) } }) { Text("全部展开") }
                 GlassTextButton(onClick = { opened.clear() }) { Text("全部收起") }
             }
@@ -338,7 +350,7 @@ fun ReferenceSheet(
                 Text("隐藏已领用完物料", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                 GlassSwitch(checked = hideUsedUp, onCheckedChange = { hideUsedUp = it })
             }
-            LazyColumn(Modifier.weight(1f)) {
+            LazyColumn(Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = 12.dp)) {
                 if (source.hasMenu && !searching && lists.pins.isNotEmpty()) {
                     item(key = "pins-title") { SectionLabel("置顶 · ${lists.pins.size}/${PickerLists.PIN_LIMIT}") }
                     items(lists.pins, key = { "pin-" + it.key }) { Box(fadeItem()) { PickerRow(it) } }
@@ -363,7 +375,7 @@ fun ReferenceSheet(
                             val toggle = { if (row.path in opened) opened.remove(row.path) else opened.add(row.path); Unit }
                             // A branch: a block with an arrow that opens and closes it. Where a branch can be chosen itself (a division), the name chooses it and only
                             // the arrow opens; otherwise the whole block opens it.
-                            Box(Modifier.fillMaxWidth().padding(start = (12 + row.depth * 14).dp, end = 12.dp, top = 3.dp, bottom = 3.dp)) {
+                            Box(Modifier.fillMaxWidth().then(treeGuides(row.depth)).padding(start = (20 + row.depth * 22).dp, end = 12.dp, top = 3.dp, bottom = 3.dp)) {
                                 Row(
                                     Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
                                         .then(if (row.choosable) Modifier else Modifier.clickable(onClick = toggle)),

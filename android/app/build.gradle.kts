@@ -19,8 +19,8 @@ android {
         applicationId = "com.personal.tpm"
         minSdk = 29            // Android 10
         targetSdk = 35
-        versionCode = 108
-        versionName = "1.108.0"
+        versionCode = 109
+        versionName = "1.109.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEFAULT_QUERY_USERNAME", queryConfigLiteral("C0382522"))
         buildConfigField("String", "DEFAULT_QUERY_PASSWORD", queryConfigLiteral(queryLocalSettings.getProperty("tpm.defaultQueryPassword", "")))
@@ -97,10 +97,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.5")
-    // Face / fingerprint / screen-lock check before a remembered account signs in. FragmentActivity comes with it.
-    implementation("androidx.biometric:biometric:1.1.0")
-    // biometric 1.1.0 brings in an old androidx.fragment (1.2.x) whose FragmentActivity rejects the request codes the newer Activity Result API
-    // uses ("Can only use lower 16 bits for requestCode" when the photo picker opens). A current fragment fixes that.
+    // Keep the Activity Result compatible FragmentActivity used by the application.
     implementation("androidx.fragment:fragment-ktx:1.8.5")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 

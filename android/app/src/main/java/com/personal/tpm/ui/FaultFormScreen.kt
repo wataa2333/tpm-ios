@@ -39,7 +39,7 @@ fun FaultFormScreen(existingId: String?, startDraftId: String?, onClose: () -> U
     val scope = rememberCoroutineScope()
     val form = remember { FormState(OrderKind.Fault) }
     val snackbar = remember { SnackbarHostState() }
-    val scopeKey = session.draftScope
+    val scopeKey = remember { session.draftScope }
     var request by remember { mutableStateOf<PickRequest?>(null) }
     var photoBusy by remember { mutableStateOf(false) }
     var showDrafts by remember { mutableStateOf(false) }
@@ -83,7 +83,9 @@ fun FaultFormScreen(existingId: String?, startDraftId: String?, onClose: () -> U
         }
         draftCount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { store.drafts(scopeKey, orderTarget).size }
     }
-    LaunchedEffect(existingId,scopeKey,initialAsset?.toString()) { initialize() }
+    LaunchedEffect(existingId, session.accountKey, initialAsset?.toString()) {
+        if (form.ready) form.refreshActor(session, existingId) else initialize()
+    }
 
     fun keepDraft() {
         try {

@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -87,14 +88,17 @@ fun Modifier.glassSurface(
     layerBlock: (GraphicsLayerScope.() -> Unit)? = null,
     illumination: (DrawScope.() -> Unit)? = null,
     highlightAngle: () -> Float = { 45f },
+    quiet: Boolean = false,
 ): Modifier {
     val rendering = currentGlassRendering()
     val effects = AppPreferences.glassEffects
     val material = backdrop ?: rememberControlBackdrop()
     // Color.Transparent carries black RGB. Giving it a new alpha would create a black button.
     val surfaceTint = glassTintColor(tint, if (prominent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
+    if (quiet) return background(surfaceTint.copy(alpha = .65f), shape)
     if (rendering == GlassRendering.Solid) return graphicsLayer(layerBlock ?: {}).background(surfaceTint, shape)
     if (rendering == GlassRendering.Translucent) return graphicsLayer(layerBlock ?: {}).background(surfaceTint.copy(alpha = .90f * surfaceTint.alpha), shape)
+    val rim = MaterialTheme.colorScheme.onSurface.copy(alpha = .14f)
     val alpha = (if (prominent) .32f else .28f) * surfaceTint.alpha
     return drawBackdrop(
         backdrop = material, shape = { shape },
@@ -113,6 +117,7 @@ fun Modifier.glassSurface(
         onDrawSurface = {
             drawRect(surfaceTint.copy(alpha = alpha))
             illumination?.invoke(this)
+            drawOutline(shape.createOutline(size, layoutDirection, this), rim, style = androidx.compose.ui.graphics.drawscope.Stroke(.5.dp.toPx()))
         },
     )
 }

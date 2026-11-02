@@ -221,7 +221,12 @@ private fun SearchRow(vm: OrderListViewModel, input: String, onInput: (String) -
             value = input, onValueChange = onInput, singleLine = true, modifier = Modifier.fillMaxWidth().glassSearchSurface(),
             placeholder = { AnimatedLabel("搜索" + vm.field.label) },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-            trailingIcon = { if (input.isNotEmpty()) GlassIconButton(onClick = { onInput(""); if (vm.searchMode) vm.search("") }) { Icon(Icons.Filled.Close, contentDescription = "清空") } },
+            trailingIcon = {
+                Row {
+                    if (input.isNotEmpty()) androidx.compose.material3.IconButton(onClick = { onInput(""); if (vm.searchMode) vm.search("") }) { Icon(Icons.Filled.Close, contentDescription = "清空") }
+                    androidx.compose.material3.IconButton(onClick = { fieldMenu = true }) { Icon(Icons.Filled.ExpandMore, contentDescription = "搜索方式：" + vm.field.label) }
+                }
+            },
             shape = CircleShape,
             colors = searchFieldColors(),
             // Return (the keyboard's search key) searches at once and puts the keyboard away.
@@ -229,7 +234,6 @@ private fun SearchRow(vm: OrderListViewModel, input: String, onInput: (String) -
             keyboardActions = KeyboardActions(onSearch = { vm.search(input); focus.clearFocus() }),
         )
         Box {
-            BlockChip("按" + vm.field.label + "搜索", { fieldMenu = true }, trailing = { Icon(Icons.Filled.ExpandMore, contentDescription = null, Modifier.size(18.dp)) })
             AppOptionSheet(expanded = fieldMenu, onDismissRequest = { fieldMenu = false }, title = "搜索方式") {
                 FaultSearchField.entries.forEach { option ->
                     AppOptionItem(text = { AnimatedLabel(option.label) }, selected = option == vm.field, onClick = { fieldMenu = false; vm.changeField(option) })
@@ -261,7 +265,8 @@ private fun StatusStrip(vm: OrderListViewModel) {
             val on = index == selected
             val background by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.Normal, easing = Motion.Change), label = "capsule")
             val content by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, tween(Motion.Normal, easing = Motion.Change), label = "capsuleText")
-            if (AppPreferences.liquidGlass) GlassFilterChip(selected = on, onClick = { vm.select(st.code) },
+            if (AppPreferences.liquidGlass) androidx.compose.material3.FilterChip(selected = on, onClick = { vm.select(st.code) },
+                border = null, colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(containerColor = Color.Transparent, selectedContainerColor = MaterialTheme.colorScheme.primaryContainer),
                 modifier = Modifier.onGloballyPositioned { lefts[index] = it.positionInParent().x.toInt() }, label = {
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                         Text(st.title, style = MaterialTheme.typography.labelLarge)
