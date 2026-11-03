@@ -236,10 +236,12 @@ fun AppNav() {
                     initializer { PagedViewModel(session, kind.page, kind.waitingFilters(), listOf(SearchChoice("工单名称", kind.nameKey), SearchChoice("资产编码", "asset.assetCode"))) }
                 },
             )
+            var selectedPoolOrder by remember { mutableStateOf<String?>(null) }
             PagedScreen(
             vm, kind.title, "暂无待接单工单", modelOf = { row, index -> poolCardModel(kind, row, index) }, onBack = { nav.popBackStack() },
-            openNotice = "功能暂未完善，仅供查看。", cardType = if (kind == PoolKind.Maintenance) CardType.Maintenance else CardType.Precision,
+            open = { model, _ -> selectedPoolOrder = model.openId }, cardType = if (kind == PoolKind.Maintenance) CardType.Maintenance else CardType.Precision,
         )
+            SlideInOverlayFor(selectedPoolOrder) { id -> PoolOrderDetail(kind, id) { selectedPoolOrder = null } }
         }
         composable(PAGED, arguments = listOf(navArgument("type") { type = NavType.StringType })) { entry ->
             val list = WorkList.byKey(entry.arguments?.getString("type").orEmpty()) ?: WorkList.Assets

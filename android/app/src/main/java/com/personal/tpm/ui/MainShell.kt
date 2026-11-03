@@ -179,7 +179,12 @@ fun MainShell(
                     androidx.compose.animation.AnimatedVisibility(visible = selected == 1 && !selectingTodos,
                         enter = androidx.compose.animation.scaleIn(tween(Motion.Normal)) + androidx.compose.animation.fadeIn(tween(Motion.Normal)),
                         exit = androidx.compose.animation.scaleOut(tween(Motion.Fast)) + androidx.compose.animation.fadeOut(tween(Motion.Fast))) {
-                        GlassTonalButton(onClick = openQuick, modifier = Modifier.heightIn(min = 56.dp)) { Text("快速完成") }
+                        GlassActionButton(onClick = openQuick, modifier = Modifier.heightIn(min = 56.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)) {
+                            Icon(Icons.Filled.Checklist, contentDescription = null)
+                            androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
+                            Text("快速完成")
+                        }
                     }
                 }
 

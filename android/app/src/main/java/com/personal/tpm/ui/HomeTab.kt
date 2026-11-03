@@ -140,9 +140,10 @@ fun HomeTab(vm: HomeViewModel, gridState: LazyGridState, pullState: PullToRefres
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("维修工单") }
-                item(span = { GridItemSpan(maxLineSpan) }) { AllOrdersCard { openList("") } }
+                item(span = { GridItemSpan(maxLineSpan) }) { AllOrdersCard({ openList("") }) }
                 items(cards, key = { it.code }, span = { if(it == FaultState.Finished) GridItemSpan(maxLineSpan) else GridItemSpan(1) }) { st ->
-                    StateCard(st.title, symbolOf(st), stateColor(st.code), if (st.hasCount) vm.counts[st.code] else null) { openList(st.code) }
+                    if (st == FaultState.Finished) AllOrdersCard({ openList(st.code) }, "已完结", "查看已完结的维修工单", symbolOf(st), stateColor(st.code))
+                    else StateCard(st.title, symbolOf(st), stateColor(st.code), if (st.hasCount) vm.counts[st.code] else null) { openList(st.code) }
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("保养工单") }
                 item(key = "pool-maintain", span = { GridItemSpan(maxLineSpan) }) { WideCard("保养工单池", "等待接单的保养工单", Icons.Filled.OilBarrel, Color(0xFF26A69A), vm.counts[PoolKind.Maintenance.path]) { openPool(PoolKind.Maintenance) } }
@@ -196,16 +197,16 @@ fun WideCard(title: String, subtitle: String, icon: ImageVector, tint: Color, co
 }
 
 @Composable
-private fun AllOrdersCard(onClick: () -> Unit) {
+private fun AllOrdersCard(onClick: () -> Unit, title: String = "所有工单", subtitle: String = "查看全部状态的维修工单", icon: ImageVector = Icons.Filled.Checklist, tint: Color = MaterialTheme.colorScheme.primary) {
     Card(
         onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), elevation = cardElevation,
     ) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Badge(Icons.Filled.Checklist, MaterialTheme.colorScheme.primary)
+            Badge(icon, tint)
             Column(Modifier.weight(1f)) {
-                Text("所有工单", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                Text("查看全部状态的维修工单", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }

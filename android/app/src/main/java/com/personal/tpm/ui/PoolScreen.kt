@@ -27,6 +27,6 @@ fun poolFacts(row: Jv): List<Pair<String, String>> = listOf(
 fun poolCardModel(kind: PoolKind, row: Jv, index: Int) = CardModel(
     key = row[kind.idKey].text.ifEmpty { "${row["sn"].text}#$index" }, title = row[kind.nameKey].text, status = "待接单", colorCode = "RECEIVED", isApproval = false,
     reference = row["asset"]["assetCode"].text.ifEmpty { "—" } + row["asset"]["addressCode"].text.let { if (it.isEmpty()) "" else " · $it" },
-    time = row["planStartDate"].dateText, facts = poolFacts(row), kind = null, openId = "", cardType = if (kind == PoolKind.Maintenance) CardType.Maintenance else CardType.Precision,
+    time = row["planStartDate"].dateText, facts = poolFacts(row), kind = null, openId = row[kind.idKey].text, cardType = if (kind == PoolKind.Maintenance) CardType.Maintenance else CardType.Precision,
 )
 
