@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.animation.animateContentSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.ui.graphics.graphicsLayer
@@ -35,6 +36,7 @@ fun PoolExecutionForm(kind: PoolKind, id: String, onClose: () -> Unit, onSubmitF
     var dirty by remember { mutableStateOf(false) }
     var confirmExit by remember { mutableStateOf(false) }
     var prepared by remember { mutableStateOf<QuickRepairPrepared?>(null) }
+    var orderInfo by remember(id) { mutableStateOf(Jv.NULL) }
     var nodes by remember { mutableStateOf(batch?.nodes.orEmpty()) }
     var choices by remember { mutableStateOf(batch?.choices.orEmpty()) }
     var resultPicker by remember { mutableStateOf<Int?>(null) }
@@ -55,6 +57,7 @@ fun PoolExecutionForm(kind: PoolKind, id: String, onClose: () -> Unit, onSubmitF
                 val current = quick.prepare(); prepared = current; nodes = current.nodes; choices = current.selections
             }
             val detail = loadPoolOrder(session, kind, id)
+            orderInfo = detail
             val task = detail["taskInfo"]
             check(task["category"].text == if (kind == PoolKind.Maintenance) "MAINTAINED" else "PRECISED") { "当前节点不是填写执行结果，请刷新工单" }
             val state = session.request("workflow/getWorkflowTaskState", mapOf("processInstanceId" to task["processInstanceId"].text))
@@ -143,6 +146,15 @@ fun PoolExecutionForm(kind: PoolKind, id: String, onClose: () -> Unit, onSubmitF
             }) {
             if (!ready) Text("正在读取执行项目与处理权限…")
             if (ready) {
+                if (quick != null) GroupCard {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        PoolItemTitle(orderInfo[kind.nameKey].text.ifEmpty { prepared?.item?.name.orEmpty() })
+                        orderInfo["sn"].text.takeIf { it.isNotEmpty() }?.let { Text("单号：$it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        val asset = orderInfo["asset"]
+                        Text(listOf(asset["assetCode"].text, asset["addressCode"].text).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                        asset["assetName"].text.takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
+                    }
+                }
                 FormTitle("执行信息")
                 GroupCard {
                     DateTimeField("开始时间", value["startTime"].text, false, true) { update("startTime", it) }
@@ -172,7 +184,7 @@ fun PoolExecutionForm(kind: PoolKind, id: String, onClose: () -> Unit, onSubmitF
                                     Box(Modifier.weight(1f)) {
                                     val item = row[kind.path + "Item"]
                                     Card(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)) { Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Text("${index + 1}. ${item["itemName"].text}", style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                        PoolItemTitle("${index + 1}. ${item["itemName"].text}")
                                         SingleChoiceGroup(listOf("完成", "忽略"), if (row["executeResult"].text == "IGNORE") 1 else 0,
                                             { updateRecord(index, "executeResult", if (it == 1) "IGNORE" else "EXECUTED") })
                                         if (row["executeResult"].text != "IGNORE") {
@@ -185,11 +197,19 @@ fun PoolExecutionForm(kind: PoolKind, id: String, onClose: () -> Unit, onSubmitF
                                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = if (item["itemType"].text == "NUMERICAL") androidx.compose.ui.text.input.KeyboardType.Decimal else androidx.compose.ui.text.input.KeyboardType.Text))
                                         }
                                         PoolOptionalSection(if (row["description"].text.isEmpty()) "标准与备注" else "标准／备注已填") {
-                                            Text(item["itemName"].text)
+                                            Text(item["itemName"].text, style = MaterialTheme.typography.bodySmall)
                                             listOf("intervalPeriod" to "间隔周期要求", "guidance" to "作业指导书", "methodBenchmark" to "方法和基准").forEach { (field, label) ->
-                                                item[field].text.takeIf { it.isNotEmpty() }?.let { FactRow(label, it) }
+                                                item[field].text.takeIf { it.isNotEmpty() }?.let { raw ->
+                                                    val display = if (field == "intervalPeriod") when (raw) {
+                                                        "DAY" -> "每日"; "WEEK" -> "每周"; "MONTH" -> "每月"; "QUARTER" -> "每季度"; "YEAR" -> "每年"; else -> raw
+                                                    } else raw
+                                                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                                        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        Text(display, style = MaterialTheme.typography.bodySmall)
+                                                    }
+                                                }
                                             }
-                                            OutlinedTextField(row["description"].text, { updateRecord(index, "description", it) }, Modifier.fillMaxWidth(), label = { Text("结果说明（选填）") })
+                                            OutlinedTextField(row["description"].text, { updateRecord(index, "description", it) }, Modifier.fillMaxWidth(), textStyle = MaterialTheme.typography.bodySmall, label = { Text("结果说明（选填）", style = MaterialTheme.typography.labelSmall) })
                                         }
                                     } }
                                     }
@@ -298,5 +318,21 @@ private fun PoolResultPicker(options: List<String>, onPick: (String) -> Unit, on
             items(options.size) { i -> GlassTextButton(onClick = { close(options[i]) }, enabled = !closing, modifier = Modifier.fillMaxWidth()) { Text(options[i]) } }
             if (options.isEmpty()) item { Text("当前标准没有可选结果，请核对标准配置", Modifier.padding(20.dp)) }
         }
+    }
+}
+
+@Composable
+private fun PoolItemTitle(text: String) {
+    var expanded by androidx.compose.runtime.saveable.rememberSaveable(text) { mutableStateOf(false) }
+    var overflowing by remember(text) { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().then(Modifier.clickable(enabled = expanded || overflowing) { expanded = !expanded })
+        .animateContentSize(androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change)), verticalAlignment = androidx.compose.ui.Alignment.Top) {
+        Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
+            minLines = 2, maxLines = if (expanded) Int.MAX_VALUE else 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            onTextLayout = { if (!expanded) overflowing = it.hasVisualOverflow })
+        if (expanded || overflowing) Icon(Icons.Default.ExpandMore, if (expanded) "收起名称" else "展开名称",
+            Modifier.size(18.dp).graphicsLayer { rotationZ = if (expanded) 180f else 0f }, tint = MaterialTheme.colorScheme.primary)
+        else Spacer(Modifier.size(18.dp))
     }
 }

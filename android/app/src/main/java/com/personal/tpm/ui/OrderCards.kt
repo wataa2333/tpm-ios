@@ -1,5 +1,8 @@
 package com.personal.tpm.ui
 
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.draw.drawWithContent
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandHorizontally
@@ -339,7 +342,7 @@ private fun PlainFact(label: String, value: String, modifier: Modifier = Modifie
     }
 }
 
-/** Static placeholders reserve card geometry; only the native circular indicator animates loading. */
+/** Native animation drives a draw-only highlight sweep while preserving placeholder geometry. */
 @Composable
 fun SkeletonCard(modifier: Modifier = Modifier, cardType: CardType = CardType.Fault) {
     val plan = skeletonPlan(cardType, { FixedCardLayout.position(cardType, it) }, FixedCardLayout.orderedFields(cardType), FixedCardLayout.detailButtonPosition(cardType)) { field, default -> FixedCardLayout.placement(cardType, field, default) }
@@ -349,25 +352,36 @@ fun SkeletonCard(modifier: Modifier = Modifier, cardType: CardType = CardType.Fa
     val grid = compactLayout(body, preview.facts.isNotEmpty(), FixedCardLayout.detailButtonSlot(cardType), { FixedCardLayout.slot(cardType, it) }, { FixedCardLayout.position(cardType, it) })
     val bodyRows = grid.cells.count { it.field != DETAIL_BUTTON }
     val base = MaterialTheme.colorScheme.surfaceContainerHigh
+    val light = MaterialTheme.colorScheme.surface.copy(alpha = .7f)
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "skeleton sweep")
+    val sweep = transition.animateFloat(initialValue = 0f, targetValue = 1f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(1400, easing = androidx.compose.animation.core.LinearEasing)), label = "skeleton light")
+    fun Modifier.flow() = this.background(base).drawWithContent {
+        drawContent()
+        val band = size.width * .65f
+        val x = (size.width + band * 2) * sweep.value - band
+        drawRect(androidx.compose.ui.graphics.Brush.linearGradient(listOf(androidx.compose.ui.graphics.Color.Transparent, light, androidx.compose.ui.graphics.Color.Transparent),
+            start = androidx.compose.ui.geometry.Offset(x - band, 0f), end = androidx.compose.ui.geometry.Offset(x + band, size.height)))
+    }
     // Everything is measured like the real card: the height of a line is the line height of the text it stands for (so it follows the interface
     // size and the font size), and the sweep of light is measured in dp, not pixels.
     val density = androidx.compose.ui.platform.LocalDensity.current
     val titleLine = with(density) { MaterialTheme.typography.titleMedium.lineHeight.toDp() }
     val bodyLine = with(density) { MaterialTheme.typography.bodyMedium.lineHeight.toDp() }
     fun bar(width: Float, height: androidx.compose.ui.unit.Dp) = Modifier.fillMaxWidth(width).height(height).clip(RoundedCornerShape(6.dp))
-        .background(base)
+        .flow()
     Card(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), elevation = CardDefaults.cardElevation(0.dp)) {
         Column(Modifier.padding(CardMetrics.padding), verticalArrangement = Arrangement.spacedBy(CardMetrics.lineGap)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(bar(if (plan.status) .68f else .85f, titleLine))
-                if (plan.status) Box(Modifier.weight(1f).height(titleLine).clip(RoundedCornerShape(6.dp)).background(base))
+                if (plan.status) Box(Modifier.weight(1f).height(titleLine).clip(RoundedCornerShape(6.dp)).flow())
             }
             if (plan.reference || plan.summaryLines > 0 || plan.footer || plan.topButton) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(CardMetrics.lineGap)) {
                         repeat(bodyRows) { row -> Box(bar(if (row == 0) .8f else .55f, bodyLine)) }
                     }
-                    if (grid.cells.any { it.field == DETAIL_BUTTON }) Box(Modifier.width(104.dp).height(CardMetrics.footerHeight).clip(CircleShape).background(base))
+                    if (grid.cells.any { it.field == DETAIL_BUTTON }) Box(Modifier.width(104.dp).height(CardMetrics.footerHeight).clip(CircleShape).flow())
                 }
             }
         }

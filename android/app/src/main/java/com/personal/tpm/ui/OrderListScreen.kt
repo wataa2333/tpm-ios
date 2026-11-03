@@ -86,6 +86,21 @@ import java.time.ZoneOffset
 @Composable
 fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, onOpen: (String) -> Unit, onNew: (() -> Unit)? = null, reportAsset: ((com.personal.tpm.data.Jv) -> Unit)? = null) {
     val skeletonCount = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp / 80 + 2).coerceIn(4, 40)
+    val categoryMotion = remember { androidx.compose.animation.core.Animatable(0f) }
+    var previousCategory by remember { mutableStateOf(vm.state) }
+    LaunchedEffect(vm.state) {
+        if (previousCategory != vm.state) {
+            val codes = listOf("") + com.personal.tpm.data.FaultState.entries.map { it.code }
+            val direction = if (codes.indexOf(vm.state) >= codes.indexOf(previousCategory)) 1f else -1f
+            previousCategory = vm.state
+            categoryMotion.snapTo(direction)
+            categoryMotion.animateTo(0f, tween(Motion.Page, easing = Motion.Arrive))
+        }
+    }
+    fun pageMotion() = Modifier.graphicsLayer {
+        translationX = size.width * .22f * categoryMotion.value
+        alpha = 1f - .45f * kotlin.math.abs(categoryMotion.value)
+    }
     val focus = LocalFocusManager.current
     val batch = vm.batch
     var activeList by remember { mutableStateOf<androidx.compose.foundation.lazy.LazyListState?>(null) }
@@ -172,14 +187,14 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
                                 ) {
                                     if (AppPreferences.liquidGlass) item(key = "glass-filters") { filtersOrderListScreen() }
                                     if (vm.loading && vm.rows.isEmpty()) {
-                                        items(skeletonCount, key = { "skeleton$it" }, contentType = { "skeleton" }) { SkeletonCard(fadeItem(skeleton = true)) }
+                                        items(skeletonCount, key = { "skeleton$it" }, contentType = { "skeleton" }) { SkeletonCard(fadeItem(skeleton = true).then(pageMotion())) }
                                     }
                                     // The key carries the position: a page that shifts under the list can repeat an order, and a repeated key crashes a lazy list.
                                     itemsIndexed(vm.rows, key = { index, row -> row["faultId"].text + "#" + index }, contentType = { _, _ -> "order" }) { _, item ->
                                         val model = remember(item) { faultCardModel(item) }
                                         val entry = remember(item) { batchItem(com.personal.tpm.data.OrderKind.Fault, item) }
                                         OrderCard(
-                                            model, vm.expanded[model.key] == true, { vm.expanded[model.key] = vm.expanded[model.key] != true }, fadeItem(),
+                                            model, vm.expanded[model.key] == true, { vm.expanded[model.key] = vm.expanded[model.key] != true }, fadeItem().then(pageMotion()),
                                             onOpen = { OrderPreview.put("Fault", model.openId, item); onOpen(model.openId) },
                                             bottomAction = if(reportAsset!=null && item["asset"]["assetId"].text.isNotBlank() && item["asset"]["assetCode"].text.isNotBlank()) ({
                                                 AssetReportButton(onClick={reportAsset(item["asset"])},modifier=Modifier.fillMaxWidth().padding(top=12.dp))
