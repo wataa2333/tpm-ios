@@ -15,9 +15,11 @@ import com.personal.tpm.ui.theme.ThemeConfig
 import kotlin.math.roundToInt
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.asImageBitmap
 
 class MainActivity : FragmentActivity() {
     private var launchIconBounds by androidx.compose.runtime.mutableStateOf<androidx.compose.ui.geometry.Rect?>(null)
+    private var launchIconSnapshot by androidx.compose.runtime.mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null)
     private var launchSystemReleased by androidx.compose.runtime.mutableStateOf(Build.VERSION.SDK_INT < 31)
     @Suppress("DEPRECATION")
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -63,13 +65,34 @@ class MainActivity : FragmentActivity() {
             splash.iconView?.let { icon ->
                 val location = IntArray(2)
                 icon.getLocationInWindow(location)
-                // The system icon drawable has a 22% inset on every side.
-                launchIconBounds = androidx.compose.ui.geometry.Rect(
-                    location[0] + icon.width * .22f, location[1] + icon.height * .22f,
-                    location[0] + icon.width * .78f, location[1] + icon.height * .78f)
+                if (icon.width > 0 && icon.height > 0) {
+                    runCatching {
+                        val bitmap = android.graphics.Bitmap.createBitmap(icon.width, icon.height, android.graphics.Bitmap.Config.ARGB_8888)
+                        icon.draw(android.graphics.Canvas(bitmap))
+                        bitmap.asImageBitmap()
+                    }.getOrNull()?.let { snapshot ->
+                        launchIconSnapshot = snapshot
+                        launchIconBounds = androidx.compose.ui.geometry.Rect(location[0].toFloat(), location[1].toFloat(),
+                            (location[0] + icon.width).toFloat(), (location[1] + icon.height).toFloat())
+                    }
+                }
             }
             launchSystemReleased = true
-            splash.remove()
+            // Keep the system frame until Compose has drawn the matching snapshot once.
+            val observer = window.decorView.viewTreeObserver
+            val listener = object : android.view.ViewTreeObserver.OnDrawListener {
+                private var scheduled = false
+                override fun onDraw() {
+                    if (scheduled) return
+                    scheduled = true
+                    window.decorView.post {
+                        if (observer.isAlive) observer.removeOnDrawListener(this)
+                        splash.remove()
+                    }
+                }
+            }
+            observer.addOnDrawListener(listener)
+            window.decorView.invalidate()
         }
         // Both system bars are transparent: the app draws behind the status bar and behind the navigation bar / gesture line, and the
         // navigation buttons get no grey scrim of their own (on phones that still draw one, the contrast enforcement is switched off).
@@ -82,7 +105,8 @@ class MainActivity : FragmentActivity() {
         val session = (application as TpmApp).session
         setContent {
             AppTheme {
-                com.personal.tpm.ui.CharacterLaunch(systemReleased = launchSystemReleased, systemIconBounds = launchIconBounds) { finished ->
+                com.personal.tpm.ui.CharacterLaunch(systemReleased = launchSystemReleased, systemIconBounds = launchIconBounds,
+                    systemIconSnapshot = launchIconSnapshot, onFinished = { launchIconSnapshot = null; launchIconBounds = null }) { finished ->
                     AppRoot(session, (application as TpmApp).vault, (application as TpmApp).pickerPrefs, (application as TpmApp).drafts, launchFinished = finished)
                 }
             }
