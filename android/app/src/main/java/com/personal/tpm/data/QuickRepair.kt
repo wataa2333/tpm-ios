@@ -5,7 +5,7 @@ import org.json.JSONObject
 
 fun quickRepairItem(todo: Jv): BatchItem? = batchItem(todo)?.takeIf {
     todo["id"].text.isNotBlank() &&
-    it.kind == OrderKind.Fault && it.group in setOf("SIGNED", "REPAIRED") && it.id.isNotBlank()
+    it.poolPrefix.isEmpty() && it.kind == OrderKind.Fault && it.group in setOf("SIGNED", "REPAIRED") && it.id.isNotBlank()
 }
 
 fun quickApproverKey(node: Jv): String = listOf(node["variableName"].text, node["assignType"].text,
@@ -41,7 +41,7 @@ internal class QuickRepairEngine(private val api: BatchApi) {
             rows.forEach { row ->
                 val identity = row["id"].text.ifEmpty { row.toString() }
                 if (seenTasks.add(identity)) fresh++
-                quickRepairItem(row)?.let { result.putIfAbsent(it.id, it) }
+                (quickRepairItem(row) ?: quickPoolItem(row))?.let { result.putIfAbsent(it.key, it) }
             }
             if (page["last"].bool || (page["last"].isNull && rows.size < 100)) break
             if (rows.isEmpty() || fresh == 0) error("待办分页没有继续推进，尚未读取完整，请刷新后重试")
@@ -51,6 +51,7 @@ internal class QuickRepairEngine(private val api: BatchApi) {
     }
 
     suspend fun prepare(item: BatchItem): QuickRepairPrepared {
+        if (item.poolPrefix.isNotEmpty()) return PoolProcessingEngine(api).prepare(item)
         require(item.kind == OrderKind.Fault && item.group in setOf("SIGNED", "REPAIRED")) { "快速完成仅用于维修待签到和待完成" }
         val detail = api.request(OrderKind.Fault.detailPath, mapOf("faultId" to item.id))
         val task = detail["taskInfo"]
@@ -67,6 +68,7 @@ internal class QuickRepairEngine(private val api: BatchApi) {
     }
 
     suspend fun sign(item: BatchItem): BatchItem {
+        if (item.poolPrefix.isNotEmpty()) return PoolProcessingEngine(api).sign(item)
         require(item.kind == OrderKind.Fault && item.group == "SIGNED")
         BatchProcessor.process(item, BatchAction.SignIn, BatchOperation.Proceed, BatchPreset(), api) { BatchChoice.Stop }
         val detail = api.request(OrderKind.Fault.detailPath, mapOf("faultId" to item.id))
@@ -75,6 +77,7 @@ internal class QuickRepairEngine(private val api: BatchApi) {
     }
 
     suspend fun submit(item: BatchItem, expectedTask: String, frozen: String, choices: Map<String, List<String>>, onWrite: () -> Unit = {}) {
+        if (item.poolPrefix.isNotEmpty()) { PoolProcessingEngine(api).submit(item, expectedTask, frozen, choices, onWrite); return }
         require(item.group == "REPAIRED")
         val fresh = prepare(item)
         check(fresh.task["id"].text == expectedTask) { "流程任务已变化，本次未写入" }

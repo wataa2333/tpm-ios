@@ -85,6 +85,7 @@ import java.time.ZoneOffset
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, onOpen: (String) -> Unit, onNew: (() -> Unit)? = null, reportAsset: ((com.personal.tpm.data.Jv) -> Unit)? = null) {
+    val skeletonCount = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp / 80 + 2).coerceIn(4, 40)
     val focus = LocalFocusManager.current
     val batch = vm.batch
     var activeList by remember { mutableStateOf<androidx.compose.foundation.lazy.LazyListState?>(null) }
@@ -171,7 +172,7 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
                                 ) {
                                     if (AppPreferences.liquidGlass) item(key = "glass-filters") { filtersOrderListScreen() }
                                     if (vm.loading && vm.rows.isEmpty()) {
-                                        items(4, key = { "skeleton$it" }, contentType = { "skeleton" }) { SkeletonCard(fadeItem(skeleton = true)) }
+                                        items(skeletonCount, key = { "skeleton$it" }, contentType = { "skeleton" }) { SkeletonCard(fadeItem(skeleton = true)) }
                                     }
                                     // The key carries the position: a page that shifts under the list can repeat an order, and a repeated key crashes a lazy list.
                                     itemsIndexed(vm.rows, key = { index, row -> row["faultId"].text + "#" + index }, contentType = { _, _ -> "order" }) { _, item ->

@@ -244,7 +244,7 @@ fun AppNav() {
             var selectedPoolOrder by remember { mutableStateOf<String?>(null) }
             PagedScreen(
             vm, kind.title, "暂无待接单工单", modelOf = { row, index -> poolCardModel(kind, row, index) }, onBack = { nav.popBackStack() },
-            open = { model, _ -> selectedPoolOrder = model.openId }, cardType = if (kind == PoolKind.Maintenance) CardType.Maintenance else CardType.Precision,
+            open = { model, _ -> selectedPoolOrder = model.openId }, poolKind = kind, cardType = if (kind == PoolKind.Maintenance) CardType.Maintenance else CardType.Precision,
         )
             SlideInOverlayFor(selectedPoolOrder) { id -> PoolOrderDetail(kind, id) { selectedPoolOrder = null } }
         }
@@ -271,7 +271,7 @@ fun AppNav() {
     }
     OperationAccountScope(quick.operationKey) {
         QuickFinishDialogs(quick, openForm = { nav.navigate("quick-finish") { launchSingleTop = true } },
-            openOrder = { nav.navigate("fault/" + Uri.encode(it)) })
+            openOrder = { item -> nav.navigate(if (item.poolPrefix.isEmpty()) "fault/" + Uri.encode(item.id) else "pool-order/${item.poolPrefix}/" + Uri.encode(item.id)) })
     }
     OperationAccountDialog()
     }

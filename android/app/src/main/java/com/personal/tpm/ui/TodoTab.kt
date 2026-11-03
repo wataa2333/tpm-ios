@@ -105,6 +105,7 @@ class TodoViewModel(private val session: Session) : ViewModel() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodoTab(vm: TodoViewModel, listState: LazyListState, pullState: PullToRefreshState, nested: Modifier, openOrder: (OrderKind, String) -> Unit, openPoolOrder: (PoolKind, String) -> Unit = { _, _ -> }) {
+    val skeletonCount = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp / 80 + 2).coerceIn(4, 40)
     AutoLoadMore(listState, vm.rows.size, !vm.loading && !vm.last && vm.error == null) { vm.loadMore() }
     val focus = LocalFocusManager.current
     var input by rememberSaveable { mutableStateOf(vm.query) }
@@ -118,7 +119,7 @@ fun TodoTab(vm: TodoViewModel, listState: LazyListState, pullState: PullToRefres
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     item(key = "search", contentType = "search") { TodoSearch(input, { input = it }, { vm.search(input); focus.clearFocus() }) }
-                    if (vm.loading && vm.rows.isEmpty()) items(4, key = { "skeleton$it" }, contentType = { "skeleton" }) { index -> SkeletonCard(fadeItem(skeleton = true), vm.skeletonTypes[index % vm.skeletonTypes.size]) }
+                    if (vm.loading && vm.rows.isEmpty()) items(skeletonCount, key = { "skeleton$it" }, contentType = { "skeleton" }) { index -> SkeletonCard(fadeItem(skeleton = true), vm.skeletonTypes[index % vm.skeletonTypes.size]) }
                     itemsIndexed(vm.rows, key = { index, task -> task["id"].text + "#" + index }, contentType = { _, _ -> "task" }) { _, task ->
                         val model = remember(task) { todoCardModel(task) }
                         val entry = remember(task) { batchItem(task) }

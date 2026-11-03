@@ -128,9 +128,11 @@ class PagedViewModel(
 fun PagedScreen(
     vm: PagedViewModel, title: String, emptyText: String, modelOf: (Jv, Int) -> CardModel, onBack: () -> Unit, open: ((CardModel, Jv) -> Unit)? = null,
     onNew: (() -> Unit)? = null, batchKind: com.personal.tpm.data.OrderKind? = null, openNotice: String? = null, cardType: CardType = CardType.Fault,
-    reportAsset: ((Jv) -> Unit)? = null,
+    reportAsset: ((Jv) -> Unit)? = null, poolKind: PoolKind? = null,
 ) {
+    val skeletonCount = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp / 80 + 2).coerceIn(4, 40)
     var noticeShown by remember { mutableStateOf(false) }
+    fun selectedItem(row: Jv) = poolKind?.let { poolBatchItem(it, row) } ?: batchKind?.let { batchItem(it, row) }
     val batch = vm.batch
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     val listState = rememberLazyListState()
@@ -165,13 +167,13 @@ fun PagedScreen(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         floatingOverlay = { if (onNew != null) NewButton(visible = !batch.active, label = "新建领料单", onClick = onNew) },
-        bottomBar = { if (batchKind != null) BatchBarHost(batch.active) { BatchBar(batch) { vm.rows.map { batchItem(batchKind, it) } } } },
+        bottomBar = { if (batchKind != null || poolKind != null) BatchBarHost(batch.active) { BatchBar(batch) { vm.rows.mapNotNull { selectedItem(it) } } } },
         topBar = {
             AppTopBar(
                 title = title, subtitle = vm.total?.let { "共 $it 条" }, onBack = onBack,
                 loading = vm.loading || vm.refreshing, pull = if (vm.refreshing) 0f else pull.distanceFraction,
                 actions = {
-                    if (batchKind != null) SelectButton(batch.active) { if (batch.active) batch.end() else batch.begin() }
+                    if (batchKind != null || poolKind != null) SelectButton(batch.active) { if (batch.active) batch.end() else batch.begin() }
                     RefreshButton(spinning = vm.loading || vm.refreshing) {
                         scope.launch { launch { hide.show() }; listState.animateScrollToItem(0) }
                         vm.reload(pull = true)
@@ -194,12 +196,12 @@ fun PagedScreen(
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
                                     if (AppPreferences.liquidGlass) item(key = "glass-filters") { filtersPagedScreen() }
-                                    if (vm.loading && vm.rows.isEmpty()) items(4, key = { "skeleton$it" }, contentType = { "skeleton" }) { SkeletonCard(fadeItem(skeleton = true), cardType) }
+                                    if (vm.loading && vm.rows.isEmpty()) items(skeletonCount, key = { "skeleton$it" }, contentType = { "skeleton" }) { SkeletonCard(fadeItem(skeleton = true), cardType) }
                                     // The key is the position: a page that shifts under the list can repeat a row, and a repeated key crashes a lazy list (and building a card just for its key was slow).
                                     items(vm.rows.size, key = { "row#$it" }, contentType = { "card" }) { index ->
                                         val row = vm.rows[index]
                                         val model = remember(row) { modelOf(row, index) }
-                                        val entry = remember(row) { batchKind?.let { batchItem(it, row) } }
+                                        val entry = remember(row) { selectedItem(row) }
                                         OrderCard(
                                             model, vm.expanded[model.key] == true,
                                             { val opening = vm.expanded[model.key] != true; vm.expanded[model.key] = opening; if (opening && openNotice != null) noticeShown = true },

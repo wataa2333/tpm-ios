@@ -34,3 +34,8 @@ fun poolExecutionError(data: Jv, prefix: String, existingMaterials: List<Jv> = e
 fun poolResultOption(option: Jv): String = option["value"].text.ifEmpty { option["text"].text.ifEmpty { option.text } }
 
 fun poolExecutionSnapshot(data: Jv) = JSONObject(data.raw.toString())
+
+fun poolDefaultRecord(prefix: String, row: Jv): JSONObject = poolExecutionSnapshot(row).also {
+    if (row["executeResult"].text == "NOT") it.put("executeResult", "EXECUTED")
+    if (row[prefix + "Result"].text.isBlank() && row[prefix + "Item"]["itemType"].text == "TEXT") it.put(prefix + "Result", "正常处理")
+}

@@ -1,5 +1,7 @@
 package com.personal.tpm.ui
 
+import androidx.compose.material.icons.filled.Bolt
+
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -181,7 +183,7 @@ fun MainShell(
                         exit = androidx.compose.animation.scaleOut(tween(Motion.Fast)) + androidx.compose.animation.fadeOut(tween(Motion.Fast))) {
                         GlassActionButton(onClick = openQuick, modifier = Modifier.heightIn(min = 56.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)) {
-                            Icon(Icons.Filled.Checklist, contentDescription = null)
+                            Icon(Icons.Filled.Bolt, contentDescription = null)
                             androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
                             Text("快速完成")
                         }

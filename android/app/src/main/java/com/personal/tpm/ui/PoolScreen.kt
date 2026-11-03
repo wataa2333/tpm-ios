@@ -45,3 +45,5 @@ suspend fun loadPoolOrder(session: com.personal.tpm.data.Session, kind: PoolKind
     val task = session.request("workflow/getUserTaskByProcessInstanceId", mapOf("processInstanceId" to detail["processInstanceId"].text))
     return Jv(org.json.JSONObject(detail.raw.toString()).put("taskInfo", task.raw))
 }
+
+fun poolBatchItem(kind: PoolKind, row: Jv) = com.personal.tpm.data.BatchItem(row[kind.idKey].text, com.personal.tpm.data.OrderKind.Fault, row[kind.nameKey].text, row["asset"]["assetCode"].text, kind.path.uppercase() + ":" + row[kind.stateKey].text, kind.path)

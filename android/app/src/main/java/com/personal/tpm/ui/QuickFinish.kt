@@ -57,7 +57,7 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
     private val edits = mutableMapOf<String, QuickRepairEdit>()
     fun editFor(id: String) = edits[id]
     fun retainEdit(id: String, edit: QuickRepairEdit) {
-        if (jobs.none { it.item.id == id && it.state != QuickJobState.Failed }) edits[id] = edit
+        if (jobs.none { it.item.key == id && it.state != QuickJobState.Failed }) edits[id] = edit
     }
     private val protectedOrders = mutableSetOf<String>()
     private val previous = mutableMapOf<String, List<String>>()
@@ -89,7 +89,7 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
     fun acknowledgeCompletion() { completionAcknowledged = true; visible = quickSubmissionActive(jobs.map { it.state }) }
     fun discover() {
         if (loading || signing || !valid) return
-        protectedOrders += jobs.filter { it.state == QuickJobState.Review }.map { it.item.id }
+        protectedOrders += jobs.filter { it.state == QuickJobState.Review }.map { it.item.key }
         // Submitted jobs keep their frozen actor while the next run reads fresh server state.
         jobs.removeAll { it.state == QuickJobState.Done || it.state == QuickJobState.Failed }
         round++
@@ -97,12 +97,12 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
         staged.clear(); skipped.clear(); signFailures.clear(); edits.clear(); previous.clear()
         completionAcknowledged = false
         loading = true; failure = null; begun = false; showProgress = false
-        val blockedAtStart = jobs.filter { quickBlocksNewRun(it.state) }.map { it.item.id }.toSet()
+        val blockedAtStart = jobs.filter { quickBlocksNewRun(it.state) }.map { it.item.key }.toSet()
         preparation = viewModelScope.launch {
             try {
                 val pending = engine(owner).pending()
-                val blocked = protectedOrders + blockedAtStart + jobs.filter { quickBlocksNewRun(it.state) }.map { it.item.id }
-                items = pending.filter { it.id !in blocked }; position = 0; confirming = true
+                val blocked = protectedOrders + blockedAtStart + jobs.filter { quickBlocksNewRun(it.state) }.map { it.item.key }
+                items = pending.filter { it.key !in blocked }; position = 0; confirming = true
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { failure = e.message ?: "读取待办失败" }
             finally { loading = false }
@@ -117,9 +117,9 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
             val ready = mutableListOf<BatchItem>()
             val failures = mutableListOf<String>()
             try {
-                val total = snapshot.count { it.group == "SIGNED" }; var signed = 0
+                val total = snapshot.count { it.group.substringAfter(":") == "SIGNED" }; var signed = 0
                 for (item in snapshot) {
-                    if (item.group == "SIGNED") {
+                    if (item.group.substringAfter(":") == "SIGNED") {
                         signProgress = "签到 ${signed + 1}/$total"
                         try { ready += engine(actor).sign(item) }
                         catch (e: CancellationException) { throw e }
@@ -146,31 +146,31 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
     suspend fun enqueue(prepared: QuickRepairPrepared, data: JSONObject, choices: Map<String, List<String>>, actor: Session, existingDraft: QuickDraftRef?) {
         val submittingRound = round
         check(valid && owner.signedIn) { "当前操作已失效" }
-        check(current?.id == prepared.item.id) { "当前工单已切换，请勿重复提交" }
-        check(jobs.none { it.item.id == prepared.item.id && it.state != QuickJobState.Failed }) { "此工单已在提交队列中" }
+        check(current?.key == prepared.item.key) { "当前工单已切换，请勿重复提交" }
+        check(jobs.none { it.item.key == prepared.item.key && it.state != QuickJobState.Failed }) { "此工单已在提交队列中" }
         val frozen = data.toString()
-        repairValidationError(Jv(JSONObject(frozen)))?.let { error(it) }
+        (if (prepared.item.poolPrefix.isEmpty()) repairValidationError(Jv(JSONObject(frozen))) else poolExecutionError(Jv(JSONObject(frozen)), prepared.item.poolPrefix, Jv(JSONObject(frozen))["erpMaintainMaterials"].array))?.let { error(it) }
         missingAssigneeMessage(prepared.nodes, choices)?.let { error(it) }
         rememberApprovers(prepared.nodes, choices)
-        val draftId = existingDraft?.id ?: UUID.randomUUID().toString(); val draftScope = existingDraft?.scope ?: actor.repairDraftScope
+        val draftId = existingDraft?.id ?: UUID.randomUUID().toString(); val draftScope = existingDraft?.scope ?: (actor.repairDraftScope + prepared.item.poolPrefix.takeIf { it.isNotEmpty() }?.let { ":pool:$it" }.orEmpty())
         withContext(Dispatchers.IO) { drafts.save(FormDraft(id = draftId, data = JSONObject(frozen), selections = choices, orderId = prepared.item.id,
             orderSn = prepared.detail["sn"].text.ifEmpty { null }), draftScope) }
-        check(valid && round == submittingRound && current?.id == prepared.item.id) { "当前操作已改变，内容已保存为草稿" }
-        jobs.removeAll { it.item.id == prepared.item.id && it.state == QuickJobState.Failed }
-        staged.removeAll { it.item.id == prepared.item.id }
-        skipped.remove(prepared.item.id)
+        check(valid && round == submittingRound && current?.key == prepared.item.key) { "当前操作已改变，内容已保存为草稿" }
+        jobs.removeAll { it.item.key == prepared.item.key && it.state == QuickJobState.Failed }
+        staged.removeAll { it.item.key == prepared.item.key }
+        skipped.remove(prepared.item.key)
         staged += QuickFinishJob(prepared.item, prepared.task["id"].text, frozen, choices.mapValues { it.value.toList() }, actor, draftId, draftScope, submittingRound)
-        edits[prepared.item.id] = QuickRepairEdit(frozen, choices.mapValues { it.value.toList() }, QuickDraftRef(draftId, draftScope))
+        edits[prepared.item.key] = QuickRepairEdit(frozen, choices.mapValues { it.value.toList() }, QuickDraftRef(draftId, draftScope))
     }
     fun next() = advance()
     fun previous() { if (position > 0) position-- }
     suspend fun finish() {
         check(valid && begun) { "当前任务已失效" }
-        val pending = staged.filter { it.item.id !in skipped }.map { saved ->
-            val edit = edits[saved.item.id]
+        val pending = staged.filter { it.item.key !in skipped }.map { saved ->
+            val edit = edits[saved.item.key]
             val data = edit?.data ?: saved.frozen
             val choices = edit?.choices ?: saved.choices
-            repairValidationError(Jv(JSONObject(data)))?.let { error("${saved.item.name}：$it，请返回该单修改") }
+            (if (saved.item.poolPrefix.isEmpty()) repairValidationError(Jv(JSONObject(data))) else poolExecutionError(Jv(JSONObject(data)), saved.item.poolPrefix, Jv(JSONObject(data))["erpMaintainMaterials"].array))?.let { error("${saved.item.name}：$it，请返回该单修改") }
             val prepared = engine(saved.actor).prepare(saved.item)
             missingAssigneeMessage(prepared.nodes, choices)?.let { error("${saved.item.name}：$it，请返回该单修改") }
             withContext(Dispatchers.IO) { drafts.save(FormDraft(id = saved.draftId, data = JSONObject(data), selections = choices,
@@ -179,10 +179,10 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
         }
         check(valid) { "当前任务已失效，草稿已保留" }
         jobs.addAll(pending); staged.clear()
-        items.filter { item -> roundJobs.none { it.item.id == item.id } }.forEach { if (it.id !in skipped) skipped += it.id }
+        items.filter { item -> roundJobs.none { it.item.key == item.key } }.forEach { if (it.key !in skipped) skipped += it.key }
         position = items.size; visible = true; startWorker()
     }
-    fun skip() { current?.let { if (it.id !in skipped) skipped += it.id; staged.removeAll { job -> job.item.id == it.id } }; advance() }
+    fun skip() { current?.let { if (it.key !in skipped) skipped += it.key; staged.removeAll { job -> job.item.key == it.key } }; advance() }
     private fun advance() { if (position < items.lastIndex) position++ }
     fun retry(job: QuickFinishJob, actor: Session) {
         if (job.state != QuickJobState.Failed || job.wrote || !valid) return
@@ -291,7 +291,7 @@ fun QuickFinishScreen(model: QuickFinishViewModel, onBack: () -> Unit) {
     var lastPage by remember { mutableStateOf(currentPage) }
     if (currentPage != null) lastPage = currentPage
     val page = currentPage ?: lastPage
-    LaunchedEffect(current?.id, model.begun) { if (model.begun && current == null) onBack() }
+    LaunchedEffect(current?.key, model.begun) { if (model.begun && current == null) onBack() }
     if (page != null && model.begun && !model.signing) {
         val change = updateTransition(page, label = "quick form page")
         val moving = change.currentState != change.targetState || change.isRunning
@@ -302,21 +302,24 @@ fun QuickFinishScreen(model: QuickFinishViewModel, onBack: () -> Unit) {
                     (slideIntoContainer((if (targetState.index >= initialState.index) AnimatedContentTransitionScope.SlideDirection.Left else AnimatedContentTransitionScope.SlideDirection.Right), tween(Motion.Normal, easing = Motion.Arrive)) togetherWith
                         slideOutOfContainer((if (targetState.index >= initialState.index) AnimatedContentTransitionScope.SlideDirection.Left else AnimatedContentTransitionScope.SlideDirection.Right), tween(Motion.Normal, easing = Motion.Leave)))
                         .using(SizeTransform(clip = false))
-                }, contentKey = { it.item.id }, modifier = Modifier.fillMaxSize()) { shown ->
+                }, contentKey = { it.item.key }, modifier = Modifier.fillMaxSize()) { shown ->
                     // Capture the outgoing page and its position until its exit animation finishes.
-                    RepairFormScreen(shown.item.id, onClose = onBack, onSubmitted = {}, quick = QuickRepairContext(
-                        restored = model.editFor(shown.item.id), retainEdit = { model.retainEdit(shown.item.id, it) },
+                    val context = QuickRepairContext(
+                        restored = model.editFor(shown.item.key), retainEdit = { model.retainEdit(shown.item.key, it) },
                         prepare = { model.prepare(shown.item, actor) },
                         enqueue = { prepared, data, choices, draft ->
                             model.enqueue(prepared, data, choices, actor, draft)
                             focus.clearFocus()
                         },
                         rememberApprovers = model::rememberApprovers,
-                        onSkip = { if (model.current?.id == shown.item.id) { focus.clearFocus(); model.skip() } },
+                        onSkip = { if (model.current?.key == shown.item.key) { focus.clearFocus(); model.skip() } },
                         onPrevious = { focus.clearFocus(); model.previous() },
-                        onFinish = model::finish, onNext = model::next, skipped = shown.item.id in model.skipped, hasPrevious = shown.index > 1, hasNext = shown.index < shown.total,
+                        onFinish = model::finish, onNext = model::next, skipped = shown.item.key in model.skipped, hasPrevious = shown.index > 1, hasNext = shown.index < shown.total,
                         position = "${shown.index}/${shown.total}",
-                    ))
+                    )
+                    if (shown.item.poolPrefix.isEmpty()) RepairFormScreen(shown.item.id, onClose = onBack, onSubmitted = {}, quick = context)
+                    else PoolExecutionForm(PoolKind.byPath(shown.item.poolPrefix)!!, shown.item.id, onClose = onBack, onSubmitFlow = {}, quick = context)
+
                 }
                 // While two forms are on screen, neither can receive an accidental second submission.
                 if (moving) Box(Modifier.matchParentSize().pointerInput(Unit) {
@@ -329,14 +332,14 @@ fun QuickFinishScreen(model: QuickFinishViewModel, onBack: () -> Unit) {
 
 /** Starting and finishing are dialogs over the existing page; only filling an order opens a route. */
 @Composable
-fun QuickFinishDialogs(model: QuickFinishViewModel, openForm: () -> Unit, openOrder: (String) -> Unit) {
+fun QuickFinishDialogs(model: QuickFinishViewModel, openForm: () -> Unit, openOrder: (BatchItem) -> Unit) {
     val actor = LocalSession.current
     if (model.confirming) GlassAlertDialog(onDismissRequest = model::cancelConfirmation,
         title = { Row(verticalAlignment = Alignment.CenterVertically) {
             Text("开始快速完成？", Modifier.weight(1f)); OperationAccountAction()
         } },
-        text = { Text("已读取全部待办：待签到 ${model.items.count { it.group == "SIGNED" }} 单，待完成 ${model.items.count { it.group == "REPAIRED" }} 单。\n" +
-            if (model.items.any { it.group == "SIGNED" }) "继续会先一键签到，再逐单填写；每单可以跳过。" else "继续后逐单填写，每单可以跳过。") },
+        text = { Text("已读取维修、保养及精度待办：待签到 ${model.items.count { it.group.substringAfter(":") == "SIGNED" }} 单，待完成 ${model.items.count { it.group.substringAfter(":") in setOf("REPAIRED", "MAINTAINED", "PRECISED") }} 单。\n" +
+            if (model.items.any { it.group.substringAfter(":") == "SIGNED" }) "继续会先一键签到，再逐单填写；每单可以跳过。" else "继续后逐单填写，每单可以跳过。") },
         confirmButton = { GlassTextButton(onClick = { model.begin(actor, openForm) }, enabled = model.items.isNotEmpty()) { Text("继续处理") } },
         dismissButton = { GlassTextButton(onClick = model::cancelConfirmation) { Text("取消") } })
     if (model.completionReady) GlassAlertDialog(onDismissRequest = model::acknowledgeCompletion,
@@ -359,7 +362,7 @@ fun QuickFinishDialogs(model: QuickFinishViewModel, openForm: () -> Unit, openOr
                     Text(job.message, style = MaterialTheme.typography.bodySmall)
                     Row {
                         if (job.state == QuickJobState.Failed && !job.wrote) GlassTextButton(onClick = { model.retry(job, actor) }) { Text("重试") }
-                        GlassTextButton(onClick = { model.showProgress = false; openOrder(job.item.id) }) { Text("核对工单") }
+                        GlassTextButton(onClick = { model.showProgress = false; openOrder(job.item) }) { Text("核对工单") }
                     }
                 } }
                 model.signFailures.forEach { message -> item { Text(message, style = MaterialTheme.typography.bodySmall) } }

@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 
 /** Read contracts recovered from the original App; business writes remain permission gated. */
 @Composable
-fun PoolOrderDetail(kind: PoolKind, id: String, onClose: () -> Unit) {
+fun PoolOrderDetail(kind: PoolKind, id: String, readOnly: Boolean = false, onClose: () -> Unit) {
     val session = LocalSession.current
     val scope = rememberCoroutineScope()
     var detail by remember(id) { mutableStateOf<Jv?>(null) }
@@ -47,7 +47,7 @@ fun PoolOrderDetail(kind: PoolKind, id: String, onClose: () -> Unit) {
     Surface(Modifier.fillMaxSize()) {
         FormPage(title = if (kind == PoolKind.Maintenance) "保养工单详情" else "精度检查工单详情",
             busy = busy, onClose = onClose, bottomBar = {
-                if (canOperate) GlassBottomSurface {
+                if (canOperate && !readOnly) GlassBottomSurface {
                     GlassActionButton(onClick = { action = if (detail?.get("taskInfo")?.get("category")?.text == if (kind == PoolKind.Maintenance) "MAINTAINED" else "PRECISED") "EDIT" else "FLOW" },
                         enabled = !busy, modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp)) {
                         Text(detail?.get("taskInfo")?.get("name")?.text?.ifEmpty { "处理任务" } ?: "处理任务")

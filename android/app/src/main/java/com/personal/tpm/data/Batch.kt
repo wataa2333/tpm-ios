@@ -31,8 +31,9 @@ enum class BatchAction(val title: String) {
 
     companion object {
         /** The one batch action that fits orders of a status, or null when that status has none. */
-        fun forGroup(group: String): BatchAction? = when (group) {
+        fun forGroup(group: String): BatchAction? = when (if (group.startsWith("MAINTAIN:") || group.startsWith("PRECISE:")) group.substringAfter(":") else group) {
             "REPORTED" -> Accept; "RECEIVED" -> Claim; "SIGNED" -> SignIn; "REPAIRED" -> Complete
+            "MAINTAINED", "PRECISED" -> Complete
             "VERIFIED", "RESOLVED" -> Approve
             "ERP:PENDING", "ERP:APPROVED", "ERP:EXECUTING", "ERP:CONFIRM" -> Approve
             else -> null
@@ -45,10 +46,12 @@ enum class BatchOperation { Proceed, Reject }
 
 /** The status an order is in, as the batch tells statuses apart: the fault state, or "ERP:" and the approval state. */
 fun batchGroup(kind: OrderKind, faultState: String, approvalState: String): String = if (kind == OrderKind.Fault) faultState else "ERP:$approvalState"
-fun batchGroupName(group: String): String = if (group.startsWith("ERP:")) "ERP " + approvalStateName(group.removePrefix("ERP:")) else faultStateName(group)
+fun batchGroupName(group: String): String = if (group.startsWith("MAINTAIN:") || group.startsWith("PRECISE:")) (if (group.startsWith("MAINTAIN:")) "保养 · " else "精度 · ") + when(group.substringAfter(":")) { "REPORTED" -> "待受理"; "RECEIVED" -> "待接单"; "SIGNED" -> "待签到"; "MAINTAINED", "PRECISED" -> "待完成"; "VERIFIED" -> "待确认"; else -> group.substringAfter(":") } else if (group.startsWith("ERP:")) "ERP " + approvalStateName(group.removePrefix("ERP:")) else faultStateName(group)
 
 /** One order that can be selected. */
-data class BatchItem(val id: String, val kind: OrderKind, val name: String, val reference: String, val group: String)
+data class BatchItem(val id: String, val kind: OrderKind, val name: String, val reference: String, val group: String, val poolPrefix: String = "") {
+    val key get() = "$poolPrefix:${kind.name}:$id"
+}
 
 fun batchItem(kind: OrderKind, item: Jv) = BatchItem(
     id = item[kind.idKey].text, kind = kind, name = if (kind == OrderKind.Fault) item["faultName"].text else erpCardTitle(item),
@@ -58,6 +61,13 @@ fun batchItem(kind: OrderKind, item: Jv) = BatchItem(
 
 /** A todo task carries its order in `data`; the order's id is the task's business key. */
 fun batchItem(todo: Jv): BatchItem? {
+    val pool = poolPrefixForTask(todo)
+    if (pool.isNotEmpty()) {
+        if (todo["suspended"].bool || todo["businessKey"].text.isEmpty()) return null
+        val data = todo["data"]
+        return BatchItem(todo["businessKey"].text, OrderKind.Fault, data[pool + "Name"].text.ifEmpty { todo["processInstanceName"].text },
+            data["asset"]["assetCode"].text, pool.uppercase() + ":" + data[pool + "State"].text.ifEmpty { todo["category"].text }, pool)
+    }
     val kind = todoKind(todo) ?: return null
     if (todo["suspended"].bool || todo["businessKey"].text.isEmpty()) return null
     val data = todo["data"]
@@ -109,12 +119,14 @@ data class BatchPreset(
     val erpDivision: Jv = Jv.NULL,
     val erpNodes: List<Jv> = emptyList(),
     val erpApprovers: Map<String, List<String>> = emptyMap(),
+    val poolTemplate: String? = null,
 ) {
     /** Assigning a repairer ends the accept step in "指派", which names no approver. */
     fun needsApprovers(action: BatchAction) = approverNodes.isNotEmpty() && !(action == BatchAction.Accept && assignUser.isFilled)
 
     fun isComplete(action: BatchAction, operation: BatchOperation = BatchOperation.Proceed): Boolean {
         if (operation == BatchOperation.Reject) return comment.isNotBlank()
+        if (poolTemplate != null) return poolExecutionError(Jv(JSONObject(poolTemplate)), if (JSONObject(poolTemplate).has("maintainRecords")) "maintain" else "precise") == null && missingAssigneeMessage(approverNodes, approvers) == null
         when (action) {
             BatchAction.Accept -> {
                 if (estimated.isBlank()) return false
@@ -164,6 +176,7 @@ object BatchProcessor {
         process(item, action, operation, preset, LiveBatchApi(session, prefs), ask)
 
     internal suspend fun process(item: BatchItem, action: BatchAction, operation: BatchOperation, preset: BatchPreset, session: BatchApi, ask: BatchAsk) {
+        if (item.poolPrefix.isNotEmpty()) { PoolProcessingEngine(session).process(item, action, operation, preset); return }
         if (BatchAction.forGroup(item.group) != action || !preset.isComplete(action, operation)) throw BatchError("批量处理方案不完整或与单据状态不匹配")
         val detail = wrap("读取单据") { session.request(item.kind.detailPath, mapOf(item.kind.idKey to item.id)) }
         ensureStillAtStep(detail, item)
@@ -385,6 +398,7 @@ object BatchProcessor {
 
     /** For the preset sheet: the approver nodes the first selected order leads to, with what is already ticked. Every order of one status leads to the same next node. */
     suspend fun approverSetup(item: BatchItem, session: Session, prefs: PickerPrefs): Pair<List<Jv>, Map<String, List<String>>> {
+        if (item.poolPrefix.isNotEmpty()) return PoolProcessingEngine(LiveBatchApi(session, prefs)).prepare(item).let { it.nodes to it.selections }
         val detail = wrap("读取单据") { session.request(item.kind.detailPath, mapOf(item.kind.idKey to item.id)) }
         ensureStillAtStep(detail, item)
         val task = detail["taskInfo"]

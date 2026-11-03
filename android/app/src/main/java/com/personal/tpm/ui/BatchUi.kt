@@ -123,7 +123,7 @@ class BatchSelection {
     fun begin() { active = true }
     fun end() { active = false; items.clear(); peeking = null }
     fun clear() { items.clear() }
-    fun contains(item: BatchItem) = items.any { it.id == item.id && it.kind == item.kind }
+    fun contains(item: BatchItem) = items.any { it.key == item.key }
     /** Whether the circle of this card works: its status has a batch action and matches what is already selected. */
     fun isSelectable(item: BatchItem): Boolean {
         if (item.id.isEmpty()) return false
@@ -133,7 +133,7 @@ class BatchSelection {
     }
     fun toggle(item: BatchItem) {
         if (item.id.isEmpty()) { notice = "这张单据没有编号，请刷新列表"; return }
-        val index = items.indexOfFirst { it.id == item.id && it.kind == item.kind }
+        val index = items.indexOfFirst { it.key == item.key }
         if (index >= 0) { items.removeAt(index); return }
         if (BatchAction.forGroup(item.group) == null) { notice = "「" + batchGroupName(item.group) + "」的单据暂不支持批量处理"; return }
         val current = group
@@ -171,7 +171,7 @@ class BatchSelection {
             val setup = try { BatchProcessor.approverSetup(first, session, prefs) }
             catch (e: CancellationException) { throw e }
             catch (e: Exception) { notice = "读取审批人失败：" + (e.message ?: ""); return }
-            val erp = if (chosenAction == BatchAction.Complete) erpSetup(session, prefs) else null
+            val erp = if (first.poolPrefix.isEmpty() && chosenAction == BatchAction.Complete) erpSetup(session, prefs) else null
             if (!active || items.toList() != snapshot) { notice = "已选单据发生变化，请重新开始批量处理"; return }
             val choosable = setup.first.filter { isChosenApprover(it) }
             if (chosenAction.needsPreset || missingAssigneeMessage(choosable, setup.second) != null) presetting = PresetRequest(chosenAction, BatchOperation.Proceed, first.kind, choosable, setup.second, erp, snapshot)
@@ -348,7 +348,8 @@ private fun BatchOverlaysContent(batch: BatchSelection) {
     androidx.activity.compose.BackHandler(enabled = batch.peeking != null) { batch.peeking = null }
     SlideInOverlayFor(batch.peeking) { item ->
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            if (item.kind == OrderKind.Fault) FaultDetailScreen(item.id, onBack = { batch.peeking = null }, onOpenFlow = {}, onOpenTask = {}, peeking = true)
+            if (item.poolPrefix.isNotEmpty()) PoolOrderDetail(PoolKind.byPath(item.poolPrefix)!!, item.id, onClose = { batch.peeking = null }, readOnly = true)
+            else if (item.kind == OrderKind.Fault) FaultDetailScreen(item.id, onBack = { batch.peeking = null }, onOpenFlow = {}, onOpenTask = {}, peeking = true)
             else ErpDetailScreen(item.id, onBack = { batch.peeking = null }, onOpenFlow = {}, onOpenTask = {}, peeking = true)
         }
     }
@@ -358,6 +359,10 @@ private fun BatchOverlaysContent(batch: BatchSelection) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BatchPresetSheet(request: PresetRequest, count: Int, onDismiss: () -> Unit, onStart: (BatchPreset) -> Unit) {
+    if (request.items.firstOrNull()?.poolPrefix?.isNotEmpty() == true) {
+        PoolBatchPreset(request, onDismiss, onStart)
+        return
+    }
     val action = request.action
     val operation = request.operation
     var preset by remember {
