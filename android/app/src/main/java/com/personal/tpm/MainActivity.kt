@@ -66,7 +66,9 @@ class MainActivity : FragmentActivity() {
         val session = (application as TpmApp).session
         setContent {
             AppTheme {
-                AppRoot(session, (application as TpmApp).vault, (application as TpmApp).pickerPrefs, (application as TpmApp).drafts)
+                com.personal.tpm.ui.CharacterLaunch { finished ->
+                    AppRoot(session, (application as TpmApp).vault, (application as TpmApp).pickerPrefs, (application as TpmApp).drafts, launchFinished = finished)
+                }
             }
         }
     }

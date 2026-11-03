@@ -40,7 +40,7 @@ class PoolProcessingTest {
         PoolProcessingEngine(api).process(item, BatchAction.Complete, BatchOperation.Proceed, BatchPreset(poolTemplate = template().toString()))
         assertEquals(listOf("maintain/handleMaintainOrder", "process/commitTask"), api.writes)
         assertEquals("12", Jv(api.saved)["orderId"].text)
-        assertEquals("22", Jv(api.saved)["maintainRecords"].array.single()["recordId"].text)
+        assertTrue(Jv(api.saved)["maintainRecords"].array.single()["recordId"].isNull)
         assertEquals("正常处理", Jv(api.saved)["maintainRecords"].array.single()["maintainResult"].text)
     }
     @Test fun incompatibleStandardsFailBeforeAnyWrite() = runBlocking {

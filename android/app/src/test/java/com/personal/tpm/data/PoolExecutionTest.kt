@@ -6,6 +6,21 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PoolExecutionTest {
+    @Test fun saveUsesRegisteredFormFieldsAndOmitsIgnoredAnswers() {
+        val data = form("maintain", result = "正常处理")
+        data.put("maintain", JSONObject().put("taskInfo", JSONObject().put("id", "workflow")))
+        val row = data.getJSONArray("maintainRecords").getJSONObject(0)
+        row.put("recordId", 99).put("executeResult", "IGNORE")
+        val payload = poolExecutionPayload(Jv(data), "maintain")
+        assertFalse(payload.has("maintain"))
+        val sent = payload.getJSONArray("maintainRecords").getJSONObject(0)
+        assertFalse(sent.has("recordId"))
+        assertFalse(sent.has("maintainResult"))
+        assertTrue(sent.has("maintainItem"))
+        assertEquals("IGNORE", sent.getString("executeResult"))
+        assertEquals(0, payload.getJSONArray("erpMaintainMaterials").length())
+        assertTrue(row.has("maintainResult"))
+    }
     private fun form(prefix: String = "precise", type: String = "TEXT", result: String = "", required: Boolean = true): JSONObject =
         JSONObject().put("orderId", 12).put("startTime", "2026-11-03 08:00").put("endTime", "2026-11-03 09:00")
             .put(prefix + "Records", JSONArray().put(JSONObject().put("executeResult", "EXECUTED").put(prefix + "Result", result)

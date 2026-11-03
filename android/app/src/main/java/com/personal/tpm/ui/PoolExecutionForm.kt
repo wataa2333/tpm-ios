@@ -107,7 +107,7 @@ fun PoolExecutionForm(kind: PoolKind, id: String, onClose: () -> Unit, onSubmitF
                 val latest = session.request("${kind.path}/getLatest${name}OrderBy${name}Id", mapOf(kind.idKey to id))
                 check(latest["orderId"].text == Jv(frozen)["orderId"].text) { "执行记录已变化，请重新打开" }
                 if (!saved) {
-                    session.request("${kind.path}/handle${name}Order", body = frozen)
+                    session.request("${kind.path}/handle${name}Order", body = poolExecutionPayload(Jv(frozen), kind.path))
                     saved = data.toString() == frozen.toString(); dirty = !saved; session.notifyChanged()
                 }
                 if (submit) {

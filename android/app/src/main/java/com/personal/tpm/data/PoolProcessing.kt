@@ -93,7 +93,7 @@ internal class PoolProcessingEngine(private val api: BatchApi) {
         poolExecutionError(payload, item.poolPrefix, existing)?.let { error(it) }
         val commit = commitTaskPayload(current.task, "agree", "", assigneesPayload(current.nodes, approvals))
         onWrite()
-        try { api.request("${item.poolPrefix}/handle${name(item.poolPrefix)}Order", body = JSONObject(data)) }
+        try { api.request("${item.poolPrefix}/handle${name(item.poolPrefix)}Order", body = poolExecutionPayload(payload, item.poolPrefix)) }
         catch (e: CancellationException) { throw e }
         catch (e: Exception) { throw QuickRepairWriteUncertain("保存执行结果", e) }
         try { api.request("process/commitTask", body = commit) }

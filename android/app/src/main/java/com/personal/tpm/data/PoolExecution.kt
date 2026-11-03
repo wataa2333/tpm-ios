@@ -35,6 +35,34 @@ fun poolResultOption(option: Jv): String = option["value"].text.ifEmpty { option
 
 fun poolExecutionSnapshot(data: Jv) = JSONObject(data.raw.toString())
 
+/** Match uni-forms' registered fields, rather than serializing the execution-detail graph. */
+fun poolExecutionPayload(data: Jv, prefix: String): JSONObject {
+    require(prefix in setOf("maintain", "precise"))
+    val out = JSONObject()
+    for (key in listOf("orderId", "startTime", "endTime", "content", "albums"))
+        if (!data[key].isNull) out.put(key, data[key].raw)
+    out.put(prefix + "Records", org.json.JSONArray(data[prefix + "Records"].array.map { row ->
+        JSONObject().also { record ->
+            for (key in listOf(prefix + "Item", "executeResult", "description"))
+                if (!row[key].isNull) record.put(key, poolExecutionSnapshotValue(row[key]))
+            // The original form unmounts the result field for ignored items.
+            if (row["executeResult"].text == "EXECUTED" && !row[prefix + "Result"].isNull)
+                record.put(prefix + "Result", row[prefix + "Result"].raw)
+        }
+    }))
+    if (prefix == "maintain") {
+        val materials = linkedMapOf<Pair<String, String>, Any?>()
+        data["erpMaintainMaterials"].array.forEach { row ->
+            materials[row["outbound"]["outboundId"].text to row["material"]["id"].text] = row.raw
+        }
+        out.put("erpMaintainMaterials", org.json.JSONArray(materials.values.toList()))
+    }
+    return out
+}
+
+private fun poolExecutionSnapshotValue(value: Jv): Any? =
+    if (value.isObject) poolExecutionSnapshot(value) else value.raw
+
 fun poolDefaultRecord(prefix: String, row: Jv): JSONObject = poolExecutionSnapshot(row).also {
     if (row["executeResult"].text == "NOT") it.put("executeResult", "EXECUTED")
     if (row[prefix + "Result"].text.isBlank() && row[prefix + "Item"]["itemType"].text == "TEXT") it.put(prefix + "Result", "正常处理")

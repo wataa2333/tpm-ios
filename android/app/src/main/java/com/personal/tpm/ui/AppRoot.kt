@@ -32,7 +32,7 @@ private enum class Screen { Login, Main }
 /** Sign in, then open the app. Each change is a plain cross-fade. */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.PickerPrefs, drafts: com.personal.tpm.data.DraftStore) {
+fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.PickerPrefs, drafts: com.personal.tpm.data.DraftStore, launchFinished: Boolean = true) {
     TransparentSystemBars()
     val auth by session.auth.collectAsState()
     val screen = when {
@@ -62,13 +62,12 @@ fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.
                     // The pages are rebuilt when the account or the factory changes (the key), like the iOS app.
                     Screen.Main -> Box(Modifier.fillMaxSize()) {
                         key(scope) { AppNav() }
-                        StartupCover()
                     }
                 }
             }
         }
         }
-        GlassIntroduction()
+        if (launchFinished) GlassIntroduction()
     }
 }
 
