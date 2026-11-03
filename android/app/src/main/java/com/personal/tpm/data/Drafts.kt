@@ -73,13 +73,13 @@ class DraftStore(context: Context) {
     fun warmUp() { readAll() }
 
     /** Newest first. */
-    fun drafts(scope: String, target: DraftTarget = DraftTarget.Everything): List<FormDraft> {
+    @Synchronized fun drafts(scope: String, target: DraftTarget = DraftTarget.Everything): List<FormDraft> {
         val list = readAll().optJSONArray(scope) ?: return emptyList()
         return List(list.length()) { FormDraft.fromJson(list.getJSONObject(it)) }.filter(target::matches).sortedByDescending { it.savedAt }
     }
 
     /** Saves a new draft, or replaces the one with the same id. */
-    fun save(draft: FormDraft, scope: String) {
+    @Synchronized fun save(draft: FormDraft, scope: String) {
         val all = readAll()
         val list = all.optJSONArray(scope) ?: JSONArray()
         val kept = JSONArray()
@@ -93,7 +93,7 @@ class DraftStore(context: Context) {
         writeAll(all)
     }
 
-    fun remove(id: String, scope: String) {
+    @Synchronized fun remove(id: String, scope: String) {
         val all = readAll()
         val list = all.optJSONArray(scope) ?: return
         val kept = JSONArray()

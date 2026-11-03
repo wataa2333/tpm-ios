@@ -83,6 +83,15 @@ class FormState(val kind: OrderKind) {
         finally { loading = false }
     }
 
+    /** Changing only the actor must not replace the user's entered values. */
+    suspend fun refreshActor(session: Session, existingId: String?, referenceSn: String? = null) {
+        val kept = JSONObject(data.toString())
+        val previous = nodes.associate { com.personal.tpm.data.quickApproverKey(it) to selections[it["variableName"].text].orEmpty() }
+        load(session, existingId, referenceSn)
+        data = kept
+        if (ready) selections = com.personal.tpm.data.inheritedQuickApprovers(nodes, selections, previous)
+    }
+
     /** A new form: the fields the person made a default for are filled in, then the default approvers. */
     suspend fun applyDefaults(session: Session, prefs: PickerPrefs) {
         val scope = session.draftScope

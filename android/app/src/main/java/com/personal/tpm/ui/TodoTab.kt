@@ -41,7 +41,9 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /** The signed-in account's open tasks (`process/pageUserTodoTask`). Its total is the badge on the tab. */
-class TodoViewModel(private val session: Session) : ViewModel() {
+class TodoViewModel(private val session: Session, autoStart: Boolean = true) : ViewModel() {
+    private var started = autoStart
+    fun ensureStarted() { if (!started) { started = true; reload() } }
     var skeletonTypes by mutableStateOf(listOf(CardType.TodoFault, CardType.TodoErp, CardType.TodoFault, CardType.TodoErp)); private set
     var query by mutableStateOf("") ; private set
     var rows by mutableStateOf<List<Jv>>(emptyList()); private set
@@ -60,14 +62,15 @@ class TodoViewModel(private val session: Session) : ViewModel() {
     val expanded = mutableStateMapOf<String, Boolean>()
     private var ticket = 0
 
-    init { reload() }
-    init { viewModelScope.launch { session.changed.drop(1).collect { reload() } } }
+    init { if (started) reload() }
+    init { viewModelScope.launch { session.changed.drop(1).collect { if (started) reload() } } }
 
     fun search(text: String) { val trimmed = text.trim(); if (trimmed != query) { query = trimmed; reload() } }
 
     private fun filters() = if (query.isEmpty()) emptyList() else listOf(filter("processInstanceName", query, "like"))
 
     fun reload(pull: Boolean = false) {
+        started = true
         val mine = ++ticket
         val snapshot = query
         if (rows.isNotEmpty()) skeletonTypes = rows.take(4).map { todoCardModel(it).cardType }
@@ -104,7 +107,8 @@ class TodoViewModel(private val session: Session) : ViewModel() {
 /** 我的待办: the tasks waiting for this account, as the same cards as the order lists. A card opens the order of its task. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TodoTab(vm: TodoViewModel, listState: LazyListState, pullState: PullToRefreshState, nested: Modifier, openOrder: (OrderKind, String) -> Unit) {
+fun TodoTab(vm: TodoViewModel, listState: LazyListState, pullState: PullToRefreshState, nested: Modifier, openOrder: (OrderKind, String) -> Unit, openPoolOrder: (PoolKind, String) -> Unit = { _, _ -> }) {
+    val skeletonCount = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp / 80 + 2).coerceIn(4, 40)
     AutoLoadMore(listState, vm.rows.size, !vm.loading && !vm.last && vm.error == null) { vm.loadMore() }
     val focus = LocalFocusManager.current
     var input by rememberSaveable { mutableStateOf(vm.query) }
@@ -118,13 +122,13 @@ fun TodoTab(vm: TodoViewModel, listState: LazyListState, pullState: PullToRefres
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     item(key = "search", contentType = "search") { TodoSearch(input, { input = it }, { vm.search(input); focus.clearFocus() }) }
-                    if (vm.loading && vm.rows.isEmpty()) items(4, key = { "skeleton$it" }, contentType = { "skeleton" }) { index -> SkeletonCard(fadeItem(skeleton = true), vm.skeletonTypes[index % vm.skeletonTypes.size]) }
+                    if (vm.loading && vm.rows.isEmpty()) items(skeletonCount, key = { "skeleton$it" }, contentType = { "skeleton" }) { index -> SkeletonCard(fadeItem(skeleton = true), vm.skeletonTypes[index % vm.skeletonTypes.size]) }
                     itemsIndexed(vm.rows, key = { index, task -> task["id"].text + "#" + index }, contentType = { _, _ -> "task" }) { _, task ->
                         val model = remember(task) { todoCardModel(task) }
                         val entry = remember(task) { batchItem(task) }
                         OrderCard(
                             model, vm.expanded[model.key] == true, { vm.expanded[model.key] = vm.expanded[model.key] != true }, fadeItem(),
-                            onOpen = { model.kind?.let { OrderPreview.put(it.toString(), model.openId, task["data"]); openOrder(it, model.openId) } },
+                            onOpen = { val pool = poolKindForTask(task); if (pool != null) openPoolOrder(pool, model.openId) else model.kind?.let { OrderPreview.put(it.toString(), model.openId, task["data"]); openOrder(it, model.openId) } },
                             selecting = if (vm.batch.active) {
                                 if (entry != null) CardSelecting(vm.batch.contains(entry), vm.batch.isSelectable(entry), { vm.batch.toggle(entry) }, { vm.batch.peeking = entry })
                                 else CardSelecting(false, false, { vm.batch.notice = "这条待办暂不支持批量处理" }, { vm.batch.notice = "这条待办暂不支持批量处理" })
@@ -135,7 +139,7 @@ fun TodoTab(vm: TodoViewModel, listState: LazyListState, pullState: PullToRefres
                         when {
                             vm.error != null -> AnimatedLabel(vm.error ?: "", Modifier.fillMaxWidth().padding(16.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                             !vm.loading && vm.rows.isEmpty() -> EmptyState("暂无待办")
-                            vm.rows.isNotEmpty() && !vm.last -> { Text("加载更多内容", Modifier.fillMaxWidth().padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+                            vm.rows.isNotEmpty() && !vm.last -> { LoadMoreFooter(vm.loadingMore) }
                             vm.rows.isNotEmpty() -> Text(
                                 vm.total?.let { "共 $it 个待办" } ?: "已显示全部 ${vm.rows.size} 条",
                                 Modifier.fillMaxWidth().padding(8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,

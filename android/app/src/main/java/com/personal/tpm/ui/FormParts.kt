@@ -9,11 +9,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import com.personal.tpm.ui.pageVerticalScroll as verticalScroll
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
@@ -25,15 +27,11 @@ import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,6 +42,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.animation.animateContentSize
@@ -94,10 +94,15 @@ import java.time.ZoneOffset
  */
 @Composable
 fun ChoiceChip(selected: Boolean, onClick: () -> Unit, label: String, enabled: Boolean = true) {
+    if (AppPreferences.liquidGlass) {
+        GlassFilterChip(selected, onClick, label = { Text(label, maxLines = 1) }, enabled = enabled)
+        return
+    }
+
     val background by androidx.compose.animation.animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "chipFill")
-    val content by androidx.compose.animation.animateColorAsState(if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "chipText")
+    val content by androidx.compose.animation.animateColorAsState(if (selected && !AppPreferences.liquidGlass) MaterialTheme.colorScheme.onPrimary else if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant, androidx.compose.animation.core.tween(Motion.Normal, easing = Motion.Change), label = "chipText")
     Row(
-        Modifier.clip(androidx.compose.foundation.shape.CircleShape).background(if(enabled) background else background.copy(alpha=.38f)).clickable(enabled=enabled,onClick = onClick)
+        Modifier.clip(androidx.compose.foundation.shape.CircleShape).then(if (AppPreferences.liquidGlass) Modifier.glassSurface(backdrop = null, shape = androidx.compose.foundation.shape.CircleShape, tint = if (enabled) background else background.copy(alpha=.38f), prominent = selected) else Modifier.background(if(enabled) background else background.copy(alpha=.38f))).clickable(enabled=enabled,onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -134,7 +139,7 @@ fun PickRow(label: String, value: String, required: Boolean, onClick: () -> Unit
     // The label keeps its own width on one line (it used to share the row and wrap); what is chosen takes the rest and may take two lines.
     // The press feedback is a rounded shape inside the card (the clip comes before the click), not a rectangle that squares off the card's corners.
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer).clickable(onClick = onClick).padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).then(if (AppPreferences.liquidGlass) Modifier.glassSearchSurface(RoundedCornerShape(16.dp), quiet = true) else Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer)).clickable(onClick = onClick).padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
         AnimatedLabel(requiredLabel(label, required), style = MaterialTheme.typography.bodyMedium, maxLines = 1, softWrap = false)
@@ -171,16 +176,12 @@ fun TextEntry(
             AnimatedLabel(requiredLabel(label, required), Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             androidx.compose.material3.TextField(
                 value = value, onValueChange = { onChange(it.take(limit)) },
-                modifier = Modifier.fillMaxWidth().animateContentSize(androidx.compose.animation.core.tween(Motion.Fast, easing = Motion.Change)),
+                modifier = Modifier.fillMaxWidth().animateContentSize(androidx.compose.animation.core.tween(Motion.Fast, easing = Motion.Change)).glassSearchSurface(RoundedCornerShape(8.dp), quiet = true),
                 shape = RoundedCornerShape(8.dp),
                 placeholder = if (placeholder.isEmpty()) null else ({ AnimatedLabel(placeholder) }),
                 minLines = 1, maxLines = if (multiline) maxOf(maxLines, 8) else 1, singleLine = !multiline,
                 keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-                colors = androidx.compose.material3.TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer, unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                ),
+                colors = searchFieldColors(onCard = true),
             )
             if (multiline) Text(
                 "${value.length}/$limit 字符", Modifier.fillMaxWidth().padding(end = 4.dp),
@@ -196,34 +197,34 @@ fun TextEntry(
 fun DateTimeField(label: String, value: String, dateOnly: Boolean, required: Boolean, onChange: (String) -> Unit) {
     var step by remember { mutableStateOf(0) } // 0 closed, 1 date, 2 time
     var pickedDate by remember { mutableStateOf<LocalDate?>(null) }
-    val current = remember(value) { parsedDate(Jv(value)).toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime() }
+    val current = remember(value) { parsedDate(Jv(value)).toInstant().atZone(com.personal.tpm.data.BusinessZone).toLocalDateTime() }
     PickRow(label, value, required) { step = 1 }
     if (step == 1) {
         val state = rememberDatePickerState(initialSelectedDateMillis = current.toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
         DatePickerDialog(
             onDismissRequest = { step = 0 },
             confirmButton = {
-                TextButton(enabled = state.selectedDateMillis != null, onClick = {
+                GlassTextButton(enabled = state.selectedDateMillis != null, onClick = {
                     val day = Instant.ofEpochMilli(state.selectedDateMillis!!).atZone(ZoneOffset.UTC).toLocalDate()
                     if (dateOnly) { onChange(day.toString()); step = 0 } else { pickedDate = day; step = 2 }
                 }) { AnimatedLabel(if (dateOnly) "确定" else "下一步") }
             },
-            dismissButton = { TextButton(onClick = { step = 0 }) { Text("取消") } },
+            dismissButton = { GlassTextButton(onClick = { step = 0 }) { Text("取消") } },
         ) { DatePicker(state) }
     }
     if (step == 2) {
         val time = rememberTimePickerState(initialHour = current.hour, initialMinute = current.minute, is24Hour = true)
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { step = 0 },
             title = { Text("选择时间") },
             text = { TimePicker(time) },
             confirmButton = {
-                TextButton(onClick = {
+                GlassTextButton(onClick = {
                     val moment = LocalDateTime.of(pickedDate ?: LocalDate.now(), LocalTime.of(time.hour, time.minute))
-                    onChange(serverDate(java.util.Date.from(moment.atZone(ZoneId.systemDefault()).toInstant()))); step = 0
+                    onChange(serverDate(java.util.Date.from(moment.atZone(com.personal.tpm.data.BusinessZone).toInstant()))); step = 0
                 }) { Text("确定") }
             },
-            dismissButton = { TextButton(onClick = { step = 0 }) { Text("取消") } },
+            dismissButton = { GlassTextButton(onClick = { step = 0 }) { Text("取消") } },
         )
     }
 }
@@ -239,7 +240,7 @@ private fun jpegOf(context: android.content.Context, uri: Uri): ByteArray? {
 
 /** The pictures of a form (at most nine): each can be deleted, new ones are picked with the system photo picker and uploaded at once. */
 @Composable
-fun PhotosField(albums: Jv, onChange: (JSONArray) -> Unit, directory: String, onUploading: (Boolean) -> Unit, onError: (String) -> Unit, modifier: Modifier = Modifier) {
+fun PhotosField(albums: Jv, onChange: (JSONArray) -> Unit, directory: String, onUploading: (Boolean) -> Unit, onError: (String) -> Unit, modifier: Modifier = Modifier, limit: Int = 9) {
     val context = LocalContext.current
     val session = LocalSession.current
     val scope = rememberCoroutineScope()
@@ -248,7 +249,7 @@ fun PhotosField(albums: Jv, onChange: (JSONArray) -> Unit, directory: String, on
     // The plain "pick several pictures" request (the system picker or the gallery, whichever the phone offers): the newer photo-picker request
     // checks limits that differ between phones and could throw the moment it was launched.
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-        val chosen = uris.take(maxOf(0, 9 - list.size))
+        val chosen = uris.take(maxOf(0, limit - list.size))
         if (chosen.isEmpty()) return@rememberLauncherForActivityResult
         uploading = true; onUploading(true)
         scope.launch {
@@ -269,18 +270,18 @@ fun PhotosField(albums: Jv, onChange: (JSONArray) -> Unit, directory: String, on
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Filled.Image, contentDescription = null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                 AnimatedLabel(image["name"].text.ifEmpty { "照片 ${index + 1}" }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                IconButton(onClick = { onChange(JSONArray().also { a -> list.forEachIndexed { i, v -> if (i != index) a.put(v.raw) } }) }) { Icon(Icons.Filled.Delete, contentDescription = "删除照片", tint = MaterialTheme.colorScheme.error) }
+                GlassIconButton(onClick = { onChange(JSONArray().also { a -> list.forEachIndexed { i, v -> if (i != index) a.put(v.raw) } }) }) { Icon(Icons.Filled.Delete, contentDescription = "删除照片", tint = MaterialTheme.colorScheme.error) }
             }
         }
         Row(
-            Modifier.fillMaxWidth().clickable(enabled = !uploading && list.size < 9) {
+            Modifier.fillMaxWidth().clickable(enabled = !uploading && list.size < limit) {
                 try { picker.launch("image/*") }
                 catch (e: Exception) { onError("打不开相册：" + (e.message ?: "没有可用的相册应用")) }
             }.padding(horizontal = 16.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Filled.AddPhotoAlternate, contentDescription = null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-            AnimatedLabel(if (uploading) "正在上传照片…" else "选择现场照片（${list.size}/9）", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+            AnimatedLabel(if (uploading) "正在上传照片…" else "选择现场照片（${list.size}/$limit）", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -292,13 +293,13 @@ fun PhotosField(albums: Jv, onChange: (JSONArray) -> Unit, directory: String, on
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FormActionBar(busy: Boolean, enabled: Boolean, onSave: (() -> Unit)?, onSubmit: () -> Unit, submitLabel: String = "提交") {
-    Surface(Modifier.fadeAbove(MaterialTheme.colorScheme.background), color = MaterialTheme.colorScheme.background, shadowElevation = 0.dp) {
+    GlassBottomSurface() {
         Row(
             Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical),
             horizontalArrangement = Arrangement.spacedBy(BarSpec.Gap), verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onSave != null) SoftButton(onClick = onSave, enabled = enabled && !busy, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight)) { Text("保存") }
-            Button(onClick = onSubmit, enabled = enabled && !busy, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight)) { AnimatedLabel(if (busy) "请稍候…" else submitLabel) }
+            GlassActionButton(onClick = onSubmit, enabled = enabled && !busy, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight)) { AnimatedLabel(if (busy) "请稍候…" else submitLabel) }
         }
     }
 }
@@ -348,6 +349,7 @@ fun FormPage(
     backEnabled: Boolean = true,
     /** Whether the page must ask something before it leaves (then the back key goes to [onBackGesture] and not to the navigation). */
     interceptBack: Boolean = false,
+    wideContent: Boolean = false,
     /** What the completed back gesture does; true when the page is going away, false when it stays (a question was asked instead). */
     onBackGesture: () -> Boolean = { onClose(); true },
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
@@ -360,15 +362,15 @@ fun FormPage(
     androidx.activity.compose.BackHandler(enabled = !backEnabled) { }
     androidx.activity.compose.BackHandler(enabled = backEnabled && interceptBack) { onBackGesture() }
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
-    CompactTheme { androidx.compose.material3.Scaffold(contentWindowInsets = appContentInsets(),
+    CompactTheme { GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(title = title, onBack = onClose, loading = busy, actions = actions) },
+        topBar = { AppTopBar(title = title, onBack = onClose, loading = busy, operationLocked = busy, actions = actions) },
         bottomBar = bottomBar,
         snackbarHost = { if (snackbar != null) androidx.compose.material3.SnackbarHost(snackbar) },
     ) { padding ->
         androidx.compose.foundation.layout.Box(Modifier.padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding())) {
             RoundedSheet {
-                PageWidth {
+                PageWidth(maxWidth = if (wideContent) 960.dp else ContentMaxWidth) {
                     androidx.compose.foundation.layout.Column(
                         Modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -398,7 +400,7 @@ fun DraftList(scopeKey: String, target: com.personal.tpm.data.DraftTarget, onPic
                 headlineContent = { AnimatedLabel(draft.title) },
                 supportingContent = { AnimatedLabel(draft.subtitle, maxLines = 2) },
                 trailingContent = {
-                    IconButton(onClick = { drafts.remove(draft.id, scopeKey); list = drafts.drafts(scopeKey, target) }) { Icon(Icons.Filled.Delete, contentDescription = "删除草稿", tint = MaterialTheme.colorScheme.error) }
+                    GlassIconButton(onClick = { drafts.remove(draft.id, scopeKey); list = drafts.drafts(scopeKey, target) }) { Icon(Icons.Filled.Delete, contentDescription = "删除草稿", tint = MaterialTheme.colorScheme.error) }
                 },
             )
         }
@@ -433,16 +435,21 @@ fun InputRow(
 ) {
     val style = MaterialTheme.typography.bodyMedium
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    val inputFocus = remember { FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val interactions = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     var wasFocused by remember { mutableStateOf(false) }
     fun confirmQuantity() {
         val number = value.toDoubleOrNull()
         if (maximum != null && maximum.isFinite() && maximum >= 0 && number != null && number.isFinite() && number > maximum)
             onChange(com.personal.tpm.data.quantityText(maximum))
     }
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).then(if (AppPreferences.liquidGlass) Modifier.glassSearchSurface(RoundedCornerShape(16.dp), quiet = true) else Modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer))
+        .clickable(interactionSource = interactions, indication = null) { inputFocus.requestFocus(); keyboard?.show() }
+        .padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         AnimatedLabel(requiredLabel(label, required), style = style, maxLines = 1, softWrap = false)
         androidx.compose.foundation.text.BasicTextField(
-            value = value, onValueChange = { onChange(it.take(limit)) }, singleLine = true, modifier = Modifier.weight(1f).onFocusChanged {
+            value = value, onValueChange = { onChange(it.take(limit)) }, singleLine = true, modifier = Modifier.weight(1f).heightIn(min = 48.dp).focusRequester(inputFocus).onFocusChanged {
                 if (wasFocused && !it.isFocused) confirmQuantity()
                 wasFocused = it.isFocused
             },
@@ -451,7 +458,7 @@ fun InputRow(
             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { confirmQuantity(); focus.clearFocus() }),
             cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
             decorationBox = { inner ->
-                androidx.compose.foundation.layout.Box(contentAlignment = Alignment.CenterEnd) {
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = 12.dp), contentAlignment = Alignment.CenterEnd) {
                     if (value.isEmpty()) AnimatedLabel(placeholder, style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     inner()
                 }
@@ -461,16 +468,17 @@ fun InputRow(
     }
 }
 
-/** A page laid over the screen that rises from the bottom (as long as a page slides, on the curve of arriving) and swallows touches meanwhile. */
+/** Keep the last item composed until the native vertical exit transition completes. */
 @Composable
-fun SlideUpOverlay(content: @Composable () -> Unit) {
-    val progress = remember { androidx.compose.animation.core.Animatable(0f) }
-    LaunchedEffect(Unit) { progress.animateTo(1f, androidx.compose.animation.core.tween(Motion.Page, easing = Motion.Arrive)) }
-    androidx.compose.foundation.layout.Box(
-        Modifier.fillMaxSize()
-            .graphicsLayer { translationY = (1f - progress.value) * size.height }
-            .pointerInput(Unit) { detectTapGestures { } },
-    ) { content() }
+fun <T : Any> SlideUpOverlayFor(item: T?, content: @Composable (T) -> Unit) {
+    var shown by remember { mutableStateOf(item) }
+    if (item != null) shown = item
+    androidx.compose.animation.AnimatedVisibility(visible = item != null,
+        enter = androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(Motion.Page, easing = Motion.Arrive)) { it },
+        exit = androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.tween(Motion.Page, easing = Motion.Leave)) { it },
+        modifier = Modifier.fillMaxSize()) {
+        shown?.let { last -> Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { } }) { content(last) } }
+    }
 }
 
 /** A page laid over the screen that slides in from the right, like every other page with a back arrow (same length, same curve), and swallows touches meanwhile. */

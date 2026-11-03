@@ -2,7 +2,7 @@
     <!-- Only the window shell: every colour on screen comes from Compose (ui/theme/ThemeConfig.kt). The window background is the page
          colour, so the moment before the first frame shows the page's own tone and not a white flash. -->
     <style name="Theme.Wataa" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:windowBackground">@drawable/launch_window</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:navigationBarDividerColor">@android:color/transparent</item>

@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import com.personal.tpm.ui.pageVerticalScroll as verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,7 +23,7 @@ import com.personal.tpm.data.DraftTarget
 fun DraftBoxScreen(onBack: () -> Unit, onOpenNew: (String) -> Unit) {
     val session = LocalSession.current
     var notice by remember { mutableStateOf<String?>(null) }
-    Scaffold(contentWindowInsets = appContentInsets(),
+    GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(title = "草稿箱", onBack = onBack) },
     ) { padding ->
@@ -35,6 +34,14 @@ fun DraftBoxScreen(onBack: () -> Unit, onOpenNew: (String) -> Unit) {
                         DraftList(session.draftScope, DraftTarget.Everything) { draft ->
                             if (draft.orderId == null) onOpenNew(draft.id)
                             else notice = "这份草稿属于单号 " + (draft.orderSn ?: "") + " 的工单。请打开那张工单，点右上角的“编辑”继续。"
+                        }
+                        listOf("维修完成" to session.repairDraftScope,
+                            "保养完成" to (session.repairDraftScope + ":pool:maintain"),
+                            "精度完成" to (session.repairDraftScope + ":pool:precise")).forEach { (title, draftScope) ->
+                            FormTitle("$title 草稿")
+                            DraftList(draftScope, DraftTarget.Everything) {
+                                notice = "请从“我的待办 → 快速完成”重新核对数量并继续，对应单据会恢复保存的填写内容。"
+                            }
                         }
                     }
                 }

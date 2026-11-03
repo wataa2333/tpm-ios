@@ -25,9 +25,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.filled.Edit
@@ -142,10 +140,10 @@ fun FaultDetailScreen(
     }
     // A task of this order was taken forward somewhere (the task screen): read it again.
     val changed by session.changed.collectAsState()
-    LaunchedEffect(id, changed, if (independent) queryAccounts.revision else 0) { load() }
+    LaunchedEffect(id, session.accountKey, changed, if (independent) queryAccounts.revision else 0) { load() }
 
     Box(Modifier.fillMaxSize()) {
-    Scaffold(contentWindowInsets = appContentInsets(),
+    GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             // Looking at an order from a selection is reading only: no buttons to take it forward.
@@ -162,7 +160,7 @@ fun FaultDetailScreen(
                 title = "报修详情", subtitle = detail?.get("sn")?.text?.ifEmpty { null }, onBack = onBack, loading = loading,
                 actions = {
                     if (!peeking && onEdit != null && operationDetail?.get("faultState")?.text == "UNTREATED" && operationDetail?.get("taskInfo")?.get("id")?.text.orEmpty().isNotEmpty()) {
-                        IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "编辑") }
+                        GlassIconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "编辑") }
                     }
                     RefreshButton(spinning = loading) { load() }
                 },
@@ -175,7 +173,7 @@ fun FaultDetailScreen(
             order == null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                 if (error != null) Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     AnimatedLabel(error ?: "", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
-                    TextButton(onClick = { load() }) { Text("重试") }
+                    GlassTextButton(onClick = { load() }) { Text("重试") }
                 }
             }
             else -> SelectionContainer { Column(
@@ -188,7 +186,7 @@ fun FaultDetailScreen(
                     FactRow("报修名称", order["faultName"].text)
                     FactRow("单号", order["sn"].text)
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("状态", Modifier.width(96.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("状态", Modifier.width(112.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         AnimatedLabel(faultStateLabel(order), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = stateColor(order["faultState"].text))
                     }
                     FactRow("故障时间", order["faultTime"].dateText)
@@ -214,7 +212,7 @@ fun FaultDetailScreen(
                             repairLoading -> Box(Modifier.padding(16.dp)) { LoadingText("读取维修任务") }
                             repairError != null -> Column(Modifier.padding(16.dp)) {
                                 AnimatedLabel(repairError.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                                TextButton(onClick = { scope.launch { readRepair(loadGeneration) } }) { Text("重试读取任务") }
+                                GlassTextButton(onClick = { scope.launch { readRepair(loadGeneration) } }) { Text("重试读取任务") }
                             }
                             repair == null -> FactRow("执行人", "接口未返回维修任务记录")
                             else -> {
@@ -236,10 +234,10 @@ fun FaultDetailScreen(
                     SectionTitle("维修退单说明")
                     GroupCard {
                         if (returnLoading) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Text("退单人", Modifier.width(96.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("退单人", Modifier.width(112.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             LoadingText()
                         } else FactRow("退单人", returnPerson.ifEmpty { if (returnError) "获取失败" else "流程未提供退单人" })
-                        if (returnError) TextButton(onClick = { returnRetry++ }) { Text("重新获取退单人") }
+                        if (returnError) GlassTextButton(onClick = { returnRetry++ }) { Text("重新获取退单人") }
                         if (note != null) {
                             if (note["signTime"].dateText.isNotEmpty()) {
                                 FactRow("签到时间", note["signTime"].dateText)

@@ -48,9 +48,8 @@ internal fun PrecisionDateChart(rows: List<Jv>, days: Int, setDays: (Int) -> Uni
     val scale = (ceil((values.maxOrNull() ?: 0).coerceAtLeast(1) / 4.0).toInt() * 4).coerceAtLeast(4)
     val fmt = DateTimeFormatter.ofPattern("MM-dd")
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(7, 30, 90).forEach { n -> ChoiceChip(days == n, { setDays(n) }, "近${n}天") }
-        }
+        val ranges = listOf(7, 30, 90)
+        SingleChoiceGroup(ranges.map { "近${it}天" }, ranges.indexOf(days), { setDays(ranges[it]) })
         AnimatedLabel("${dates.first().format(fmt)} — ${dates.last().format(fmt)} · 共${values.sum()}台", style = MaterialTheme.typography.bodySmall)
         Canvas(Modifier.fillMaxWidth().height(210.dp).semantics {
             contentDescription = "检测日期曲线图，${dates[selected]}：${values[selected]}台。支持双指缩放和横向拖动"

@@ -20,9 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -119,7 +117,7 @@ fun WorkflowScreen(processId: String, onBack: () -> Unit) {
     }
     LaunchedEffect(processId) { load() }
 
-    Scaffold(contentWindowInsets = appContentInsets(),
+    GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppTopBar(
@@ -134,7 +132,7 @@ fun WorkflowScreen(processId: String, onBack: () -> Unit) {
                     SelectionContainer { Column(Modifier.fillMaxSize().fadeInOnShow().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         error?.let { message ->
                             AnimatedLabel(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { load() }) { Text("重试") }
+                            GlassTextButton(onClick = { load() }) { Text("重试") }
                         }
                         if (history.isNotEmpty()) {
                             SectionTitle("处理记录")

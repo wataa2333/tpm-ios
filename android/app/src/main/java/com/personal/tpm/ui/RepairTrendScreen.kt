@@ -64,21 +64,18 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
             Text("日期范围",style=MaterialTheme.typography.titleSmall)
             RepairDateControls(vm)
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                Button(enabled=!vm.loading && vm.selectedSpan!=null,onClick=vm::prepare){AnimatedLabel(if(vm.started) "重新查询" else "查询")}
-                if(vm.loading) TextButton(onClick=vm::pause){Text("暂停")}
-                else if(vm.started && !vm.showingPrevious && !vm.snapshot.exhausted) TextButton(onClick={vm.load()}){Text("继续")}
+                GlassActionButton(enabled=!vm.loading && vm.selectedSpan!=null,onClick=vm::prepare){AnimatedLabel(if(vm.started) "重新查询" else "查询")}
+                if(vm.loading) GlassTextButton(onClick=vm::pause){Text("暂停")}
+                else if(vm.started && !vm.showingPrevious && !vm.snapshot.exhausted) GlassTextButton(onClick={vm.load()}){Text("继续")}
             }
             if(vm.loading) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
+                AppProgressIndicator(Modifier.fillMaxWidth())
                 AnimatedLabel(if(vm.checking) "正在预估数量" else "已读${vm.snapshot.readCount} / ${vm.expectedTotal?.toString() ?: "未知"}",style=MaterialTheme.typography.bodySmall)
             }
             } }
             GroupCard { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
             Text("统计粒度",style=MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
-                ChoiceChip(!monthly,{monthly=false},"按天")
-                ChoiceChip(monthly,{monthly=true},"按月")
-            }
+            SingleChoiceGroup(listOf("按天", "按月"), if(monthly) 1 else 0, { monthly = it == 1 })
             Text("按故障发现日期统计待确认、待复线及已完结的维修单。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(!complete) AnimatedLabel(if(vm.started) "数据未读完整，图表和表格仅为已加载数量。" else "选择日期后查询，再查看完整图表。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
             } }
@@ -94,7 +91,7 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
                 item { controls() }
                 item { GroupCard { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                     Text("人员对比",style=MaterialTheme.typography.titleSmall)
-                    OutlinedButton(onClick={picker=true},modifier=Modifier.fillMaxWidth(),border=BorderStroke(1.dp,accent.copy(alpha=.55f))){AnimatedLabel("选择对比人员 · 已选${shown.count{it.key!=ALL_REPAIR_TREND}}人")}
+                    GlassOutlinedButton(onClick={picker=true},modifier=Modifier.fillMaxWidth(),border=BorderStroke(1.dp,accent.copy(alpha=.55f))){AnimatedLabel("选择对比人员 · 已选${shown.count{it.key!=ALL_REPAIR_TREND}}人")}
                 } } }
             }
             item {
@@ -112,8 +109,8 @@ fun RepairTrendScreen(vm:RepairPendingViewModel,onBack:()->Unit) {
             item { RepairTrendTable(table,focus,{focus=it},monthly,complete,colors) }
         }
     }
-    Scaffold(contentWindowInsets=WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),topBar={AppTopBar("${days}天处理趋势",onBack=onBack,loading=vm.loading,actions={
-        if(!landscape) TextButton(onClick={manualLandscape=true}){Text("横屏")}
+    GlassScaffold(contentWindowInsets=WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),topBar={AppTopBar("${days}天处理趋势",onBack=onBack,loading=vm.loading,actions={
+        if(!landscape) GlassTextButton(onClick={manualLandscape=true}){Text("横屏")}
     })}){padding->
         if(landscape) Row(Modifier.padding(padding).fillMaxSize()){
             LazyColumn(Modifier.width(sidebarWidth).fillMaxHeight(),contentPadding=PaddingValues(start=12.dp,end=12.dp,top=12.dp,bottom=12.dp+navigationBottom),verticalArrangement=Arrangement.spacedBy(10.dp)){
@@ -133,7 +130,7 @@ private fun LazyListScope.trendPersonItems(series:List<RepairTrend>,selected:Set
     item {
         GroupCard { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text("人员与全部汇总",style=MaterialTheme.typography.titleSmall)
-        Row { TextButton(onClick=if(series.all{it.key in selected}) clear else selectAll){AnimatedLabel(if(series.all{it.key in selected}) "取消全选" else "全选")};TextButton(onClick=clear){Text("清空")}}
+        Row { GlassTextButton(onClick=if(series.all{it.key in selected}) clear else selectAll){AnimatedLabel(if(series.all{it.key in selected}) "取消全选" else "全选")};GlassTextButton(onClick=clear){Text("清空")}}
         } }
     }
     series.firstOrNull{it.key==ALL_REPAIR_TREND}?.let{all->item{TrendPerson(all,all.key in selected,colors[all.key] ?: Color.Gray,{toggle(all.key)},Modifier.fillMaxWidth())}}
@@ -163,7 +160,7 @@ private fun TrendPerson(person:RepairTrend,selected:Boolean,color:Color,onClick:
 private fun TrendPeopleSheet(series:List<RepairTrend>,selected:Set<String?>,colors:Map<String?,Color>,toggle:(String?)->Unit,selectAll:()->Unit,clear:()->Unit,onDismiss:()->Unit) {
     AppSheet(onDismissRequest=onDismiss,sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true)){
         Column(Modifier.fillMaxWidth().fillMaxHeight(.9f).padding(12.dp)){
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("选择对比人员",style=MaterialTheme.typography.titleMedium);TextButton(onClick=onDismiss){Text("完成")}}
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("选择对比人员",style=MaterialTheme.typography.titleMedium);GlassTextButton(onClick=onDismiss){Text("完成")}}
             LazyColumn(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(8.dp)){trendPersonItems(series,selected,colors,toggle,selectAll,clear)}
         }
     }
