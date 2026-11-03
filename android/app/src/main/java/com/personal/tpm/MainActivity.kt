@@ -13,8 +13,12 @@ import com.personal.tpm.ui.AppRoot
 import com.personal.tpm.ui.theme.AppTheme
 import com.personal.tpm.ui.theme.ThemeConfig
 import kotlin.math.roundToInt
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 class MainActivity : FragmentActivity() {
+    private var launchIconBounds by androidx.compose.runtime.mutableStateOf<androidx.compose.ui.geometry.Rect?>(null)
+    private var launchSystemReleased by androidx.compose.runtime.mutableStateOf(Build.VERSION.SDK_INT < 31)
     @Suppress("DEPRECATION")
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -55,6 +59,18 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= 31) splashScreen.setOnExitAnimationListener { splash ->
+            splash.iconView?.let { icon ->
+                val location = IntArray(2)
+                icon.getLocationInWindow(location)
+                // The system icon drawable has a 22% inset on every side.
+                launchIconBounds = androidx.compose.ui.geometry.Rect(
+                    location[0] + icon.width * .22f, location[1] + icon.height * .22f,
+                    location[0] + icon.width * .78f, location[1] + icon.height * .78f)
+            }
+            launchSystemReleased = true
+            splash.remove()
+        }
         // Both system bars are transparent: the app draws behind the status bar and behind the navigation bar / gesture line, and the
         // navigation buttons get no grey scrim of their own (on phones that still draw one, the contrast enforcement is switched off).
         enableEdgeToEdge(
@@ -66,7 +82,7 @@ class MainActivity : FragmentActivity() {
         val session = (application as TpmApp).session
         setContent {
             AppTheme {
-                com.personal.tpm.ui.CharacterLaunch { finished ->
+                com.personal.tpm.ui.CharacterLaunch(systemReleased = launchSystemReleased, systemIconBounds = launchIconBounds) { finished ->
                     AppRoot(session, (application as TpmApp).vault, (application as TpmApp).pickerPrefs, (application as TpmApp).drafts, launchFinished = finished)
                 }
             }
