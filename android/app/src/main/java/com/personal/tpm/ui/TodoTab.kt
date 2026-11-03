@@ -41,7 +41,9 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /** The signed-in account's open tasks (`process/pageUserTodoTask`). Its total is the badge on the tab. */
-class TodoViewModel(private val session: Session) : ViewModel() {
+class TodoViewModel(private val session: Session, autoStart: Boolean = true) : ViewModel() {
+    private var started = autoStart
+    fun ensureStarted() { if (!started) { started = true; reload() } }
     var skeletonTypes by mutableStateOf(listOf(CardType.TodoFault, CardType.TodoErp, CardType.TodoFault, CardType.TodoErp)); private set
     var query by mutableStateOf("") ; private set
     var rows by mutableStateOf<List<Jv>>(emptyList()); private set
@@ -60,14 +62,15 @@ class TodoViewModel(private val session: Session) : ViewModel() {
     val expanded = mutableStateMapOf<String, Boolean>()
     private var ticket = 0
 
-    init { reload() }
-    init { viewModelScope.launch { session.changed.drop(1).collect { reload() } } }
+    init { if (started) reload() }
+    init { viewModelScope.launch { session.changed.drop(1).collect { if (started) reload() } } }
 
     fun search(text: String) { val trimmed = text.trim(); if (trimmed != query) { query = trimmed; reload() } }
 
     private fun filters() = if (query.isEmpty()) emptyList() else listOf(filter("processInstanceName", query, "like"))
 
     fun reload(pull: Boolean = false) {
+        started = true
         val mine = ++ticket
         val snapshot = query
         if (rows.isNotEmpty()) skeletonTypes = rows.take(4).map { todoCardModel(it).cardType }

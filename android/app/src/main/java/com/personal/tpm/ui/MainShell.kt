@@ -133,8 +133,17 @@ fun MainShell(
     LaunchedEffect(homeVm.loading) {
         if (!homeVm.loading) { androidx.compose.runtime.withFrameNanos { }; launchReady() }
     }
-    val todoVm = viewModel<TodoViewModel>(factory = viewModelFactory { initializer { TodoViewModel(session) } })
-    val workspaceVm = viewModel<WorkspaceViewModel>(factory = viewModelFactory { initializer { WorkspaceViewModel(session) } })
+    val todoVm = viewModel<TodoViewModel>(factory = viewModelFactory { initializer { TodoViewModel(session, autoStart = false) } })
+    val workspaceVm = viewModel<WorkspaceViewModel>(factory = viewModelFactory { initializer { WorkspaceViewModel(session, autoStart = false) } })
+    val launchFinished = LocalLaunchFinished.current
+    LaunchedEffect(launchFinished, selected) {
+        if (launchFinished) {
+            // Badge refresh follows the reveal; workspace queries start only when that tab is needed.
+            kotlinx.coroutines.delay(150)
+            todoVm.ensureStarted()
+            if (selected == 2) workspaceVm.ensureStarted()
+        }
+    }
     val gridState = rememberLazyGridState()
     val workspaceGrid = rememberLazyGridState()
     val todoState = rememberLazyListState()

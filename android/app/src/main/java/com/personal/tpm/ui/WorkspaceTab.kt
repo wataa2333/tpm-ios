@@ -74,18 +74,21 @@ enum class WorkList(val key: String, val title: String, val page: String) {
 }
 
 /** The numbers on the workbench cards: one request per card asking for a single row; only the total is used. */
-class WorkspaceViewModel(private val session: Session) : ViewModel() {
+class WorkspaceViewModel(private val session: Session, autoStart: Boolean = true) : ViewModel() {
+    private var started = autoStart
+    fun ensureStarted() { if (!started) { started = true; reload() } }
     var counts by mutableStateOf<Map<String, Int>>(emptyMap()); private set
     var refreshing by mutableStateOf(false); private set
     var loading by mutableStateOf(true); private set
     var error by mutableStateOf<String?>(null); private set
     private var ticket = 0
 
-    init { reload() }
-    init { viewModelScope.launch { session.changed.drop(1).collect { reload() } } }
-    init { viewModelScope.launch { session.queryAccounts?.changes?.drop(1)?.collect { counts = emptyMap(); reload() } } }
+    init { if (started) reload() }
+    init { viewModelScope.launch { session.changed.drop(1).collect { if (started) reload() } } }
+    init { viewModelScope.launch { session.queryAccounts?.changes?.drop(1)?.collect { counts = emptyMap(); if (started) reload() } } }
 
     fun reload(pull: Boolean = false) {
+        started = true
         val mine = ++ticket
         refreshing = pull; loading = true; error = null
         viewModelScope.launch {
