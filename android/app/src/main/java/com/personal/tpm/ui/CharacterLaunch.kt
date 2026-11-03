@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -33,6 +34,7 @@ import kotlin.math.roundToInt
 fun CharacterLaunch(content: @Composable (finished: Boolean) -> Unit) {
     var finished by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
+    val firstFrame = if (!finished) ImageBitmap.imageResource(R.drawable.launch_character_first) else null
     var assetLoaded by remember { mutableStateOf(false) }
     val sheet by produceState<ImageBitmap?>(null) {
         if (!finished) value = runCatching { withContext(Dispatchers.IO) {
@@ -47,25 +49,26 @@ fun CharacterLaunch(content: @Composable (finished: Boolean) -> Unit) {
         if (assetLoaded && sheet == null) { finished = true; return@LaunchedEffect }
         if (sheet != null) {
             withFrameNanos { }
-            clock.animateTo(2400f, tween(2400, easing = LinearEasing))
+            clock.animateTo(1100f, tween(1100, easing = LinearEasing))
             finished = true
         }
     }
     BackHandler(!finished) { }
     Box(Modifier.fillMaxSize().background(Color.White)) {
-        if (!finished) sheet?.let { image ->
+        if (!finished) (sheet ?: firstFrame)?.let { image ->
             val cleanAlpha = remember { ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
                 1f,0f,0f,0f,0f, 0f,1f,0f,0f,0f, 0f,0f,1f,0f,0f, 0f,0f,0f,1.2f,-51f
             ))) }
             Canvas(Modifier.fillMaxSize()) {
-                val frame = (clock.value / 180f).toInt().coerceIn(0, 11)
-                val cellWidth = image.width / 4
-                val cellHeight = image.height / 3
-                val width = size.width.coerceAtMost(400.dp.toPx()) * .89f
+                val isSheet = sheet != null
+                val frame = launchFrameIndex(clock.value)
+                val cellWidth = if (isSheet) image.width / 4 else image.width
+                val cellHeight = if (isSheet) image.height / 3 else image.height
+                val width = 156.dp.toPx().coerceAtMost(size.width * .48f)
                 val height = width * cellHeight / cellWidth
-                drawImage(image, srcOffset = IntOffset(frame % 4 * cellWidth, frame / 4 * cellHeight),
+                drawImage(image, srcOffset = if (isSheet) IntOffset(frame % 4 * cellWidth, frame / 4 * cellHeight) else IntOffset.Zero,
                     srcSize = IntSize(cellWidth, cellHeight),
-                    dstOffset = IntOffset(((size.width - width) / 2).roundToInt(), (size.height * .30f).roundToInt()),
+                    dstOffset = IntOffset(((size.width - width) / 2).roundToInt(), ((size.height - height) / 2).roundToInt()),
                     dstSize = IntSize(width.roundToInt(), height.roundToInt()), colorFilter = cleanAlpha)
             }
         }
@@ -83,6 +86,8 @@ fun CharacterLaunch(content: @Composable (finished: Boolean) -> Unit) {
 }
 
 internal fun launchPullProgress(milliseconds: Float): Float {
-    val t = ((milliseconds - 1580f) / 820f).coerceIn(0f, 1f)
+    val t = ((milliseconds - 540f) / 560f).coerceIn(0f, 1f)
     return 1f - (1f - t) * (1f - t) * (1f - t)
 }
+
+internal fun launchFrameIndex(milliseconds: Float): Int = (milliseconds / 60f).toInt().coerceIn(0, 11)

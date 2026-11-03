@@ -2,11 +2,11 @@
     <!-- Android 12 and newer always show a start-up window with the app icon; it cannot be switched off. It is made empty here: the page
          colour and an invisible icon, so the app seems to open straight onto its first screen. -->
     <style name="Theme.Wataa" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowBackground">@drawable/launch_window</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowSplashScreenBackground">@android:color/white</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_blank</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/launch_system_icon</item>
         <item name="android:windowSplashScreenAnimationDuration">0</item>
     </style>
 </resources>
