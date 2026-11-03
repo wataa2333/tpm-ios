@@ -19,7 +19,7 @@ android {
         applicationId = "com.personal.tpm"
         minSdk = 29            // Android 10
         targetSdk = 35
-        versionCode = 115
+        versionCode = 116
         versionName = "2.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEFAULT_QUERY_USERNAME", queryConfigLiteral("C0382522"))

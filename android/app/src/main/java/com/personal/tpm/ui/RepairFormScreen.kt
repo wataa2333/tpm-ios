@@ -147,7 +147,7 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
             onClose()
         } catch (e: Exception) { failure = "提示" to ("草稿没有保存成功：" + (e.message ?: "")) }
     }
-    fun submit() {
+    fun submit(endTask: Boolean = false) {
         val capped = com.personal.tpm.data.clampRepairQuantities(data)
         data = capped
         repairValidationError(Jv(capped))?.let { failure = "请检查表单" to it; return }
@@ -162,6 +162,7 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
             try {
                 if (quick != null) {
                     quick.enqueue(prepared!!, capped, approvers, draftId?.let { QuickDraftRef(it, scopeKey) })
+                    if (endTask) quick.onFinish() else quick.onNext()
                     return@launch
                 }
                 try { session.request("repair/handleRepair", body = repairPayload(capped, jv["repairId"].raw)) }
@@ -179,7 +180,9 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
         bottomBar = {
             if (quick == null) FormActionBar(busy = saving, enabled = loaded && !photoBusy, onSave = { keepDraft() }, onSubmit = { submit() }, submitLabel = "提交")
             else GlassBottomSurface {
-                Row(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SoftButton(onClick = { currentEdit?.let(quick.retainEdit); quick.onPrevious() }, enabled = quick.hasPrevious && !saving && !photoBusy, modifier = Modifier.weight(1f)) { Text("上一单") }
                     SoftButton(onClick = {
                         if (loaded && dirty) {
                             try { store.save(FormDraft(id = draftId ?: java.util.UUID.randomUUID().toString(), data = JSONObject(data.toString()), selections = approvers, orderId = faultId), scopeKey) }
@@ -187,7 +190,17 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
                         }
                         quick.onSkip()
                     }, enabled = !saving && !photoBusy, modifier = Modifier.weight(1f)) { Text("跳过") }
-                    GlassActionButton(onClick = ::submit, enabled = loaded && !saving && !photoBusy && prepared != null, modifier = Modifier.weight(1f)) { Text("下一条") }
+                    GlassActionButton(onClick = { submit() }, enabled = quick.hasNext && loaded && !saving && !photoBusy && prepared != null, modifier = Modifier.weight(1f)) { Text("下一单") }
+                }
+                GlassActionButton(onClick = {
+                    if (!quick.skipped) submit(true) else scope.launch {
+                        saving = true
+                        try { quick.onFinish() }
+                        catch (e: CancellationException) { throw e }
+                        catch (e: Exception) { failure = "任务尚未提交" to (e.message ?: "请重试") }
+                        finally { saving = false }
+                    }
+                }, enabled = loaded && !saving && !photoBusy && prepared != null, modifier = Modifier.fillMaxWidth()) { Text("结束任务") }
                 }
             }
         },

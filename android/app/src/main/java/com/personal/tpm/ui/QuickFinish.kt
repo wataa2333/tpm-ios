@@ -52,11 +52,12 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
     var failure by mutableStateOf<String?>(null)
     var visible by mutableStateOf(false); private set
     val jobs = mutableStateListOf<QuickFinishJob>()
+    private val staged = mutableStateListOf<QuickFinishJob>()
     val skipped = mutableStateListOf<String>()
     private val edits = mutableMapOf<String, QuickRepairEdit>()
     fun editFor(id: String) = edits[id]
     fun retainEdit(id: String, edit: QuickRepairEdit) {
-        if (jobs.none { it.item.id == id && it.state != QuickJobState.Failed } && id !in skipped) edits[id] = edit
+        if (jobs.none { it.item.id == id && it.state != QuickJobState.Failed }) edits[id] = edit
     }
     private val protectedOrders = mutableSetOf<String>()
     private val previous = mutableMapOf<String, List<String>>()
@@ -93,7 +94,7 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
         jobs.removeAll { it.state == QuickJobState.Done || it.state == QuickJobState.Failed }
         round++
         items = emptyList(); position = 0
-        skipped.clear(); signFailures.clear(); edits.clear(); previous.clear()
+        staged.clear(); skipped.clear(); signFailures.clear(); edits.clear(); previous.clear()
         completionAcknowledged = false
         loading = true; failure = null; begun = false; showProgress = false
         val blockedAtStart = jobs.filter { quickBlocksNewRun(it.state) }.map { it.item.id }.toSet()
@@ -156,12 +157,33 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
             orderSn = prepared.detail["sn"].text.ifEmpty { null }), draftScope) }
         check(valid && round == submittingRound && current?.id == prepared.item.id) { "当前操作已改变，内容已保存为草稿" }
         jobs.removeAll { it.item.id == prepared.item.id && it.state == QuickJobState.Failed }
-        jobs += QuickFinishJob(prepared.item, prepared.task["id"].text, frozen, choices.mapValues { it.value.toList() }, actor, draftId, draftScope, submittingRound)
-        edits.remove(prepared.item.id)
-        visible = true; advance(); startWorker()
+        staged.removeAll { it.item.id == prepared.item.id }
+        skipped.remove(prepared.item.id)
+        staged += QuickFinishJob(prepared.item, prepared.task["id"].text, frozen, choices.mapValues { it.value.toList() }, actor, draftId, draftScope, submittingRound)
+        edits[prepared.item.id] = QuickRepairEdit(frozen, choices.mapValues { it.value.toList() }, QuickDraftRef(draftId, draftScope))
     }
-    fun skip() { current?.let { skipped += it.id; edits.remove(it.id) }; advance() }
-    private fun advance() { position++; while (current != null && jobs.any { it.item.id == current?.id }) position++ }
+    fun next() = advance()
+    fun previous() { if (position > 0) position-- }
+    suspend fun finish() {
+        check(valid && begun) { "当前任务已失效" }
+        val pending = staged.filter { it.item.id !in skipped }.map { saved ->
+            val edit = edits[saved.item.id]
+            val data = edit?.data ?: saved.frozen
+            val choices = edit?.choices ?: saved.choices
+            repairValidationError(Jv(JSONObject(data)))?.let { error("${saved.item.name}：$it，请返回该单修改") }
+            val prepared = engine(saved.actor).prepare(saved.item)
+            missingAssigneeMessage(prepared.nodes, choices)?.let { error("${saved.item.name}：$it，请返回该单修改") }
+            withContext(Dispatchers.IO) { drafts.save(FormDraft(id = saved.draftId, data = JSONObject(data), selections = choices,
+                orderId = saved.item.id, orderSn = prepared.detail["sn"].text.ifEmpty { null }), saved.draftScope) }
+            QuickFinishJob(saved.item, prepared.task["id"].text, data, choices.mapValues { it.value.toList() }, saved.actor, saved.draftId, saved.draftScope, round)
+        }
+        check(valid) { "当前任务已失效，草稿已保留" }
+        jobs.addAll(pending); staged.clear()
+        items.filter { item -> roundJobs.none { it.item.id == item.id } }.forEach { if (it.id !in skipped) skipped += it.id }
+        position = items.size; visible = true; startWorker()
+    }
+    fun skip() { current?.let { if (it.id !in skipped) skipped += it.id; staged.removeAll { job -> job.item.id == it.id } }; advance() }
+    private fun advance() { if (position < items.lastIndex) position++ }
     fun retry(job: QuickFinishJob, actor: Session) {
         if (job.state != QuickJobState.Failed || job.wrote || !valid) return
         job.actor = actor; job.state = QuickJobState.Queued; visible = true; startWorker()
@@ -207,6 +229,12 @@ data class QuickRepairContext(
     val enqueue: suspend (QuickRepairPrepared, JSONObject, Map<String, List<String>>, QuickDraftRef?) -> Unit,
     val rememberApprovers: (List<Jv>, Map<String, List<String>>) -> Unit,
     val onSkip: () -> Unit,
+    val onPrevious: () -> Unit,
+    val onFinish: suspend () -> Unit,
+    val onNext: () -> Unit,
+    val skipped: Boolean,
+    val hasPrevious: Boolean,
+    val hasNext: Boolean,
     val position: String,
 )
 data class QuickProgress(val text: String?, val open: () -> Unit, val reserveHeaderSpace: Boolean = false)
@@ -271,8 +299,8 @@ fun QuickFinishScreen(model: QuickFinishViewModel, onBack: () -> Unit) {
             LocalOperationLocked provides moving) {
             Box(Modifier.fillMaxSize().clipToBounds()) {
                 change.AnimatedContent(transitionSpec = {
-                    (slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(Motion.Normal, easing = Motion.Arrive)) togetherWith
-                        slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(Motion.Normal, easing = Motion.Leave)))
+                    (slideIntoContainer((if (targetState.index >= initialState.index) AnimatedContentTransitionScope.SlideDirection.Left else AnimatedContentTransitionScope.SlideDirection.Right), tween(Motion.Normal, easing = Motion.Arrive)) togetherWith
+                        slideOutOfContainer((if (targetState.index >= initialState.index) AnimatedContentTransitionScope.SlideDirection.Left else AnimatedContentTransitionScope.SlideDirection.Right), tween(Motion.Normal, easing = Motion.Leave)))
                         .using(SizeTransform(clip = false))
                 }, contentKey = { it.item.id }, modifier = Modifier.fillMaxSize()) { shown ->
                     // Capture the outgoing page and its position until its exit animation finishes.
@@ -285,6 +313,8 @@ fun QuickFinishScreen(model: QuickFinishViewModel, onBack: () -> Unit) {
                         },
                         rememberApprovers = model::rememberApprovers,
                         onSkip = { if (model.current?.id == shown.item.id) { focus.clearFocus(); model.skip() } },
+                        onPrevious = { focus.clearFocus(); model.previous() },
+                        onFinish = model::finish, onNext = model::next, skipped = shown.item.id in model.skipped, hasPrevious = shown.index > 1, hasNext = shown.index < shown.total,
                         position = "${shown.index}/${shown.total}",
                     ))
                 }
