@@ -18,4 +18,10 @@ class CharacterLaunchTest {
         assertEquals(9, launchFrameIndex(540f))
         assertEquals(11, launchFrameIndex(1100f))
     }
+    @Test fun waitingLoopNeverPlaysTheDownstroke() {
+        assertEquals(0, launchWaitingFrame(0))
+        assertEquals(8, launchWaitingFrame(480))
+        for (time in 240L..120000L step 30) assertTrue(launchWaitingFrame(time) in 4..8)
+        assertEquals(launchWaitingFrame(600), launchWaitingFrame(1080))
+    }
 }

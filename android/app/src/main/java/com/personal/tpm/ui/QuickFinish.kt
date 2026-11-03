@@ -26,6 +26,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.drop
 import org.json.JSONObject
 import java.util.UUID
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 enum class QuickJobState { Queued, Running, Done, Failed, Review }
 class QuickFinishJob(val item: BatchItem, val taskId: String, val frozen: String,
@@ -54,10 +56,42 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
     val jobs = mutableStateListOf<QuickFinishJob>()
     private val staged = mutableStateListOf<QuickFinishJob>()
     val skipped = mutableStateListOf<String>()
-    private val edits = mutableMapOf<String, QuickRepairEdit>()
+    private val edits = mutableStateMapOf<String, QuickRepairEdit>()
+    private val draftActors = mutableMapOf<String, Session>()
+    private val draftLock = Mutex()
     fun editFor(id: String) = edits[id]
     fun retainEdit(id: String, edit: QuickRepairEdit) {
-        if (jobs.none { it.item.key == id && it.state != QuickJobState.Failed }) edits[id] = edit
+        if (jobs.none { it.item.key == id && it.state != QuickJobState.Failed }) {
+            val retained = edit.copy(draft = edit.draft ?: edits[id]?.draft)
+            edits[id] = retained
+            val item = items.find { it.key == id } ?: return
+            val actor = draftActors[id] ?: return
+            viewModelScope.launch {
+                try { saveEdit(item, actor, retained) }
+                catch (e: CancellationException) { throw e }
+                catch (e: Exception) { failure = "自动保存草稿失败：${e.message}" }
+            }
+        }
+    }
+    private fun draftScope(item: BatchItem, actor: Session) = actor.repairDraftScope +
+        item.poolPrefix.takeIf { it.isNotEmpty() }?.let { ":pool:$it" }.orEmpty()
+    suspend fun loadEdit(item: BatchItem, actor: Session): QuickRepairEdit? {
+        draftActors[item.key] = actor
+        val scope = draftScope(item, actor)
+        edits[item.key]?.takeIf { it.draft == null || it.draft.scope == scope }?.let { return it }
+        edits.remove(item.key)
+        val saved = withContext(Dispatchers.IO) { drafts.drafts(scope, DraftTarget.Order(item.id)).firstOrNull() } ?: return null
+        return QuickRepairEdit(saved.data.toString(), saved.selections, QuickDraftRef(saved.id, scope)).also { edits[item.key] = it }
+    }
+    suspend fun saveEdit(item: BatchItem, actor: Session, edit: QuickRepairEdit) = draftLock.withLock {
+        if (!valid || jobs.any { it.item.key == item.key && it.state != QuickJobState.Failed }) return@withLock
+        val scope = draftScope(item, actor)
+        val reference = quickDraftReference(scope, item.key, edits[item.key]?.draft ?: edit.draft)
+        val saved = edit.copy(draft = reference)
+        withContext(Dispatchers.IO) { drafts.save(FormDraft(id = reference.id, data = JSONObject(edit.data),
+            selections = edit.choices, orderId = item.id), reference.scope) }
+        // Do not overwrite an edit that arrived while the encrypted file was being written.
+        if (edits[item.key]?.data == edit.data && edits[item.key]?.choices == edit.choices || edits[item.key] == null) edits[item.key] = saved
     }
     private val protectedOrders = mutableSetOf<String>()
     private val previous = mutableMapOf<String, List<String>>()
@@ -152,7 +186,8 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
         (if (prepared.item.poolPrefix.isEmpty()) repairValidationError(Jv(JSONObject(frozen))) else poolExecutionError(Jv(JSONObject(frozen)), prepared.item.poolPrefix, Jv(JSONObject(frozen))["erpMaintainMaterials"].array))?.let { error(it) }
         missingAssigneeMessage(prepared.nodes, choices)?.let { error(it) }
         rememberApprovers(prepared.nodes, choices)
-        val draftId = existingDraft?.id ?: UUID.randomUUID().toString(); val draftScope = existingDraft?.scope ?: (actor.repairDraftScope + prepared.item.poolPrefix.takeIf { it.isNotEmpty() }?.let { ":pool:$it" }.orEmpty())
+        val keptDraft = edits[prepared.item.key]?.draft ?: existingDraft
+        val draftId = keptDraft?.id ?: UUID.randomUUID().toString(); val draftScope = keptDraft?.scope ?: draftScope(prepared.item, actor)
         withContext(Dispatchers.IO) { drafts.save(FormDraft(id = draftId, data = JSONObject(frozen), selections = choices, orderId = prepared.item.id,
             orderSn = prepared.detail["sn"].text.ifEmpty { null }), draftScope) }
         check(valid && round == submittingRound && current?.key == prepared.item.key) { "当前操作已改变，内容已保存为草稿" }
@@ -220,6 +255,9 @@ class QuickFinishViewModel(val owner: Session, private val prefs: PickerPrefs, p
 }
 
 data class QuickDraftRef(val id: String, val scope: String)
+internal fun quickDraftReference(scope: String, itemKey: String, existing: QuickDraftRef?): QuickDraftRef =
+    existing?.takeIf { it.scope == scope } ?: QuickDraftRef(
+        UUID.nameUUIDFromBytes((scope + "|quick|" + itemKey).toByteArray(Charsets.UTF_8)).toString(), scope)
 data class QuickRepairEdit(val data: String, val choices: Map<String, List<String>>, val draft: QuickDraftRef?)
 
 data class QuickRepairContext(
@@ -236,6 +274,8 @@ data class QuickRepairContext(
     val hasPrevious: Boolean,
     val hasNext: Boolean,
     val position: String,
+    val loadDraft: suspend () -> QuickRepairEdit? = { restored },
+    val saveDraft: suspend (QuickRepairEdit) -> Unit = {},
 )
 data class QuickProgress(val text: String?, val open: () -> Unit, val reserveHeaderSpace: Boolean = false)
 val LocalQuickProgress = compositionLocalOf { QuickProgress(null, {}) }
@@ -307,6 +347,8 @@ fun QuickFinishScreen(model: QuickFinishViewModel, onBack: () -> Unit) {
                     val context = QuickRepairContext(
                         restored = model.editFor(shown.item.key), retainEdit = { model.retainEdit(shown.item.key, it) },
                         prepare = { model.prepare(shown.item, actor) },
+                        loadDraft = { model.loadEdit(shown.item, actor) },
+                        saveDraft = { model.saveEdit(shown.item, actor, it) },
                         enqueue = { prepared, data, choices, draft ->
                             model.enqueue(prepared, data, choices, actor, draft)
                             focus.clearFocus()

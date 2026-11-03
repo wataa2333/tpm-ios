@@ -4,6 +4,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class QuickCompletionTest {
+    @Test fun autosaveReusesOneDraftButIsolatesAccountFactoryAndOrderKind() {
+        val draft = quickDraftReference("userA:factoryA", "maintain:Fault:42", null)
+        assertEquals(draft, quickDraftReference("userA:factoryA", "maintain:Fault:42", null))
+        assertEquals(draft, quickDraftReference("userA:factoryA", "maintain:Fault:42", draft))
+        assertNotEquals(draft.id, quickDraftReference("userB:factoryA", "maintain:Fault:42", draft).id)
+        assertNotEquals(draft.id, quickDraftReference("userA:factoryB", "maintain:Fault:42", draft).id)
+        assertNotEquals(draft.id, quickDraftReference("userA:factoryA", "precise:Fault:42", null).id)
+        val restored = QuickDraftRef("previous-saved-draft", "userA:factoryA")
+        assertEquals(restored, quickDraftReference("userA:factoryA", "maintain:Fault:42", restored))
+    }
     @Test fun previousOrderResultRemainsAvailableInsideTheWizard() {
         assertNull(quickPreviousResult(emptyList()))
         assertNull(quickPreviousResult(listOf(QuickJobState.Running)))

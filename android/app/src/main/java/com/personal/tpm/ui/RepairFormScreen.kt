@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.LaunchedEffect
@@ -107,7 +108,7 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
                 data = merged; draftId = draft.id
                 scope.launch { snackbar.showSnackbar("已加载上次保存的草稿（" + draft.title + "）") }
             }
-            quick?.restored?.let { edit ->
+            quick?.loadDraft?.invoke()?.let { edit ->
                 val merged = JSONObject(data.toString()); val kept = JSONObject(edit.data)
                 for (key in draftKeys) if (kept.has(key)) merged.put(key, kept.get(key))
                 data = merged; draftId = edit.draft?.id ?: draftId; dirty = true
@@ -136,9 +137,16 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
     androidx.compose.runtime.DisposableEffect(faultId) {
         onDispose { currentEdit?.let { quick?.retainEdit?.invoke(it) } }
     }
+    LaunchedEffect(currentEdit?.data, currentEdit?.choices, loaded) {
+        if (loaded && !loading && quick != null) {
+            kotlinx.coroutines.delay(450)
+            currentEdit?.let(quick.retainEdit)
+        }
+    }
 
     fun keepDraft() {
         if (!loaded) return
+        if (quick != null) { currentEdit?.let(quick.retainEdit); onClose(); return }
         val kept = JSONObject()
         for (key in draftKeys) if (data.has(key)) kept.put(key, data.get(key))
         try {
@@ -184,10 +192,7 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     SoftButton(onClick = { currentEdit?.let(quick.retainEdit); quick.onPrevious() }, enabled = quick.hasPrevious && !saving && !photoBusy, modifier = Modifier.weight(1f)) { Text("上一单") }
                     SoftButton(onClick = {
-                        if (loaded && dirty) {
-                            try { store.save(FormDraft(id = draftId ?: java.util.UUID.randomUUID().toString(), data = JSONObject(data.toString()), selections = approvers, orderId = faultId), scopeKey) }
-                            catch (e: Exception) { failure = "草稿未保存" to (e.message ?: "请重试"); return@SoftButton }
-                        }
+                        currentEdit?.let(quick.retainEdit)
                         quick.onSkip()
                     }, enabled = !saving && !photoBusy, modifier = Modifier.weight(1f)) { Text("跳过") }
                     GlassActionButton(onClick = { submit() }, enabled = quick.hasNext && loaded && !saving && !photoBusy && prepared != null, modifier = Modifier.weight(1f)) { Text("下一单") }
@@ -205,6 +210,14 @@ fun RepairFormScreen(faultId: String, onClose: () -> Unit, onSubmitted: () -> Un
             }
         },
     ) {
+        if (quick != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("编辑后自动保存到本机", style = MaterialTheme.typography.labelSmall)
+            TextButton(enabled = loaded && !saving && !photoBusy, onClick = { scope.launch {
+                try { currentEdit?.let { quick.saveDraft(it) }; snackbar.showSnackbar("草稿已保存") }
+                catch (e: CancellationException) { throw e }
+                catch (e: Exception) { failure = "草稿未保存" to (e.message ?: "请重试") }
+            } }) { Text("手动保存草稿") }
+        }
         if (quick != null) GroupCard {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(prepared?.item?.name ?: "读取工单信息…", style = MaterialTheme.typography.titleMedium)

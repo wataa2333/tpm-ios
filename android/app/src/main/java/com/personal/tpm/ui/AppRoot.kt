@@ -41,6 +41,10 @@ fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.
     }
     val scope by session.scope.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val launchReady = LocalLaunchReady.current
+    androidx.compose.runtime.LaunchedEffect(screen) {
+        if (screen == Screen.Login) { androidx.compose.runtime.withFrameNanos { }; launchReady() }
+    }
     val queries = androidx.compose.runtime.remember { com.personal.tpm.data.QueryAccounts(context).also { session.queryAccounts = it } }
     androidx.compose.runtime.LaunchedEffect(scope) { queries.invalidate() }
     // Scrolling containers own their platform overscroll effect; do not disable or duplicate it here.

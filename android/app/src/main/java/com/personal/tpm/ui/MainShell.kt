@@ -129,6 +129,10 @@ fun MainShell(
     val pull = rememberPullToRefreshState()
     var mineBusy by remember { mutableStateOf(false) }
     val homeVm = viewModel<HomeViewModel>(factory = viewModelFactory { initializer { HomeViewModel(session) } })
+    val launchReady = LocalLaunchReady.current
+    LaunchedEffect(homeVm.loading) {
+        if (!homeVm.loading) { androidx.compose.runtime.withFrameNanos { }; launchReady() }
+    }
     val todoVm = viewModel<TodoViewModel>(factory = viewModelFactory { initializer { TodoViewModel(session) } })
     val workspaceVm = viewModel<WorkspaceViewModel>(factory = viewModelFactory { initializer { WorkspaceViewModel(session) } })
     val gridState = rememberLazyGridState()

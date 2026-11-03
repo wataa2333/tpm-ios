@@ -72,7 +72,7 @@ fun PoolExecutionForm(kind: PoolKind, id: String, onClose: () -> Unit, onSubmitF
             if (kind == PoolKind.Maintenance) result.put("erpMaintainMaterials", session.request("erpOutbound/getErpMaintainMaterialsByMaintainId", mapOf("maintainId" to order["orderId"].text)).raw)
             existingMaterials = Jv(result)["erpMaintainMaterials"].array
             if (batch != null) result.put("erpMaintainMaterials", JSONArray())
-            quick?.restored?.let { edit ->
+            quick?.loadDraft?.invoke()?.takeIf { Jv(JSONObject(it.data))["orderId"].text == order["orderId"].text }?.let { edit ->
                 val kept = JSONObject(edit.data)
                 check(Jv(kept)["orderId"].text == order["orderId"].text) { "执行记录已改变，请重新读取待办" }
                 kept.keys().forEach { key -> result.put(key, kept.get(key)) }
@@ -85,6 +85,9 @@ fun PoolExecutionForm(kind: PoolKind, id: String, onClose: () -> Unit, onSubmitF
     }
     val edit by rememberUpdatedState(if (ready && quick != null) QuickRepairEdit(data.toString(), choices.mapValues { it.value.toList() }, quick.restored?.draft) else null)
     DisposableEffect(id) { onDispose { edit?.let { quick?.retainEdit?.invoke(it) } } }
+    LaunchedEffect(edit?.data, edit?.choices, ready) {
+        if (ready && quick != null) { kotlinx.coroutines.delay(450); edit?.let(quick.retainEdit) }
+    }
     fun save(submit: Boolean, endTask: Boolean = false) {
         if (!ready || saving || uploading) return
         poolExecutionError(value, kind.path, existingMaterials)?.let { failure = it; return }
@@ -146,6 +149,14 @@ fun PoolExecutionForm(kind: PoolKind, id: String, onClose: () -> Unit, onSubmitF
             }) {
             if (!ready) Text("正在读取执行项目与处理权限…")
             if (ready) {
+                if (quick != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Text("编辑后自动保存到本机", style = MaterialTheme.typography.labelSmall)
+                    TextButton(enabled = !saving && !uploading, onClick = { scope.launch {
+                        try { edit?.let { quick.saveDraft(it) }; snackbar.showSnackbar("草稿已保存") }
+                        catch (e: CancellationException) { throw e }
+                        catch (e: Exception) { failure = "草稿未保存：${e.message}" }
+                    } }) { Text("手动保存草稿") }
+                }
                 if (quick != null) GroupCard {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         PoolItemTitle(orderInfo[kind.nameKey].text.ifEmpty { prepared?.item?.name.orEmpty() })

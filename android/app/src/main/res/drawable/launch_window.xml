@@ -1,4 +1,4 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@android:color/white" />
-    <item android:width="156dp" android:height="139dp" android:gravity="center" android:drawable="@drawable/launch_character_first" />
+    <item android:width="161.28dp" android:height="161.28dp" android:gravity="center" android:drawable="@drawable/launch_character_first" />
 </layer-list>
