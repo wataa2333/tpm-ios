@@ -240,7 +240,7 @@ private fun jpegOf(context: android.content.Context, uri: Uri): ByteArray? {
 
 /** The pictures of a form (at most nine): each can be deleted, new ones are picked with the system photo picker and uploaded at once. */
 @Composable
-fun PhotosField(albums: Jv, onChange: (JSONArray) -> Unit, directory: String, onUploading: (Boolean) -> Unit, onError: (String) -> Unit, modifier: Modifier = Modifier) {
+fun PhotosField(albums: Jv, onChange: (JSONArray) -> Unit, directory: String, onUploading: (Boolean) -> Unit, onError: (String) -> Unit, modifier: Modifier = Modifier, limit: Int = 9) {
     val context = LocalContext.current
     val session = LocalSession.current
     val scope = rememberCoroutineScope()
@@ -249,7 +249,7 @@ fun PhotosField(albums: Jv, onChange: (JSONArray) -> Unit, directory: String, on
     // The plain "pick several pictures" request (the system picker or the gallery, whichever the phone offers): the newer photo-picker request
     // checks limits that differ between phones and could throw the moment it was launched.
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-        val chosen = uris.take(maxOf(0, 9 - list.size))
+        val chosen = uris.take(maxOf(0, limit - list.size))
         if (chosen.isEmpty()) return@rememberLauncherForActivityResult
         uploading = true; onUploading(true)
         scope.launch {
@@ -274,14 +274,14 @@ fun PhotosField(albums: Jv, onChange: (JSONArray) -> Unit, directory: String, on
             }
         }
         Row(
-            Modifier.fillMaxWidth().clickable(enabled = !uploading && list.size < 9) {
+            Modifier.fillMaxWidth().clickable(enabled = !uploading && list.size < limit) {
                 try { picker.launch("image/*") }
                 catch (e: Exception) { onError("打不开相册：" + (e.message ?: "没有可用的相册应用")) }
             }.padding(horizontal = 16.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Filled.AddPhotoAlternate, contentDescription = null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-            AnimatedLabel(if (uploading) "正在上传照片…" else "选择现场照片（${list.size}/9）", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+            AnimatedLabel(if (uploading) "正在上传照片…" else "选择现场照片（${list.size}/$limit）", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -349,6 +349,7 @@ fun FormPage(
     backEnabled: Boolean = true,
     /** Whether the page must ask something before it leaves (then the back key goes to [onBackGesture] and not to the navigation). */
     interceptBack: Boolean = false,
+    wideContent: Boolean = false,
     /** What the completed back gesture does; true when the page is going away, false when it stays (a question was asked instead). */
     onBackGesture: () -> Boolean = { onClose(); true },
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
@@ -369,7 +370,7 @@ fun FormPage(
     ) { padding ->
         androidx.compose.foundation.layout.Box(Modifier.padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding())) {
             RoundedSheet {
-                PageWidth {
+                PageWidth(maxWidth = if (wideContent) 960.dp else ContentMaxWidth) {
                     androidx.compose.foundation.layout.Column(
                         Modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),

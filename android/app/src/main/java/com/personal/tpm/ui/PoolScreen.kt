@@ -30,3 +30,18 @@ fun poolCardModel(kind: PoolKind, row: Jv, index: Int) = CardModel(
     time = row["planStartDate"].dateText, facts = poolFacts(row), kind = null, openId = row[kind.idKey].text, cardType = if (kind == PoolKind.Maintenance) CardType.Maintenance else CardType.Precision,
 )
 
+
+fun poolKindForTask(task: Jv): PoolKind? = when {
+    task["processDefinitionKey"].text.startsWith("MAINTAIN") -> PoolKind.Maintenance
+    task["processDefinitionKey"].text.startsWith("PRECISE") -> PoolKind.Precision
+    else -> null
+}
+
+/** The original App resolves the current user task separately when detail omits taskInfo. */
+suspend fun loadPoolOrder(session: com.personal.tpm.data.Session, kind: PoolKind, id: String): Jv {
+    val name = if (kind == PoolKind.Maintenance) "Maintain" else "Precise"
+    val detail = session.request("${kind.path}/get${name}DetailById", mapOf(kind.idKey to id))
+    if (detail["taskInfo"]["id"].text.isNotEmpty() || detail["processInstanceId"].text.isEmpty()) return detail
+    val task = session.request("workflow/getUserTaskByProcessInstanceId", mapOf("processInstanceId" to detail["processInstanceId"].text))
+    return Jv(org.json.JSONObject(detail.raw.toString()).put("taskInfo", task.raw))
+}

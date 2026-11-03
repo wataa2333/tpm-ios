@@ -135,13 +135,14 @@ fun erpCardModel(item: Jv) = CardModel(
 fun todoCardModel(task: Jv): CardModel {
     val data = task["data"]
     val kind = todoKind(task)
+    val pool = poolKindForTask(task)
     val fault = kind != OrderKind.Erp
     return CardModel(
-        key = task["id"].text, title = todoTitle(task), status = todoStatus(task),
+        key = task["id"].text, title = pool?.let { data[it.nameKey].text.ifEmpty { todoTitle(task) } } ?: todoTitle(task), status = todoStatus(task),
         colorCode = if (fault) data["faultState"].text else data["approvalState"].text, isApproval = !fault,
         reference = if (fault) data["asset"]["assetCode"].text.ifEmpty { "—" } + data["asset"]["addressCode"].text.let { if (it.isEmpty()) "" else " · $it" } else data["outNumber"].text.ifEmpty { "—" },
         time = task["createTime"].dateText,
-        facts = listOf("流程类型" to (kind?.title ?: "其他流程"), "当前节点" to task["name"].text) + when (kind) { OrderKind.Fault -> faultCardFacts(data); OrderKind.Erp -> erpCardFacts(data); null -> emptyList() },
+        facts = listOf("流程类型" to (pool?.title ?: kind?.title ?: "其他流程"), "当前节点" to task["name"].text) + when (kind) { OrderKind.Fault -> faultCardFacts(data); OrderKind.Erp -> erpCardFacts(data); null -> emptyList() },
         kind = kind, openId = task["businessKey"].text, cardType = when (kind) { OrderKind.Fault -> CardType.TodoFault; OrderKind.Erp -> CardType.TodoErp; null -> CardType.TodoOther },
     )
 }

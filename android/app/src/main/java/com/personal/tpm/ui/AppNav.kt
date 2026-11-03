@@ -97,6 +97,7 @@ fun AppNav() {
                 MainShell(
                     openList = { state -> nav.navigate("list/" + Uri.encode(state.ifEmpty { "_" }) + "?q=&f=") },
                     openPool = { kind -> nav.navigate("pool/" + kind.path) },
+                    openPoolOrder = { kind, id -> nav.navigate("pool-order/${kind.path}/" + Uri.encode(id)) },
                     openOrder = { kind, id -> nav.navigate((if (kind == OrderKind.Erp) "erp/" else "fault/") + Uri.encode(id)) },
                     openWork = { list -> nav.navigate("paged/" + list.key) },
                     openQuery = { field, text -> nav.navigate("list/_?q=" + Uri.encode(text) + "&f=" + field.name) },
@@ -227,6 +228,10 @@ fun AppNav() {
         }) }
         composable(DRAFTS) {
             DraftBoxScreen(onBack = { nav.popBackStack() }, onOpenNew = { draft -> nav.navigate(newFaultRoute(draft = draft)) })
+        }
+        composable("pool-order/{kind}/{id}", arguments = listOf(navArgument("kind") { type = NavType.StringType }, navArgument("id") { type = NavType.StringType })) { entry ->
+            val kind = PoolKind.byPath(entry.arguments?.getString("kind").orEmpty()) ?: PoolKind.Maintenance
+            PoolOrderDetail(kind, entry.arguments?.getString("id").orEmpty()) { nav.popBackStack() }
         }
         composable(POOL, arguments = listOf(navArgument("kind") { type = NavType.StringType })) { entry ->
             val kind = PoolKind.byPath(entry.arguments?.getString("kind").orEmpty()) ?: PoolKind.Maintenance

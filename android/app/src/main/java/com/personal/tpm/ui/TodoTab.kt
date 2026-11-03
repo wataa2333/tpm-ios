@@ -104,7 +104,7 @@ class TodoViewModel(private val session: Session) : ViewModel() {
 /** 我的待办: the tasks waiting for this account, as the same cards as the order lists. A card opens the order of its task. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TodoTab(vm: TodoViewModel, listState: LazyListState, pullState: PullToRefreshState, nested: Modifier, openOrder: (OrderKind, String) -> Unit) {
+fun TodoTab(vm: TodoViewModel, listState: LazyListState, pullState: PullToRefreshState, nested: Modifier, openOrder: (OrderKind, String) -> Unit, openPoolOrder: (PoolKind, String) -> Unit = { _, _ -> }) {
     AutoLoadMore(listState, vm.rows.size, !vm.loading && !vm.last && vm.error == null) { vm.loadMore() }
     val focus = LocalFocusManager.current
     var input by rememberSaveable { mutableStateOf(vm.query) }
@@ -124,7 +124,7 @@ fun TodoTab(vm: TodoViewModel, listState: LazyListState, pullState: PullToRefres
                         val entry = remember(task) { batchItem(task) }
                         OrderCard(
                             model, vm.expanded[model.key] == true, { vm.expanded[model.key] = vm.expanded[model.key] != true }, fadeItem(),
-                            onOpen = { model.kind?.let { OrderPreview.put(it.toString(), model.openId, task["data"]); openOrder(it, model.openId) } },
+                            onOpen = { val pool = poolKindForTask(task); if (pool != null) openPoolOrder(pool, model.openId) else model.kind?.let { OrderPreview.put(it.toString(), model.openId, task["data"]); openOrder(it, model.openId) } },
                             selecting = if (vm.batch.active) {
                                 if (entry != null) CardSelecting(vm.batch.contains(entry), vm.batch.isSelectable(entry), { vm.batch.toggle(entry) }, { vm.batch.peeking = entry })
                                 else CardSelecting(false, false, { vm.batch.notice = "这条待办暂不支持批量处理" }, { vm.batch.notice = "这条待办暂不支持批量处理" })

@@ -79,8 +79,8 @@ val ContentMaxWidth = 640.dp
 
 /** Centres its content in a column no wider than [ContentMaxWidth]. */
 @Composable
-fun PageWidth(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Box(modifier.fillMaxSize(), Alignment.TopCenter) { Box(Modifier.widthIn(max = ContentMaxWidth).fillMaxHeight()) { content() } }
+fun PageWidth(modifier: Modifier = Modifier, maxWidth: androidx.compose.ui.unit.Dp = ContentMaxWidth, content: @Composable () -> Unit) {
+    Box(modifier.fillMaxSize(), Alignment.TopCenter) { Box(Modifier.widthIn(max = maxWidth).fillMaxHeight()) { content() } }
 }
 
 /** The status-bar icons dark (over a light surface) or light (over a dark one). */

@@ -22,15 +22,19 @@ fun PoolOrderDetail(kind: PoolKind, id: String, onClose: () -> Unit) {
     var selected by remember(id) { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var canOperate by remember { mutableStateOf(false) }
+    var action by remember { mutableStateOf<String?>(null) }
     val name = if (kind == PoolKind.Maintenance) "Maintain" else "Precise"
     suspend fun loadRecords(orderId: String) {
         records = session.request("${kind.path}/get${name}RecordsBy${name}Id", mapOf(kind.idKey to orderId)).array
         selected = orderId
     }
     suspend fun load() {
-        busy = true; error = null
+        busy = true; error = null; canOperate = false
         try {
-            detail = session.request("${kind.path}/get${name}DetailById", mapOf(kind.idKey to id))
+            detail = loadPoolOrder(session, kind, id)
+            val task = detail?.get("taskInfo") ?: Jv.NULL
+            if (task["id"].text.isNotEmpty()) canOperate = session.request("workflow/getWorkflowTaskState", mapOf("processInstanceId" to task["processInstanceId"].text))["canSubmit"].bool
             orders = session.request("${kind.path}/get${name}OrdersBy${name}Id", mapOf(kind.idKey to id)).array
             val first = orders.firstOrNull { it["orderId"].text == selected } ?: orders.firstOrNull()
             records = emptyList()
@@ -42,7 +46,14 @@ fun PoolOrderDetail(kind: PoolKind, id: String, onClose: () -> Unit) {
     LaunchedEffect(id, session.accountKey) { load() }
     Surface(Modifier.fillMaxSize()) {
         FormPage(title = if (kind == PoolKind.Maintenance) "保养工单详情" else "精度检查工单详情",
-            busy = busy, onClose = onClose, bottomBar = {}, interceptBack = true,
+            busy = busy, onClose = onClose, bottomBar = {
+                if (canOperate) GlassBottomSurface {
+                    GlassActionButton(onClick = { action = if (detail?.get("taskInfo")?.get("category")?.text == if (kind == PoolKind.Maintenance) "MAINTAINED" else "PRECISED") "EDIT" else "FLOW" },
+                        enabled = !busy, modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp)) {
+                        Text(detail?.get("taskInfo")?.get("name")?.text?.ifEmpty { "处理任务" } ?: "处理任务")
+                    }
+                }
+            }, interceptBack = true,
             actions = { GlassIconButton(onClick = { if (!busy) scope.launch { load() } }) { Icon(Icons.Default.Refresh, "刷新") } }) {
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             detail?.let { row ->
@@ -72,5 +83,10 @@ fun PoolOrderDetail(kind: PoolKind, id: String, onClose: () -> Unit) {
                 }
             } }
         }
+    }
+    SlideInOverlayFor(action) { page ->
+        if (page == "EDIT") PoolExecutionForm(kind, id, onClose = { action = null; scope.launch { load() } }, onSubmitFlow = { action = "FLOW" })
+        else TaskScreen(com.personal.tpm.data.OrderKind.Fault, id, false, onBack = { action = null },
+            onDone = { action = null; scope.launch { load() } }, poolKind = kind)
     }
 }

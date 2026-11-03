@@ -113,7 +113,7 @@ private typealias Tab = GlassTab
 @Composable
 fun MainShell(
     openList: (String) -> Unit, openPool: (PoolKind) -> Unit, openOrder: (OrderKind, String) -> Unit,
-    openWork: (WorkList) -> Unit, openQuery: (com.personal.tpm.data.FaultSearchField, String) -> Unit, openDrafts: () -> Unit, openNew: () -> Unit, openQuick: () -> Unit, openDev: () -> Unit, openDashboard: () -> Unit, openPrecision: () -> Unit, openQuerySettings: () -> Unit,
+    openWork: (WorkList) -> Unit, openQuery: (com.personal.tpm.data.FaultSearchField, String) -> Unit, openDrafts: () -> Unit, openNew: () -> Unit, openQuick: () -> Unit, openDev: () -> Unit, openDashboard: () -> Unit, openPrecision: () -> Unit, openQuerySettings: () -> Unit, openPoolOrder: (PoolKind, String) -> Unit = { _, _ -> },
 ) {
     val session = LocalSession.current
     val auth by session.auth.collectAsState()
@@ -251,7 +251,7 @@ fun MainShell(
                             androidx.compose.animation.Crossfade(targetState = selected, animationSpec = tween(Motion.Normal, easing = Motion.Change), label = "tabs") { tab ->
                             when (tab) {
                                 0 -> HomeTab(homeVm, gridState, pull, nested, openList, openPool)
-                                1 -> TodoTab(todoVm, todoState, pull, nested, openOrder)
+                                1 -> TodoTab(todoVm, todoState, pull, nested, openOrder, openPoolOrder)
                                 2 -> WorkspaceTab(workspaceVm, workspaceGrid, pull, nested, openWork, openQuery, openDashboard, openPrecision)
                                 3 -> MineTab(session, nested, onBusy = { mineBusy = it }, onChooseFactory = { choosingFactory = true }, openDrafts = openDrafts, openDev = openDev, openQuerySettings = openQuerySettings)
                                 else -> Placeholder(tabs[tab].title)
