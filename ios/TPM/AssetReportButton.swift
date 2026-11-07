@@ -5,20 +5,21 @@ struct AssetReportButton: View {
     let asset: JSONValue
     var screenEdge = false
     var compact = false
-    @State private var presenting = false
     private var reference: JSONValue { .object(["assetId": asset["assetId"], "assetCode": asset["assetCode"], "assetName": asset["assetName"]]) }
     var body: some View {
         if !asset["assetId"].text.isEmpty && !asset["assetCode"].text.isEmpty {
-            let button = Button { presenting = true } label: {
+            let button = NavigationLink {
+                OriginalFaultForm(initialAsset: reference)
+                    .environment(\.queryReading, false)
+                    .navigationBarBackButtonHidden()
+                    .modifier(DetailTabVisibility())
+            } label: {
                 Text(compact ? "使用此资产编码报修" : "使用此资产编码进行新建报修")
                     .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, minHeight: 44)
             }.accessibilityLabel("使用此资产编码进行新建报修")
                 .accessibilityIdentifier("report-with-asset")
-                .fullScreenCover(isPresented: $presenting) {
-                    NavigationStack { OriginalFaultForm(initialAsset: reference) }
-                        .environment(\.queryReading, false)
-                }
+                .navigationLinkIndicatorVisibility(.hidden)
             if screenEdge {
                 button.buttonStyle(AssetReportDockStyle())
             } else {

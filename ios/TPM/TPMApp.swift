@@ -143,15 +143,13 @@ struct MainTabs: View {
     init(selection: Int = 0, previewFaultList: Bool = false) { _selection = State(initialValue: selection); self.previewFaultList = previewFaultList }
     var body: some View {
         NativeTabShell(selection: $selection, preview: true) {
-            NavigationStack { HomeView() }
+            HomeView()
         } todo: {
-            NavigationStack {
-                if previewFaultList { FaultListView() } else { TodoInboxView(preview: true) }
-            }
+            if previewFaultList { FaultListView() } else { TodoInboxView(preview: true) }
         } workspace: {
-            NavigationStack { WorkspaceView() }
+            WorkspaceView()
         } mine: {
-            NavigationStack { ProfileView() }
+            ProfileView()
         }
     }
 }

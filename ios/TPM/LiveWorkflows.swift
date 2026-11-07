@@ -37,13 +37,13 @@ struct LiveTabs: View {
     @State private var selection = 0
     var body: some View {
         NativeTabShell(selection: $selection, mineTitle: accountTitle) {
-            NavigationStack { DashboardHome() }
+            DashboardHome()
         } todo: {
-            NavigationStack { TodoInboxView() }
+            TodoInboxView()
         } workspace: {
-            NavigationStack { DashboardWorkspace() }
+            DashboardWorkspace()
         } mine: {
-            NavigationStack { ProfileTab() }
+            ProfileTab()
         }
         // Only when something changed (a task was finished, a manual refresh): the todo page itself keeps the
         // number current whenever it loads, so switching tabs asks for nothing.

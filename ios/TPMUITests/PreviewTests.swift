@@ -467,6 +467,7 @@ final class PreviewTests: XCTestCase {
         let reference = app.descendants(matching: .any)["order-reference-FA-CNC-008"].firstMatch
         let time = app.descendants(matching: .any)["order-time-FA-CNC-008"].firstMatch
         XCTAssertLessThanOrEqual(time.frame.minY - reference.frame.maxY, 8)
+        XCTAssertGreaterThanOrEqual(expand.frame.height, 43)
         for _ in 0..<2 {
             expand.tap()
             XCTAssertTrue(expand.label.contains("收起详情"), app.debugDescription)
@@ -515,6 +516,12 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(formBar.exists)
         XCTAssertEqual(formBar.frame.minY, originalBarTop, accuracy: 3)
         XCTAssertFalse(tabBar.isHittable)
+        let save = app.buttons["保存"], submit = app.buttons["提交"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(save.isHittable)
+        XCTAssertTrue(submit.isHittable)
+        XCTAssertLessThan(formBar.frame.maxY, save.frame.minY)
+        XCTAssertLessThanOrEqual(submit.frame.maxY, app.frame.maxY)
         cancel.tap()
         XCTAssertTrue(app.buttons["新建报修"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.navigationBars["故障报修"].exists)

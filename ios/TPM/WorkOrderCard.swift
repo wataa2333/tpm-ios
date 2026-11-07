@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// One rhythm for every list row and card in the app: 12pt above and below, 16pt at the sides, 6pt between lines,
-/// and a footer that moves its button below the time when the available width is too small.
+/// and an independent action column that moves below the text at accessibility sizes.
 enum RowMetrics {
     static let spacing: CGFloat = 6
     static let insets = EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
@@ -30,6 +30,7 @@ struct WorkOrderCard<Destination: View>: View {
     @ViewBuilder let destination: () -> Destination
     @State private var expanded = false
     @State private var opening = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Status retains its meaning colour; card titles use the normal text colour.
     private var emphasis: Color { FaultState.allCases.first { $0.rawValue == status }?.color ?? color }
@@ -82,24 +83,27 @@ struct WorkOrderCard<Destination: View>: View {
                 .contentShape(.rect)
             }.buttonStyle(.plain).navigationLinkIndicatorVisibility(.hidden)
                 .accessibilityIdentifier("order-title-" + reference)
-            WrappingContent { Text((reference.isEmpty ? "—" : reference) + (machine.isEmpty ? "" : " · " + machine)).animatedTextValue((reference.isEmpty ? "—" : reference) + (machine.isEmpty ? "" : " · " + machine)).font(AppFont.subheadline).foregroundStyle(.secondary) }
-                .accessibilityLabel(referenceTitle + "：" + reference + (machine.isEmpty ? "" : "，机台号：" + machine))
-                .accessibilityIdentifier("order-reference-" + reference)
-            ForEach(Array(summaryFacts.enumerated()), id: \.offset) { _, fact in
-                WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).animatedTextValue(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(AppFont.subheadline).foregroundStyle(.secondary) }
-            }
-            ForEach(Array(statusNote.enumerated()), id: \.offset) { _, fact in
-                WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).animatedTextValue(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(AppFont.subheadline).foregroundStyle(.orange) }
-                    .accessibilityIdentifier("order-note-" + reference)
-            }
-            VStack(spacing: 0) {
-            ViewThatFits(in: .horizontal) {
-                footer
-                VStack(alignment: .trailing, spacing: 6) {
-                    Text(time).animatedTextValue(time).font(AppFont.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+            let summaryLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .trailing, spacing: RowMetrics.spacing))
+                : AnyLayout(HStackLayout(alignment: .bottom, spacing: 12))
+            summaryLayout {
+                VStack(alignment: .leading, spacing: 4) {
+                    WrappingContent { Text((reference.isEmpty ? "—" : reference) + (machine.isEmpty ? "" : " · " + machine)).animatedTextValue((reference.isEmpty ? "—" : reference) + (machine.isEmpty ? "" : " · " + machine)).font(AppFont.subheadline).foregroundStyle(.secondary) }
+                        .accessibilityLabel(referenceTitle + "：" + reference + (machine.isEmpty ? "" : "，机台号：" + machine))
+                        .accessibilityIdentifier("order-reference-" + reference)
+                    ForEach(Array(summaryFacts.enumerated()), id: \.offset) { _, fact in
+                        WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).animatedTextValue(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(AppFont.subheadline).foregroundStyle(.secondary) }
+                    }
+                    ForEach(Array(statusNote.enumerated()), id: \.offset) { _, fact in
+                        WrappingContent { Text(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).animatedTextValue(fact.0 + "：" + (fact.1.isEmpty ? "—" : fact.1)).font(AppFont.subheadline).foregroundStyle(.orange) }
+                            .accessibilityIdentifier("order-note-" + reference)
+                    }
+                    Text(time).animatedTextValue(time).font(AppFont.subheadline).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("order-time-" + reference)
-                    expandButton
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                expandButton
             }
             if expanded {
                 VStack(spacing: 10) {
@@ -125,18 +129,9 @@ struct WorkOrderCard<Destination: View>: View {
                 .padding(.top, RowMetrics.spacing)
                 .transition(.opacity)
             }
-            }
         }
         .padding(selecting == nil ? RowMetrics.insets : EdgeInsets(top: RowMetrics.insets.top, leading: 0, bottom: RowMetrics.insets.bottom, trailing: RowMetrics.insets.trailing))
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-    private var footer: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text(time).animatedTextValue(time).font(AppFont.subheadline).foregroundStyle(.secondary).fixedSize()
-                .accessibilityIdentifier("order-time-" + reference)
-            Spacer(minLength: 0)
-            expandButton
-        }
     }
     private var expandButton: some View {
         Button { withAnimation(reduceMotion ? nil : .smooth(duration: 0.5)) { expanded.toggle() } } label: {
@@ -145,7 +140,7 @@ struct WorkOrderCard<Destination: View>: View {
                 Image(systemName: "chevron.down").font(.system(size: 12, weight: .semibold)).frame(width: 14, height: 20).rotationEffect(.degrees(expanded ? 180 : 0))
             }
             .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 5)
-            .frame(minHeight: 32).background(Color.accentColor, in: .capsule)
+            .frame(minHeight: 44).background(Color.accentColor, in: .capsule)
         }.buttonStyle(.plain).fixedSize()
             .accessibilityLabel(expanded ? "收起详情" : "展开详情")
             .accessibilityIdentifier("order-expand-" + reference)

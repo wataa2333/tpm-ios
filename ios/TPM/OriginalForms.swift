@@ -219,18 +219,21 @@ struct ReferencePicker: View {
     }
     var body: some View {
         List {
-            if menu.enabled && !preview {
-                // A small hint: the pin and default actions are otherwise invisible.
-                Text(menu.supportsDefault ? "长按或向左滑动某一项，可以置顶，或设为默认。" : "长按或向左滑动某一项，可以置顶。").animatedTextValue(menu.supportsDefault ? "长按或向左滑动某一项，可以置顶，或设为默认。" : "长按或向左滑动某一项，可以置顶。")
-                    .font(AppFont.footnote).foregroundStyle(.secondary)
-                    .listRowBackground(Color.clear).listRowSeparator(.hidden)
-                    .accessibilityIdentifier("picker-menu-hint")
-            }
             if source == .outboundMaterials { Toggle("隐藏已领用完物料", isOn: $hideUsedMaterials) }
-            if source == .users { Picker("人员分类", selection: $userMode) { Text("按姓名").tag(0); Text("按班组").tag(1) }.pickerStyle(.segmented) }
+            if source == .users {
+                Section {
+                    Picker("人员分类", selection: $userMode) {
+                        Text("按姓名").tag(0)
+                        Text("按班组").tag(1)
+                    }
+                    .pickerStyle(.segmented)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
+            }
             if !source.searchModes.isEmpty {
                 // Always there for the lists the server searches, so the ways of searching are never hidden.
-                Section { Picker("搜索方式", selection: $searchMode) { ForEach(source.searchModes) { Text($0.label(for: source)).animatedTextValue($0.label(for: source)).tag($0) } }.pickerStyle(.segmented).labelsHidden() }
+                Section { Picker("搜索方式", selection: $searchMode) { ForEach(source.searchModes) { Text($0.label(for: source)).animatedTextValue($0.label(for: source)).tag($0) } }.pickerStyle(.segmented).labelsHidden().listRowBackground(Color.clear).listRowSeparator(.hidden) }
             }
             if menu.enabled, query.isEmpty, !menu.pins.isEmpty {
                 Section { ForEach(menu.pins) { entry in optionRow(entry.value) } } header: { Text("置顶 · \(menu.pins.count)/\(PickerLists.pinLimit)").animatedTextValue("置顶 · \(menu.pins.count)/\(PickerLists.pinLimit)") }

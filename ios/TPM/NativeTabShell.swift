@@ -28,24 +28,40 @@ struct NativeTabShell<Home: View, Todo: View, Workspace: View, Mine: View>: View
 
     var body: some View {
         TabView(selection: tabSelection) {
-            Tab("主页", systemImage: "house", value: 0) { home() }
-            Tab("我的待办", systemImage: "checklist", value: 2) { todo() }
+            Tab("主页", systemImage: "house", value: 0) { tabStack(0, content: home) }
+            Tab("我的待办", systemImage: "checklist", value: 2) { tabStack(2, content: todo) }
                 .badge(navigation.todoCount)
             Tab(kind == .erp ? "新建领料" : "新建报修", systemImage: "plus.circle", value: newDocumentTab) {
                 Color.clear
             }
-            Tab("看板", systemImage: "square.grid.2x2", value: 1) { workspace() }
-            Tab(mineTitle, systemImage: "person.crop.circle", value: 3) { mine() }
+            Tab("看板", systemImage: "square.grid.2x2", value: 1) { tabStack(1, content: workspace) }
+            Tab(mineTitle, systemImage: "person.crop.circle", value: 3) { tabStack(3, content: mine) }
         }
         .onChange(of: selection) {
             navigation.searchReset = UUID()
             navigation.hideTabs = false
         }
-        .fullScreenCover(isPresented: presenting(.fault), onDismiss: documentClosed) {
-            NavigationStack { OriginalFaultForm(preview: preview) }
-        }
         .sheet(isPresented: presenting(.erp), onDismiss: documentClosed) {
             NavigationStack { OriginalERPForm(preview: preview) }.presentationDragIndicator(.visible)
+        }
+    }
+
+    private func tabStack<Content: View>(_ tab: Int, @ViewBuilder content: () -> Content) -> some View {
+        NavigationStack {
+            content()
+                .navigationDestination(isPresented: Binding(
+                    get: { selection == tab && creating == .fault },
+                    set: { presented in
+                        if !presented && selection == tab && creating == .fault {
+                            creating = nil
+                            documentClosed()
+                        }
+                    }
+                )) {
+                    OriginalFaultForm(preview: preview)
+                        .navigationBarBackButtonHidden()
+                        .modifier(DetailTabVisibility())
+                }
         }
     }
 
