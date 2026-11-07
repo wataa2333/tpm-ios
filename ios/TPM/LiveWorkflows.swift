@@ -160,6 +160,12 @@ struct LiveWorkflowList: View {
                     Button { choosingDates = true } label: { Image(systemName: dateRange == nil ? "calendar" : "calendar.badge.checkmark") }
                         .accessibilityLabel("按日期筛选").accessibilityIdentifier("date-range-button")
                 }
+            } else {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("新建领料", systemImage: "plus") { adding = true }
+                        .labelStyle(.iconOnly)
+                        .disabled(batch.active)
+                }
             }
         }
         .refreshButton(busy: loading || loadingMore || gate.busy) { gate.request() }
@@ -172,12 +178,11 @@ struct LiveWorkflowList: View {
         .task(id: gate.id("\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)-\(readContext)")) { await gate.run(key: "\(navigation.refresh)-\(state)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)-\(readContext)", debounce: searchMode || activeQuery.isEmpty ? nil : .milliseconds(350), load: { await reload() }) }
         .task(id: gate.id("counts-\(navigation.refresh)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)-\(readContext)")) { await gate.run("counts", key: "counts-\(navigation.refresh)-\(searchField.rawValue)-\(activeQuery)-\(dateKey)-\(readContext)", debounce: searchMode || activeQuery.isEmpty ? nil : .milliseconds(350), load: { await reloadCounts() }) }
         .onAppear {
-            navigation.newDocument = kind; navigation.hideTabs = false
+            navigation.hideTabs = false
             if navigation.pendingListRefresh { navigation.pendingListRefresh = false; navigation.refresh = UUID() }
         }
-        .onDisappear { if navigation.newDocument == kind { navigation.newDocument = nil } }
         .sheet(isPresented: $adding, onDismiss: { Task { await reload() } }) {
-            NavigationStack { if kind == .fault { OriginalFaultForm() } else { OriginalERPForm() } }
+            NavigationStack { OriginalERPForm() }.presentationDragIndicator(.visible)
         }
     }
     private func reload(more: Bool = false) async {

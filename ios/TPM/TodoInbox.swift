@@ -51,10 +51,9 @@ struct TodoInboxView: View {
         .task(id: gate.id("\(navigation.refresh)-\(query)")) { await gate.run(key: "\(navigation.refresh)-\(query)", debounce: query.isEmpty ? nil : .milliseconds(350), load: { await load() }) }
         .refreshable { refreshing = true; await load(); refreshing = false }
         .onAppear {
-            navigation.newDocument = .fault; navigation.hideTabs = false
+            navigation.hideTabs = false
             if navigation.pendingListRefresh { navigation.pendingListRefresh = false; navigation.refresh = UUID() }
         }
-        .onDisappear { navigation.newDocument = nil }
     }
 
     private func load(more: Bool = false) async {

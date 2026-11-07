@@ -224,7 +224,6 @@ struct FaultListView: View {
         // on the departure of the detail screen can leave the bar hidden or
         // the keyboard state latched after a nested pop.
         .onAppear {
-            navigation.newDocument = .fault
             navigation.hideTabs = false
             // Orders advanced inside an open detail join their new step only now that the list is back.
             for (id, next) in navigation.pendingAdvance {
@@ -232,7 +231,6 @@ struct FaultListView: View {
             }
             navigation.pendingAdvance = [:]
         }
-        .onDisappear { if navigation.newDocument == .fault { navigation.newDocument = nil } }
         .sheet(isPresented: $creating) { NavigationStack { NewFaultView() } }
     }
 }

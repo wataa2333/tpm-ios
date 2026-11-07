@@ -498,7 +498,7 @@ final class PreviewTests: XCTestCase {
         capture(app, "Fault form lower fields")
     }
 
-    func testNewActionInTabBarKeepsCurrentPage() {
+    func testNewReportTabKeepsBarAndRestoresCurrentPage() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "faults"]
         app.launch()
@@ -508,20 +508,20 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(tabBar.buttons["新建报修"].exists)
         XCTAssertTrue(add.isHittable)
         XCTAssertEqual(app.buttons.matching(identifier: "新建报修").count, 1)
-        let originalBarTop = app.navigationBars["故障报修"].frame.minY
         add.tap()
         let cancel = app.buttons["取消"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 10))
         let formBar = app.navigationBars.containing(.button, identifier: "取消").firstMatch
         XCTAssertTrue(formBar.exists)
-        XCTAssertEqual(formBar.frame.minY, originalBarTop, accuracy: 3)
-        XCTAssertFalse(tabBar.isHittable)
+        XCTAssertTrue(tabBar.isHittable)
+        XCTAssertTrue(tabBar.buttons["新建报修"].isSelected)
         let save = app.buttons["保存"], submit = app.buttons["提交"]
         XCTAssertTrue(save.waitForExistence(timeout: 5))
         XCTAssertTrue(save.isHittable)
         XCTAssertTrue(submit.isHittable)
         XCTAssertLessThan(formBar.frame.maxY, save.frame.minY)
-        XCTAssertLessThanOrEqual(submit.frame.maxY, app.frame.maxY)
+        XCTAssertLessThanOrEqual(save.frame.maxY, tabBar.frame.minY + 2)
+        XCTAssertLessThanOrEqual(submit.frame.maxY, tabBar.frame.minY + 2)
         cancel.tap()
         XCTAssertTrue(app.buttons["新建报修"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.navigationBars["故障报修"].exists)

@@ -6,11 +6,9 @@ func bottomBarExtension(safeAreaInset: CGFloat) -> CGFloat {
 
 @MainActor
 final class BottomNavigationModel: ObservableObject {
-    @Published var newDocument: WorkflowKind?
     @Published var hideTabs = false
     @Published var refresh = UUID()
     @Published var searchReset = UUID()
-    @Published var presentingDocument = false
     /// A list is in selection mode: the "new" button steps aside for the batch bar.
     @Published var selectingBatch = false
     /// An order moved to its next step while its detail is open. The list behind must not

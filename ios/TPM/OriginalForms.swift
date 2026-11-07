@@ -581,6 +581,7 @@ struct OriginalFaultForm: View {
     var draft: FaultDraft? = nil
     var initialAsset: JSONValue? = nil
     var onSaved: (() -> Void)? = nil
+    var onClose: (() -> Void)? = nil
     private func field(_ key: String) -> Binding<JSONValue> { Binding(get: { model.data[key] ?? .null }, set: { model.data[key] = $0 }) }
     private func apply(_ draft: FaultDraft, automatic: Bool = false) {
         model.data = draft.data
@@ -604,12 +605,15 @@ struct OriginalFaultForm: View {
     private func keepDraft() {
         let draft = FaultDraft(id: draftID ?? UUID(), savedAt: Date(), data: model.data, selections: model.selections,
                                orderID: orderID, orderSN: existing?.text("sn"))
-        do { try DraftStore.shared.save(draft, scope: session.draftScope); dismiss() }
+        do { try DraftStore.shared.save(draft, scope: session.draftScope); finish() }
         catch { model.error = "草稿没有保存成功：" + error.localizedDescription }
+    }
+    private func finish() {
+        if let onClose { onClose() } else { dismiss() }
     }
     /// Closing keeps entered content locally without an extra confirmation.
     private func close() {
-        if worthKeeping { keepDraft() } else { dismiss() }
+        if worthKeeping { keepDraft() } else { finish() }
     }
     private func text(_ key: String) -> Binding<String> { Binding(get: { model.data.text(key) }, set: { model.data[key] = .string($0) }) }
     var body: some View {
@@ -723,7 +727,7 @@ struct OriginalFaultForm: View {
             _ = try await session.request(path, body: .object(payload))
             // The report is on the server now: the draft it came from has done its job.
             if let draftID { DraftStore.shared.remove(id: draftID, scope: session.draftScope) }
-            onSaved?(); dismiss()
+            onSaved?(); finish()
         } catch { model.error = error.localizedDescription }
     }
 }
