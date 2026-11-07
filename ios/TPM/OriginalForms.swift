@@ -11,6 +11,7 @@ final class OriginalFormModel: ObservableObject {
     @Published var saving = false
     @Published var error: String?
     @Published var ready = false
+    private var loadRevision = UUID()
     let kind: String
     init(kind: String) { self.kind = kind }
     func selectReceiverDepartment(_ department: JSONValue) {
@@ -20,17 +21,23 @@ final class OriginalFormModel: ObservableObject {
         data = updated
     }
     func load(_ session: LiveSession, existing: Fields? = nil, referenceSn: String? = nil) async {
+        guard !Task.isCancelled else { return }
+        let revision = UUID()
+        loadRevision = revision
         loading = true; ready = false; error = nil
-        defer { loading = false }
+        defer { if loadRevision == revision { loading = false } }
         do {
             if let existing {
                 data = existing
                 if kind == "ERP_OUTBOUND" {
-                    data["erpMaterialOutbounds"] = try await session.request("erpOutbound/getErpMaterialOutboundsByOutboundId", query: ["outboundId": existing.text("outboundId")])
+                    let materials = try await session.request("erpOutbound/getErpMaterialOutboundsByOutboundId", query: ["outboundId": existing.text("outboundId")])
+                    guard loadRevision == revision, !Task.isCancelled else { return }
+                    data["erpMaterialOutbounds"] = materials
                 }
             }
             else {
                 let user = try await session.request("user/getUserDeptByUserId", query: ["userId": session.authentication.text("id")])
+                guard loadRevision == revision, !Task.isCancelled else { return }
                 data = ["assignees": .object([:])]
                 if kind == "ASSET_FAULT" {
                     data["applyUser"] = user
@@ -48,7 +55,9 @@ final class OriginalFormModel: ObservableObject {
                 }
             }
             let result = try await session.request("workflow/getAssigneeElementsByProcessCategory", query: ["processCategory": kind])
+            guard loadRevision == revision, !Task.isCancelled else { return }
             assignees = result.array.map(\.object)
+            selections = [:]
             var existingAssignments = data["assignees"]?.object ?? [:]
             if let raw = data["assignees"]?.text.data(using: .utf8), let decoded = try? JSONDecoder().decode(JSONValue.self, from: raw) { existingAssignments = decoded.object }
             for node in assignees {
@@ -57,7 +66,10 @@ final class OriginalFormModel: ObservableObject {
                 selections[key] = usernames(raw)
             }
             ready = true
-        } catch { self.error = error.localizedDescription }
+        } catch {
+            guard loadRevision == revision, !Task.isCancelled, !isCancellation(error) else { return }
+            self.error = error.localizedDescription
+        }
     }
     func validationError() -> String? {
         let fields = kind == "ASSET_FAULT"
@@ -582,6 +594,9 @@ struct OriginalFaultForm: View {
     var initialAsset: JSONValue? = nil
     var onSaved: (() -> Void)? = nil
     var onClose: (() -> Void)? = nil
+    var isActive = true
+    @State private var loadAttempt = UUID()
+    @State private var initialized = false
     private func field(_ key: String) -> Binding<JSONValue> { Binding(get: { model.data[key] ?? .null }, set: { model.data[key] = $0 }) }
     private func apply(_ draft: FaultDraft, automatic: Bool = false) {
         model.data = draft.data
@@ -650,9 +665,15 @@ struct OriginalFaultForm: View {
             Section("现场照片") { OriginalPhotosField(albums: field("albums"), directory: "asset_fault", preview: preview, uploading: $photoUploading) }
             if preview { Section { Text("原包字段预览，未连接服务器").font(AppFont.footnote).foregroundStyle(.secondary) } }
         }
-        .disabled(model.loading || model.saving)
-        .initialLoadingContent(model.loading && !model.ready)
-        .overlay { AnimatedLoadingOverlay(isPresented: model.loading || model.saving, title: model.saving ? "正在提交报修…" : "正在加载表单…") }
+        .disabled(!initialized || model.loading || model.saving)
+        .initialLoadingContent(!initialized)
+        .overlay {
+            if !initialized, !model.loading, let error = model.error {
+                LoadingFailure(error: error) { loadAttempt = UUID() }
+            } else {
+                AnimatedLoadingOverlay(isPresented: !initialized || model.loading || model.saving, title: model.saving ? "正在提交报修…" : "正在加载表单…")
+            }
+        }
         .navigationTitle(existing == nil ? "故障报修" : "编辑报修").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { close() }.disabled(model.saving || photoUploading) }
@@ -673,17 +694,19 @@ struct OriginalFaultForm: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             DocumentActions(busy: model.saving, submitting: confirming == true,
-                            disabled: !model.ready || model.loading || photoUploading,
+                            disabled: !initialized || model.loading || photoUploading,
                             // "保存" keeps a draft on this phone: nothing is sent to the server and nothing is required.
                             // Only "提交" writes to the server, and it needs the form complete.
                             save: { if draftsAllowed { keepDraft() } else { prepare(false) } }, submit: { prepare(true) })
         }
-        .task {
-            guard !model.ready else { return }
+        .task(id: isActive ? loadAttempt : nil) {
+            guard isActive, !initialized else { return }
             if preview { model.loading = false; model.ready = true; model.data = ["faultTime": .string("2026-10-16 09:30"), "albums": .array([]), "applyUser": PreviewIdentity.user, "applyDept": PreviewIdentity.department, "userPhone": .string("13800000000")] }
             else {
                 await model.load(session, existing: existing)
-                if existing == nil, model.ready { await model.applyDefaults(session) }
+                guard model.ready, !Task.isCancelled else { return }
+                if existing == nil { await model.applyDefaults(session) }
+                guard !Task.isCancelled else { return }
                 loadedData = model.data; loadedSelections = model.selections
                 // The form opens with what was saved last time for the same order (a new report: the last
                 // new report). A draft chosen on purpose wins; a draft of another order is never offered.
@@ -698,17 +721,25 @@ struct OriginalFaultForm: View {
                         let matches = page["content"].array.filter { $0["assetId"].text == id && $0["assetCode"].text == code }
                         guard matches.count == 1 else { throw APIError(message: "当前登录账号无法核对该资产，请手动选择报修资产") }
                         model.data["asset"] = matches[0]
-                    } catch is CancellationError { return } catch { model.error = error.localizedDescription }
+                    } catch {
+                        guard !Task.isCancelled, !isCancellation(error) else { return }
+                        model.error = error.localizedDescription
+                    }
                 }
                 if draftsAllowed, model.ready, initialAsset == nil {
                     if let draft, draftTarget.matches(draft) { apply(draft) }
                     else if let last = DraftStore.shared.drafts(scope: session.draftScope, for: draftTarget).first { apply(last, automatic: true) }
                 }
             }
+            guard !Task.isCancelled else { return }
             draftCount = DraftStore.shared.drafts(scope: session.draftScope, for: draftTarget).count
+            initialized = true
         }
         .keyboardManaged(showsToolbar: false)
-        .errorDialog($model.error, title: model.ready ? "提示" : "加载失败", clearsOnClose: true, retry: model.ready ? nil : { Task { await model.load(session, existing: existing) } })
+        .errorDialog(Binding(
+            get: { isActive && initialized ? model.error : nil },
+            set: { if isActive && initialized { model.error = $0 } }
+        ), clearsOnClose: true)
     }
     private func prepare(_ committed: Bool) {
         if let error = model.validationError() { model.error = error; showValidation = true; return }

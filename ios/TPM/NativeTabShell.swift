@@ -20,7 +20,7 @@ struct NativeTabShell<Home: View, Todo: View, Workspace: View, Mine: View>: View
                 .badge(navigation.todoCount)
             Tab("新建报修", systemImage: "plus.circle", value: reportTab) {
                 NavigationStack {
-                    OriginalFaultForm(preview: preview, onClose: closeReport)
+                    OriginalFaultForm(preview: preview, onClose: closeReport, isActive: selection == reportTab)
                         .id(reportFormID)
                         .modifier(ListTabVisibility())
                 }

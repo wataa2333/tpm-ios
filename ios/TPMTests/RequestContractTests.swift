@@ -79,6 +79,24 @@ struct RequestContractTests {
         #expect(StubURLProtocol.captured.count == 3)
     }
 
+    @Test func cancelledReportLoadDoesNotShowFailureAndCanReload() async {
+        let session = makeSession()
+        let model = OriginalFormModel(kind: "ASSET_FAULT")
+        let abandoned = Task { await model.load(session) }
+        abandoned.cancel()
+        await abandoned.value
+
+        #expect(model.error == nil)
+        #expect(!model.ready)
+        #expect(StubURLProtocol.captured.isEmpty)
+
+        await model.load(session)
+        #expect(model.ready)
+        #expect(!model.loading)
+        #expect(model.error == nil)
+        #expect(StubURLProtocol.captured.count == 2)
+    }
+
     @Test func temporaryOperationUsesItsOwnTokenAndStopsWhenOwnerLeaves() async throws {
         let owner = makeSession()
         let configuration = URLSessionConfiguration.ephemeral

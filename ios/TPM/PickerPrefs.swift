@@ -278,6 +278,7 @@ extension OriginalFormModel {
         for item in Self.defaultFields(kind: kind) {
             guard let choice = store.defaultChoice(scope: session.draftScope, field: item.field),
                   let result = try? await resolveReference(item.source, choice.entry.value, session: session) else { continue }
+            guard !Task.isCancelled else { return }
             if kind == "ASSET_FAULT" && item.dataKey == "dept" { selectReceiverDepartment(result) }
             else {
                 data[item.dataKey] = result
