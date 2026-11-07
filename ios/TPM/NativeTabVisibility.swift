@@ -11,21 +11,31 @@ struct NativeTabVisibility: UIViewControllerRepresentable {
         return controller
     }
     func updateUIViewController(_ controller: VisibilityController, context: Context) {
-        controller.hidden = hidden
-        controller.applyVisibility(animated: !context.transaction.disablesAnimations)
+        controller.updateVisibility(hidden, animated: !context.transaction.disablesAnimations)
     }
     final class VisibilityController: UIViewController {
         var hidden = false
+        private var appeared = false
+
+        func updateVisibility(_ hidden: Bool, animated: Bool) {
+            guard self.hidden != hidden else { return }
+            self.hidden = hidden
+            // Initial SwiftUI updates can arrive before the navigation push starts.
+            // Let UIKit's appearance callbacks start the transition for an arriving page.
+            if appeared { applyVisibility(animated: animated) }
+        }
+
         func applyVisibility(animated: Bool) {
             guard let tabs = tabBarController, tabs.isTabBarHidden != hidden else { return }
             tabs.setTabBarHidden(hidden, animated: animated && !UIAccessibility.isReduceMotionEnabled)
         }
         override func viewWillAppear(_ animated: Bool) {
             super.viewWillAppear(animated)
-            applyVisibility(animated: animated)
+            applyVisibility(animated: transitionCoordinator?.isAnimated ?? animated)
         }
         override func viewWillDisappear(_ animated: Bool) {
             super.viewWillDisappear(animated)
+            appeared = false
             // A back swipe that is let go half way brings this screen back: it asserts its own state again,
             // because the screen behind has already asked for the opposite while the swipe was running.
             transitionCoordinator?.notifyWhenInteractionChanges { [weak self] context in
@@ -34,6 +44,7 @@ struct NativeTabVisibility: UIViewControllerRepresentable {
         }
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
+            appeared = true
             applyVisibility(animated: animated)
         }
     }
