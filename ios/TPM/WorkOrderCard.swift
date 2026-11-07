@@ -106,12 +106,21 @@ struct WorkOrderCard<Destination: View>: View {
                     ForEach(Array(expandedFacts.enumerated()), id: \.offset) { _, fact in
                         ReadableFact(title: fact.0, value: fact.1)
                     }
-                    Button { open() } label: {
-                        Label(selecting == nil ? "打开工单" : "查看工单", systemImage: "arrow.up.right.square").animatedTextValue(selecting == nil ? "打开工单" : "查看工单").font(AppFont.subheadline.weight(.semibold))
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }.buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.regular)
+                    HStack(spacing: 8) {
+                        Button { open() } label: {
+                            Text(selecting == nil ? "打开工单" : "查看工单")
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.borderedProminent)
                         .accessibilityIdentifier("order-open-" + reference)
-                    if selecting == nil, let reportAsset { AssetReportButton(asset: reportAsset) }
+                        if selecting == nil, let reportAsset {
+                            AssetReportButton(asset: reportAsset, compact: true)
+                        }
+                    }
+                    .font(AppFont.subheadline.weight(.semibold))
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.regular)
                 }
                 .padding(.top, RowMetrics.spacing)
                 .transition(.opacity)

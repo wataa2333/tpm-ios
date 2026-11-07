@@ -79,6 +79,27 @@ struct RequestContractTests {
         #expect(StubURLProtocol.captured.count == 3)
     }
 
+    @Test func temporaryOperationUsesItsOwnTokenAndStopsWhenOwnerLeaves() async throws {
+        let owner = makeSession()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubURLProtocol.self]
+        let temporary = LiveSession(urlSession: URLSession(configuration: configuration), authentication: [
+            "token": .string("OPERATION-TOKEN"), "name": .string("special")
+        ], operationOwner: owner)
+        _ = try await temporary.request("process/commitTask", body: .object([:]))
+        #expect(StubURLProtocol.captured.map(\.authorization) == ["Bearer OPERATION-TOKEN"])
+        #expect(owner.authentication.text("token") == "TEST-TOKEN")
+
+        owner.signOut()
+        do {
+            _ = try await temporary.request("process/commitTask", body: .object([:]))
+            Issue.record("Changing the owner scope must stop temporary operations before sending a request")
+        } catch {
+            #expect(isCancellation(error))
+        }
+        #expect(StubURLProtocol.captured.count == 1)
+    }
+
     @Test func serverErrorsDoNotActivateQueryFallback() async throws {
         let owner = makeSession(), query = makeQuerySession()
         var activated = false

@@ -31,7 +31,7 @@ struct DashboardCard: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .center) {
                 // Keep the same text identity from unknown → known; a hidden zero only reserves space.
-                Text(count.map(String.init) ?? "0").font(.custom("GoogleSans-Bold", size: 30, relativeTo: .title)).monospacedDigit()
+                Text(count.map(String.init) ?? "0").font(.title.bold()).monospacedDigit()
                     .lineLimit(1).minimumScaleFactor(0.45).layoutPriority(1)
                     .foregroundStyle(.primary)
                     .opacity(count == nil ? 0 : 1)
@@ -196,15 +196,19 @@ struct DashboardHome: View {
                 if preview { DemoNotice() }
             }
             .buttonStyle(DashboardPressStyle())
-            // Room under the last card for the floating "+" button.
-            .padding(.horizontal, 16).padding(.bottom, 80)
+            .padding(.horizontal, 16).padding(.bottom, 16)
         }
         // The loading spinner floats over the page instead of sitting in it: it is for the first load and the
         // refresh button, takes no room, and so can never move the content or fight the pull-down gesture.
         // Pulling down shows the system spinner only and changes nothing on this page until the numbers arrive.
         .overlay(alignment: .top) {
-            ProgressView().padding(.top, 6).opacity(loadingCounts || gate.busy ? 1 : 0).allowsHitTesting(false)
-                .interfaceMotion(loadingCounts || gate.busy)
+            ProgressView()
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 6)
+                .opacity(loadingCounts || gate.busy ? 1 : 0)
+                .accessibilityHidden(!loadingCounts && !gate.busy)
+                .allowsHitTesting(false)
+                .transaction { $0.animation = nil; $0.disablesAnimations = true }
         }
         .navigationTitle("主页").navigationBarTitleDisplayMode(.large).nativeNavigationChrome()
         .modifier(ListTabVisibility())
@@ -294,8 +298,7 @@ struct DashboardWorkspace: View {
                 if preview { DemoNotice() }
             }
             .buttonStyle(DashboardPressStyle())
-            // Room under the last card for the floating "+" button.
-            .padding(.horizontal, 16).padding(.bottom, 80)
+            .padding(.horizontal, 16).padding(.bottom, 16)
         }
         .keyboardManaged()
         .navigationDestination(item: $route) { query in

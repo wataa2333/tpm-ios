@@ -310,12 +310,6 @@ import Foundation
     #expect(faultFormHasContent(["albums": .array([.object(["url": .string("x")])])]))
 }
 
-@Test func theFaceIDGateCanBeSwitchedOffByTheOwnerOrByTheTestLaunchArgument() {
-    #expect(BiometricGate.isRequired(enabled: true, arguments: []))
-    #expect(!BiometricGate.isRequired(enabled: false, arguments: []))
-    #expect(!BiometricGate.isRequired(enabled: true, arguments: ["--skip-biometrics"]))
-}
-
 @Test func aDraftIsOnlyOfferedToTheFormOfItsOwnOrder() {
     let url = FileManager.default.temporaryDirectory.appendingPathComponent("drafts-" + UUID().uuidString).appendingPathComponent("fault-drafts.json")
     defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }

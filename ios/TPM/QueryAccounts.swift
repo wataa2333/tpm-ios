@@ -104,13 +104,6 @@ private enum QueryCredentialVault {
             self.activateFallback(for: owner)
         }
     }
-    private func authorizeSavedPassword() async throws {
-        switch await BiometricGate.authenticate(reason: "使用独立查询账号读取维修数据") {
-        case .passed: break
-        case .cancelled: throw CancellationError()
-        case .failed(let message): throw APIError(message: message)
-        }
-    }
     private func align(_ source: LiveSession, to session: LiveSession) async throws {
         guard session.signedIn, !session.currentFactoryID.isEmpty else { throw APIError(message: "请先登录并选择当前厂区") }
         let factory = session.currentFactoryID
@@ -130,7 +123,6 @@ private enum QueryCredentialVault {
         }
         let password: String
         if inputPassword.isEmpty {
-            try await authorizeSavedPassword()
             guard let saved = QueryCredentialVault.password(name) ?? AccountVault.password(for: name) else { throw APIError(message: "请填写密码，或先保存该账号") }
             password = saved
         } else { password = inputPassword }
@@ -156,7 +148,6 @@ private enum QueryCredentialVault {
         if connecting == nil {
             let name = username, token = revision, owner = session.scopeRevision
             connecting = Task {
-                try await self.authorizeSavedPassword()
                 guard let password = QueryCredentialVault.password(name) else { throw QueryCredentialsUnavailable() }
                 let source = LiveSession(queryOnly: true)
                 try await source.login(username: name, password: password)
@@ -210,9 +201,9 @@ struct QueryAccountSettingsView: View {
             Section("独立查询账号") {
                 TextField("账号", text: $username).textInputAutocapitalization(.never).autocorrectionDisabled()
                 SecureField("密码（已保存可留空）", text: $password).textContentType(.password)
-                Button("验证并使用") { verify() }.disabled(username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                if busy { ProgressView("正在验证账号与当前厂区") }
-                Text("验证成功后密码仅保存在本机钥匙串中，不修改当前登录账号。查询账号无当前厂区权限时会提示。").font(AppFont.caption).foregroundStyle(.secondary)
+                Button("使用此账号") { verify() }.disabled(username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if busy { ProgressView("正在登录并切换厂区") }
+                Text("登录成功后密码仅保存在本机钥匙串中，不修改当前登录账号。查询账号无当前厂区权限时会提示。").font(AppFont.caption).foregroundStyle(.secondary)
             }
             if !saved.isEmpty {
                 Section("选择已保存账号") {

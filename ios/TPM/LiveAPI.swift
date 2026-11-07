@@ -114,6 +114,18 @@ final class LiveSession: ObservableObject {
     /// Query sessions never restore/persist the operator token and cannot call business write endpoints.
     let queryOnly: Bool
     var queryOwnerScope = ""
+    private let operationOwnerRevision: UUID?
+    private weak var operationOwner: LiveSession?
+    private var persistsOperator: Bool { !queryOnly && operationOwnerRevision == nil }
+
+    private func checkOperationOwner() throws {
+        if let operationOwnerRevision {
+            guard let operationOwner, operationOwner.signedIn,
+                  operationOwner.scopeRevision == operationOwnerRevision else {
+                throw CancellationError()
+            }
+        }
+    }
     private weak var readFallbackOwner: LiveSession?
     private var readFallbackScope: UUID?
     private var usingReadFallback = false
@@ -135,19 +147,21 @@ final class LiveSession: ObservableObject {
     }
     private let urlSession: URLSession
     /// `authentication` is only for tests that need a signed-in session without the Keychain.
-    init(urlSession: URLSession = .shared, authentication initial: Fields? = nil, queryOnly: Bool = false) {
+    init(urlSession: URLSession = .shared, authentication initial: Fields? = nil, queryOnly: Bool = false, operationOwner: LiveSession? = nil) {
+        self.operationOwner = operationOwner
+        self.operationOwnerRevision = operationOwner?.scopeRevision
         self.urlSession = urlSession; self.queryOnly = queryOnly
-        if let initial { authentication = initial } else if !queryOnly { restore() }
+        if let initial { authentication = initial } else if persistsOperator { restore() }
     }
     func restore() {
-        guard !queryOnly else { return }
+        guard persistsOperator else { return }
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.personal.tpm", kSecAttrAccount as String: account, kSecReturnData as String: true]
         var result: CFTypeRef?
         if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
            let data = result as? Data, let value = try? JSONDecoder().decode(JSONValue.self, from: data) { authentication = value.object }
     }
     private func persist() throws {
-        guard !queryOnly else { return }
+        guard persistsOperator else { return }
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.personal.tpm", kSecAttrAccount as String: account]
         let data = try JSONEncoder().encode(JSONValue.object(authentication))
         let attributes: [String: Any] = [kSecValueData as String: data]
@@ -161,10 +175,10 @@ final class LiveSession: ObservableObject {
     }
     func signOut() {
         readFallbackOwner = nil; readFallbackScope = nil; usingReadFallback = false; onReadFallback = nil
-        if !queryOnly { UserDirectory.shared.clear() }
+        if persistsOperator { UserDirectory.shared.clear() }
         scopeRevision = UUID()
         authentication = [:]
-        if !queryOnly { SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.personal.tpm", kSecAttrAccount as String: account] as CFDictionary) }
+        if persistsOperator { SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.personal.tpm", kSecAttrAccount as String: account] as CFDictionary) }
     }
     func login(username: String, password: String) async throws {
         signingIn = true
@@ -207,7 +221,7 @@ final class LiveSession: ObservableObject {
         authentication["factoryId"] = factories.first { $0["factoryId"].text == factoryID }?["factoryId"] ?? .string(factoryID)
         do { try persist() } catch { authentication = previous; throw error }
         scopeRevision = UUID()
-        if !queryOnly { rememberFactory() }
+        if persistsOperator { rememberFactory() }
     }
     func request(_ path: String, query: [String: String] = [:], body: JSONValue? = nil) async throws -> JSONValue {
         if queryOnly { try QueryReadPolicy.validate(path: path, body: body) }
@@ -235,6 +249,8 @@ final class LiveSession: ObservableObject {
         }
     }
     private func perform(_ input: URLRequest, allowPlainText: Bool = false, signOutOnUnauthorized: Bool = true) async throws -> JSONValue {
+        try Task.checkCancellation()
+        try checkOperationOwner()
         let scope = scopeRevision
         var request = input
         request.timeoutInterval = 60
@@ -249,6 +265,7 @@ final class LiveSession: ObservableObject {
         // The page that asked may be gone by now (left, or the factory or account changed). Its answer is thrown away
         // here, before anything is decoded, stored or applied.
         try Task.checkCancellation()
+        try checkOperationOwner()
         guard scope == scopeRevision else { throw CancellationError() }
         guard let http = response as? HTTPURLResponse else { throw APIError(message: "服务器响应无效", request: label) }
         guard (200..<300).contains(http.statusCode) else {
@@ -307,11 +324,6 @@ extension LiveSession {
 
     /// Switches to a remembered account: the pages dim, then the new account's pages fade in.
     func switchAccount(to account: SavedAccount) async throws {
-        switch await BiometricGate.authenticate(reason: "使用已记住的账号 " + (account.displayName.isEmpty ? account.username : account.displayName)) {
-        case .passed: break
-        case .cancelled: return
-        case .failed(let message): throw APIError(message: message)
-        }
         guard let password = AccountVault.password(for: account.username) else {
             throw APIError(message: "没有找到这个账号保存的密码，请重新登录并打开“记住密码”")
         }
@@ -380,5 +392,29 @@ struct LoadingFailure: View {
         if let error {
             ContentUnavailableView { Label("加载失败", systemImage: "wifi.exclamationmark") } description: { Text(error).animatedTextValue(error) } actions: { Button("重试", action: retry) }
         } else { ProgressView("正在加载…").frame(maxWidth: .infinity, maxHeight: .infinity) }
+    }
+}
+
+extension LiveSession {
+    /// A single operation uses its own token and cannot change the main account or its remembered factory.
+    func startOperation(as account: SavedAccount) async throws -> LiveSession? {
+        if account.username.caseInsensitiveCompare(authentication.text("name")) == .orderedSame { return nil }
+        guard signedIn, !currentFactoryID.isEmpty else { throw APIError(message: "请先登录并选择厂区") }
+        guard let password = AccountVault.password(for: account.username) else {
+            throw APIError(message: "该账号没有已保存的密码，请先登录并记住密码")
+        }
+        let factory = currentFactoryID
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpShouldSetCookies = false
+        let temporary = LiveSession(urlSession: URLSession(configuration: configuration), operationOwner: self)
+        try await temporary.login(username: account.username, password: password)
+        if temporary.factories.isEmpty { try await temporary.refreshFactories() }
+        guard temporary.factories.contains(where: { $0["factoryId"].text == factory }) else {
+            throw APIError(message: "所选账号没有当前厂区的访问权限")
+        }
+        try await temporary.changeFactory(to: factory)
+        try Task.checkCancellation()
+        try temporary.checkOperationOwner()
+        return temporary
     }
 }

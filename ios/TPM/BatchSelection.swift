@@ -327,7 +327,10 @@ struct CardSelecting {
 struct BatchHost: ViewModifier {
     @ObservedObject var batch: BatchSelection
     let candidates: () -> [BatchItem]
-    @EnvironmentObject private var session: LiveSession
+    @EnvironmentObject private var owner: LiveSession
+    @State private var operationSession: LiveSession?
+    @State private var choosingOperationAccount = false
+    private var session: LiveSession { operationSession ?? owner }
     @EnvironmentObject private var navigation: BottomNavigationModel
     @State private var presetting: BatchPresetRequest?
     @State private var preparing = false
@@ -339,7 +342,7 @@ struct BatchHost: ViewModifier {
         content
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    if batch.active { Button("取消") { batch.end() }.accessibilityIdentifier("batch-cancel") }
+                    if batch.active { Button("取消") { batch.end() }.disabled(preparing).accessibilityIdentifier("batch-cancel") }
                     else {
                         Button("多选", systemImage: "checkmark.circle") { batch.begin() }
                             .labelStyle(.iconOnly)
@@ -349,13 +352,27 @@ struct BatchHost: ViewModifier {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if batch.active {
-                    BatchBar(batch: batch, busy: preparing, onSelectAll: { batch.selectAll(candidates()) }, onRun: { begin($0) })
+                    BatchBar(batch: batch, busy: preparing, onSelectAll: { batch.selectAll(candidates()) }, onRun: { begin($0) }) {
+                        Button("本次操作账号", systemImage: operationSession == nil ? "person.crop.circle" : "person.crop.circle.badge.checkmark") {
+                            choosingOperationAccount = true
+                        }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.glass)
+                        .accessibilityValue(session.authentication.text("name"))
+                        .disabled(preparing || presetting != nil || run != nil)
+                    }
                         .transition(.opacity)
                 }
             }
             .interfaceMotion(batch.active)
-            .onChange(of: batch.active) { _, active in navigation.selectingBatch = active }
-            .onDisappear { if batch.active { batch.end() }; navigation.selectingBatch = false }
+            .onChange(of: batch.active) { _, active in
+                navigation.selectingBatch = active
+                if !active { operationSession = nil }
+            }
+            .onDisappear { if batch.active { batch.end() }; navigation.selectingBatch = false; operationSession = nil }
+            .sheet(isPresented: $choosingOperationAccount) {
+                OperationAccountPicker(owner: owner, operationSession: $operationSession)
+            }
             .toast($batch.notice)
             .sheet(item: $presetting, onDismiss: {
                 if let started = pendingRun { pendingRun = nil; finishing = started; run = started }
@@ -363,10 +380,10 @@ struct BatchHost: ViewModifier {
                 BatchPresetSheet(request: request, count: batch.items.count) { preset in
                     pendingRun = BatchRun(action: request.action, operation: request.operation, items: batch.items, preset: preset)
                     presetting = nil
-                }
+                }.environmentObject(session)
             }
             .sheet(item: $run, onDismiss: finishRun) { run in
-                BatchRunSheet(run: run)
+                BatchRunSheet(run: run).environmentObject(session)
             }
             .sheet(item: $batch.peeking) { item in
                 BatchPeekSheet(item: item)
@@ -384,6 +401,9 @@ struct BatchHost: ViewModifier {
             return
         }
         preparing = true
+        let session = session
+        let items = batch.items
+        let ownerScope = owner.scopeRevision
         Task {
             defer { preparing = false }
             let setup: (nodes: [Fields], selections: [String: [String]])
@@ -393,6 +413,8 @@ struct BatchHost: ViewModifier {
                 return
             }
             let erp = action == .complete ? await BatchProcessor.erpSetup(session: session) : nil
+            guard batch.active, items == batch.items, session === self.session,
+                  ownerScope == owner.scopeRevision else { return }
             let choosable = setup.nodes.filter { ["ASSIGN", "SUPERVISOR"].contains($0.text("assignType")) }
             if action.needsPreset || missingAssigneeMessage(nodes: choosable, selections: setup.selections) != nil {
                 presetting = BatchPresetRequest(action: action, operation: .proceed, kind: first.kind, nodes: choosable, selections: setup.selections, erp: erp)
@@ -406,6 +428,7 @@ struct BatchHost: ViewModifier {
     private func finishRun() {
         guard let done = finishing else { return }
         finishing = nil
+        operationSession = nil
         batch.remove(ids: Set(done.succeeded))
         if batch.items.isEmpty { batch.end() }
         if !done.succeeded.isEmpty { navigation.refresh = UUID() }
@@ -420,11 +443,12 @@ extension View {
 
 /// The bar at the bottom of a list in selection mode. It sits above the tab bar, on its own bar material:
 /// the count and the status on one line, the action as a full-width button below.
-struct BatchBar: View {
+struct BatchBar<AccountAction: View>: View {
     @ObservedObject var batch: BatchSelection
     var busy = false
     let onSelectAll: () -> Void
     let onRun: (BatchOperation) -> Void
+    @ViewBuilder let accountAction: () -> AccountAction
     var body: some View {
         VStack(spacing: 10) {
             HStack(spacing: 12) {
@@ -434,6 +458,7 @@ struct BatchBar: View {
                     Text(batch.groupTitle).animatedTextValue(batch.groupTitle).font(AppFont.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
+                accountAction()
                 Menu {
                     Button("全选已加载的单据", systemImage: "checkmark.circle", action: onSelectAll)
                     Button("清空已选", systemImage: "circle", role: .destructive) { batch.clear() }

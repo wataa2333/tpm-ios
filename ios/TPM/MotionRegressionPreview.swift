@@ -16,7 +16,7 @@ struct MotionRegressionPreview: View {
         }
         .navigationTitle("动画回归示例").navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            BatchBar(batch: selection, onSelectAll: { selection.selectAll([sample]) }, onRun: { _ in })
+            BatchBar(batch: selection, onSelectAll: { selection.selectAll([sample]) }, onRun: { _ in }) { EmptyView() }
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("motion-batch-bar")
         }

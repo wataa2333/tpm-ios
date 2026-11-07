@@ -77,10 +77,10 @@ struct PrecisionDashboardScreen: View {
                         NavigationLink { PrecisionDeviceScreen(asset: row["asset"]) } label: {
                             HStack(alignment: .center, spacing: 12) {
                                 VStack(alignment: .leading, spacing: 5) {
-                                    Text(row["asset"]["addressCode"].text.isEmpty ? row["asset"]["assetCode"].text : row["asset"]["addressCode"].text).animatedTextValue(row["asset"]["addressCode"].text.isEmpty ? row["asset"]["assetCode"].text : row["asset"]["addressCode"].text).font(AppFont.precisionText(.title3, size: 20))
-                                    Text(row["asset"]["assetName"].text).animatedTextValue(row["asset"]["assetName"].text).font(AppFont.precisionText(.subheadline, size: 15))
-                                    Text(row["asset"]["assetCode"].text).animatedTextValue(row["asset"]["assetCode"].text).font(AppFont.precisionText(.caption, size: 12))
-                                    Text("检测日期：" + readableDate(row["analysisDate"])).animatedTextValue("检测日期：" + readableDate(row["analysisDate"])).font(AppFont.precisionText(.caption, size: 12))
+                                    Text(row["asset"]["addressCode"].text.isEmpty ? row["asset"]["assetCode"].text : row["asset"]["addressCode"].text).animatedTextValue(row["asset"]["addressCode"].text.isEmpty ? row["asset"]["assetCode"].text : row["asset"]["addressCode"].text).font(AppFont.precisionText(.title3))
+                                    Text(row["asset"]["assetName"].text).animatedTextValue(row["asset"]["assetName"].text).font(AppFont.precisionText(.subheadline))
+                                    Text(row["asset"]["assetCode"].text).animatedTextValue(row["asset"]["assetCode"].text).font(AppFont.precisionText(.caption))
+                                    Text("检测日期：" + readableDate(row["analysisDate"])).animatedTextValue("检测日期：" + readableDate(row["analysisDate"])).font(AppFont.precisionText(.caption))
                                     PrecisionPeopleLabel(assetID: row["asset"]["assetId"].text, refreshID: model.updatedAt).id(row["asset"]["assetId"].text)
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                                 Text(row["analysisResult"].text.replacingOccurrences(of: "RESULT_", with: "")).animatedTextValue(row["analysisResult"].text.replacingOccurrences(of: "RESULT_", with: ""))

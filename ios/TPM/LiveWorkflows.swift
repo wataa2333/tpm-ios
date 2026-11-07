@@ -316,9 +316,19 @@ struct LiveWorkflowDetail: View {
         if returnToList {
             if let closeWorkOrder { closeWorkOrder() } else { dismiss() }
         }
-        else { Task { await load() } }
+        else if suppressActions && operationSession != nil {
+            resetForOperationAccount()
+            operationSession = nil
+            gate.request()
+        } else { Task { await load() } }
     }
-    @EnvironmentObject private var session: LiveSession
+    @EnvironmentObject private var owner: LiveSession
+    @State private var operationSession: LiveSession?
+    @State private var choosingOperationAccount = false
+    private var session: LiveSession { operationSession ?? owner }
+    private var detailKey: String {
+        session.scopeRevision.uuidString + (usesQueryAccount ? queries.revision.uuidString : "")
+    }
     @EnvironmentObject private var queries: QueryAccountModel
     let kind: WorkflowKind
     let id: String
@@ -349,9 +359,12 @@ struct LiveWorkflowDetail: View {
             if detail == .null { LoadingFailure(error: error) { Task { await load() } } }
             else {
                 List {
+                    if let operationSession, !usesQueryAccount {
+                        Section { LabeledContent("本次操作账号", value: operationSession.authentication.text("name")) }
+                    }
                     if usesQueryAccount {
                         Section {
-                            Text("查询：" + queries.label(operator: session) + " · 操作：" + session.authentication.text("name")).animatedTextValue("查询：" + queries.label(operator: session) + " · 操作：" + session.authentication.text("name")).font(AppFont.caption).foregroundStyle(.secondary)
+                            Text("查询：" + queries.label(operator: owner) + " · 操作：" + session.authentication.text("name")).animatedTextValue("查询：" + queries.label(operator: owner) + " · 操作：" + session.authentication.text("name")).font(AppFont.caption).foregroundStyle(.secondary)
                             if let operationNotice {
                                 Label(operationNotice, systemImage: "lock.fill").animatedTextValue(operationNotice).font(AppFont.subheadline).foregroundStyle(.secondary)
                             }
@@ -406,12 +419,27 @@ struct LiveWorkflowDetail: View {
         .textSelection(.enabled).navigationTitle(kind == .fault ? "报修详情" : "出库详情").navigationBarTitleDisplayMode(.inline).nativeNavigationChrome()
         .errorDialog($error, retry: { Task { await load() } })
         .modifier(DetailTabVisibility())
-        .task(id: gate.id("detail-" + (usesQueryAccount ? queries.revision.uuidString : "operator"))) { await gate.run(key: "detail-" + (usesQueryAccount ? queries.revision.uuidString : "operator")) { await load() } }
+        .task(id: gate.id(detailKey)) { await gate.run(key: detailKey) { await load() } }
+        .sheet(isPresented: $choosingOperationAccount) {
+            OperationAccountPicker(owner: owner, operationSession: Binding(get: { operationSession }, set: { selected in
+                resetForOperationAccount()
+                operationSession = selected
+                gate.request()
+            }))
+        }
         .onChange(of: queries.revision) {
             if usesQueryAccount { detail = .null; operatorDetail = .null; actions = DetailActionSnapshot(); sourceSession = nil; operationNotice = nil }
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
+                if !peeking {
+                    Button("本次操作账号", systemImage: operationSession == nil ? "person.crop.circle" : "person.crop.circle.badge.checkmark") {
+                        choosingOperationAccount = true
+                    }
+                    .labelStyle(.iconOnly)
+                    .accessibilityValue(session.authentication.text("name"))
+                    .disabled(loading || editing || processing || returning || returnToList)
+                }
                 if canEdit && !peeking { Button("编辑") { editing = true }.disabled(loading || gate.busy || returnToList || suppressActions) }
                 RefreshButton(busy: loading || gate.busy) { gate.request() }
             }
@@ -447,16 +475,21 @@ struct LiveWorkflowDetail: View {
             .interfaceMotion(actions)
             .interfaceMotion(suppressActions)
         }
-        .sheet(isPresented: $returning, onDismiss: taskSheetClosed) { NavigationStack { WorkflowTaskView(task: task, kind: kind, previewReturn: true, onCompleted: completed) } }
+        .sheet(isPresented: $returning, onDismiss: taskSheetClosed) { NavigationStack { WorkflowTaskView(task: task, kind: kind, previewReturn: true, onCompleted: completed) }.environmentObject(session) }
         .sheet(isPresented: $editing, onDismiss: taskSheetClosed) {
-            NavigationStack { if kind == .fault { OriginalFaultForm(existing: (usesQueryAccount ? operatorDetail : detail).object, onSaved: completed) } else { OriginalERPForm(existing: detail.object, onSaved: { _ in completed() }) } }
+            NavigationStack { if kind == .fault { OriginalFaultForm(existing: (usesQueryAccount ? operatorDetail : detail).object, onSaved: completed) } else { OriginalERPForm(existing: detail.object, onSaved: { _ in completed() }) } }.environmentObject(session)
         }
         .sheet(isPresented: $processing, onDismiss: taskSheetClosed) {
             NavigationStack {
                 if kind == .fault && task["category"].text == "REPAIRED" { OriginalRepairForm(faultID: id, task: task, onCompleted: completed) }
                 else { WorkflowTaskView(task: task, kind: kind, onCompleted: kind == .fault && task["category"].text == "SIGNED" ? signCompleted : completed) }
-            }
+            }.environmentObject(session)
         }
+    }
+    private func resetForOperationAccount() {
+        detailLoadID = UUID(); actions = DetailActionSnapshot(); operatorDetail = .null
+        detail = .null; materials = []; repairResult = .null; sourceSession = nil
+        loading = true; error = nil
     }
     private var canEdit: Bool {
         if usesQueryAccount && (operatorDetail == .null || operationNotice != nil) { return false }
@@ -468,7 +501,7 @@ struct LiveWorkflowDetail: View {
         loading = true; error = nil; operationNotice = nil; actions = DetailActionSnapshot(); operatorDetail = .null
         defer { if detailLoadID == run { loading = false } }
         do {
-            let source = usesQueryAccount ? try await queries.source(for: session) : session
+            let source = usesQueryAccount ? try await queries.source(for: owner) : session
             let loadedDetail = try await source.request(kind.detailPath, query: [kind.idKey: id])
             try Task.checkCancellation()
             guard !usesQueryAccount || queryRevision == queries.revision else { return }
@@ -488,8 +521,8 @@ struct LiveWorkflowDetail: View {
                     guard !isCancellation(error), detailLoadID == run, scope == session.scopeRevision, queryRevision == queries.revision else { return }
                     actions = DetailActionSnapshot()
                     if (error as? APIError)?.status == 403 {
-                        operationNotice = "当前登录账号 " + session.authentication.text("name") + " 没有此单据的操作权限"
-                    } else { operationNotice = "当前登录账号操作权限核对失败，已停用操作。请刷新重试：" + error.localizedDescription }
+                        operationNotice = "操作账号 " + session.authentication.text("name") + " 没有此单据的操作权限"
+                    } else { operationNotice = "操作账号权限核对失败，已停用操作。请刷新重试：" + error.localizedDescription }
                 }
                 return
             }
@@ -514,7 +547,8 @@ struct LiveWorkflowDetail: View {
             // The extras never hold the page up: it is shown as soon as the order itself is loaded.
             if kind == .fault { Task { await loadExplanations(record: loadedDetail, run: run, scope: scope) } }
         } catch {
-            guard detailLoadID == run, scope == session.scopeRevision, !returnToList, !isCancellation(error) else { return }
+            guard detailLoadID == run, !returnToList, !isCancellation(error),
+                  scope == session.scopeRevision || (error as? APIError)?.status == 401 else { return }
             actions = DetailActionSnapshot()
             self.error = error.localizedDescription
         }

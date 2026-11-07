@@ -13,6 +13,6 @@ if device["state"] != "Booted":
 subprocess.run(["xcrun", "simctl", "bootstatus", device["udid"], "-b"], check=True)
 arguments = ["xcodebuild", "test", "-project", "ios/TPM.xcodeproj", "-scheme", "TPM", "-configuration", "Debug", "-destination", f"platform=iOS Simulator,id={device['udid']}", "-derivedDataPath", "build/simulator", "CODE_SIGNING_ALLOWED=NO", "-resultBundlePath", "build/NativeUIChecks.xcresult"]
 if os.environ.get("TPM_TEST_SCOPE") == "navigation":
-    arguments += ["-only-testing:TPMUITests/PreviewTests/testHomeFirstAndDashboardFactoryEntry", "-only-testing:TPMUITests/PreviewTests/testNewActionIsSeparateFromTabs", "-only-testing:TPMUITests/PreviewTests/testCompactSpacingAndRepeatedExpansion"]
+    arguments += ["-only-testing:TPMUITests/PreviewTests/testHomeFirstAndDashboardFactoryEntry", "-only-testing:TPMUITests/PreviewTests/testNewActionInTabBarKeepsCurrentPage", "-only-testing:TPMUITests/PreviewTests/testCompactSpacingAndRepeatedExpansion"]
 result = subprocess.run(arguments)
 raise SystemExit(result.returncode)

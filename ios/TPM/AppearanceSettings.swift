@@ -90,9 +90,6 @@ struct AppearanceSettings: View {
 
 struct DeveloperAccessSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var password = ""
-    @State private var unlocked = false
-    @State private var incorrect = false
     @AppStorage(ManagementSettings.enabledKey) private var managementEnabled = false
     @AppStorage(ManagedReadSettings.experimentalKey) private var experimental = false
     @AppStorage(ManagedReadSettings.pageKey) private var pageSize = 500
@@ -100,34 +97,25 @@ struct DeveloperAccessSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                if unlocked {
-                    Section {
-                        settingToggle("管理看板", isOn: $managementEnabled)
-                    } footer: { Text("开启后在看板显示管理看板入口，不改变服务器权限。") }
-                    Section("管理读取档位") {
-                        settingToggle("实验读取档位", isOn: $experimental)
-                        if experimental {
-                            settingPicker("每页数量", selection: $pageSize, options: ManagedReadSettings.pageSizes)
-                            settingPicker("详情并发", selection: $concurrency, options: ManagedReadSettings.concurrencyLevels)
-                        }
-                        Text("默认每页 500、详情并发 8。档位仅对下次新查询生效；服务端最大每页数量未实测。").font(AppFont.caption).foregroundStyle(.secondary)
+                Section {
+                    settingToggle("管理看板", isOn: $managementEnabled)
+                } footer: { Text("开启后在看板显示管理看板入口，不改变服务器权限。") }
+                Section("管理读取档位") {
+                    settingToggle("实验读取档位", isOn: $experimental)
+                    if experimental {
+                        settingPicker("每页数量", selection: $pageSize, options: ManagedReadSettings.pageSizes)
+                        settingPicker("详情并发", selection: $concurrency, options: ManagedReadSettings.concurrencyLevels)
                     }
-                    Section("应用信息") {
-                        LabeledContent("版本") { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—").animatedTextValue(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—") }
-                        LabeledContent("构建") { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—").animatedTextValue(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—") }
-                    }
-                } else {
-                    Section("开发者验证") {
-                        SecureField("密码", text: $password).textContentType(.password)
-                            .submitLabel(.go).onSubmit(unlock)
-                        if incorrect { Text("密码不正确").foregroundStyle(.red) }
-                        Button("进入", action: unlock)
-                    }
+                    Text("默认每页 500、详情并发 8。档位仅对下次新查询生效；服务端最大每页数量未实测。").font(AppFont.caption).foregroundStyle(.secondary)
+                }
+                Section("应用信息") {
+                    LabeledContent("版本") { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—").animatedTextValue(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—") }
+                    LabeledContent("构建") { Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—").animatedTextValue(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—") }
                 }
             }
-            .interfaceMotion(unlocked).interfaceMotion(experimental).interfaceMotion(incorrect)
+            .interfaceMotion(experimental)
             .keyboardManaged()
-            .navigationTitle(unlocked ? "开发者选项" : "开发者验证").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("开发者选项").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("完成") { dismiss() } } }
         }
     }
@@ -146,10 +134,5 @@ struct DeveloperAccessSheet: View {
                 ForEach(options, id: \.self) { Text("\($0) 单").animatedTextValue("\($0) 单").tag($0) }
             }.labelsHidden().pickerStyle(.menu).fixedSize()
         }.frame(maxWidth: .infinity, minHeight: 44)
-    }
-    private func unlock() {
-        unlocked = password == "1331"
-        incorrect = !unlocked
-        password = ""
     }
 }

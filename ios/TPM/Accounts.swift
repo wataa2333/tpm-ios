@@ -1,6 +1,5 @@
 import SwiftUI
 import Security
-import LocalAuthentication
 
 // Remembered accounts: the login page can keep the password of an account, and the "我的" page switches
 // between the remembered accounts without typing anything. Passwords are kept only in the iOS Keychain,
@@ -66,39 +65,6 @@ enum AccountVault {
     }
 }
 
-/// Face ID (or the device passcode as the fallback) in front of the remembered accounts: a remembered
-/// account signs in without typing a password, so the phone must first confirm it is the owner.
-enum BiometricGate {
-    static let defaultsKey = "protectSavedAccounts"
-    /// On unless the owner turned it off.
-    static var isEnabled: Bool {
-        get { UserDefaults.standard.object(forKey: defaultsKey) as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: defaultsKey) }
-    }
-    enum Outcome: Equatable { case passed, cancelled, failed(String) }
-    /// Decides without asking the system: whether a check is needed at all.
-    static func isRequired(enabled: Bool, arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
-        enabled && !arguments.contains("--skip-biometrics")
-    }
-    static func authenticate(reason: String) async -> Outcome {
-        guard isRequired(enabled: isEnabled) else { return .passed }
-        let context = LAContext()
-        context.localizedCancelTitle = "取消"
-        var unavailable: NSError?
-        // With no Face ID and no passcode there is nothing to ask for; the Keychain items themselves
-        // need an unlocked, passcode-protected phone, so remembered accounts cannot exist there anyway.
-        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &unavailable) else { return .passed }
-        do {
-            return try await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) ? .passed : .failed("没有通过验证")
-        } catch let error as LAError {
-            switch error.code {
-            case .userCancel, .systemCancel, .appCancel: return .cancelled
-            default: return .failed("没有通过面容 ID 验证")
-            }
-        } catch { return .failed("没有通过面容 ID 验证") }
-    }
-}
-
 @MainActor
 final class SavedAccountsModel: ObservableObject {
     @Published private(set) var accounts: [SavedAccount] = AccountVault.list()
@@ -116,22 +82,10 @@ struct ProfileTab: View {
     @State private var showAccounts = false
     @State private var refreshing = false
     @State private var switchError: String?
-    @State private var protect = BiometricGate.isEnabled
     @State private var draftCount = 0
     @State private var resuming: FaultDraft?
     @State private var draftNotice: String?
     @State private var developer = false
-    /// Turning the protection off is a change the owner confirms with the same check.
-    private func setProtection(_ on: Bool) {
-        if on { BiometricGate.isEnabled = true; protect = true; return }
-        Task {
-            switch await BiometricGate.authenticate(reason: "关闭对已记住账号的保护") {
-            case .passed: BiometricGate.isEnabled = false; protect = false
-            case .cancelled: protect = true
-            case .failed(let message): protect = true; switchError = message
-            }
-        }
-    }
     private var current: String { session.authentication.text("name") }
     var body: some View {
         List {
@@ -184,15 +138,6 @@ struct ProfileTab: View {
                 }
                 .accessibilityIdentifier("switch-account")
             }
-            Section {
-                // Laid out by hand: text on the left, switch centred on the right of the same line.
-                HStack(spacing: 12) {
-                    Label("用面容 ID 保护已记住的账号", systemImage: "faceid").frame(maxWidth: .infinity, alignment: .leading)
-                    Toggle("用面容 ID 保护已记住的账号", isOn: Binding(get: { protect }, set: { setProtection($0) })).labelsHidden().labeledContentStyle(.automatic)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("protect-accounts")
-            } footer: { Text("打开后，使用已记住的账号前需要面容 ID 或设备密码验证。") }
             Section { NavigationLink { AppearanceSettings() } label: { Label("外观", systemImage: "paintpalette") } }
             Section("其他") {
                 Button { developer = true } label: { Label("开发者选项", systemImage: "hammer") }

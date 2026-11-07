@@ -57,7 +57,7 @@ struct PrecisionPeopleLabel: View {
     @State private var text = "工单检测人：读取中…"
     private var context: String { session.scopeRevision.uuidString + queries.revision.uuidString }
     var body: some View {
-        Text(text).animatedTextValue(text).font(AppFont.precisionText(.caption, size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        Text(text).animatedTextValue(text).font(AppFont.precisionText(.caption)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             .task(id: context + (refreshID?.description ?? "")) {
                 let key = context
                 text = "工单检测人：读取中…"

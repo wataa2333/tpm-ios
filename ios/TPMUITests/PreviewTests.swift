@@ -143,7 +143,7 @@ final class PreviewTests: XCTestCase {
 
     func testKeyboardDismissalKeepsDocumentActionsVisibleAcrossTwelveCycles() {
         let app = XCUIApplication()
-        app.launchArguments = ["--screen", "new-fault", "--skip-biometrics"]
+        app.launchArguments = ["--screen", "new-fault"]
         app.launch()
         XCTAssertTrue(app.buttons["draft-box-button"].waitForExistence(timeout: 10))
         app.buttons["draft-box-button"].tap()
@@ -206,7 +206,7 @@ final class PreviewTests: XCTestCase {
 
     func testRepairNotesSheetKeepsAllThreeButtonsAboveKeyboard() {
         let app = XCUIApplication()
-        app.launchArguments = ["--screen", "repair-keyboard", "--skip-biometrics"]
+        app.launchArguments = ["--screen", "repair-keyboard"]
         app.launch()
         XCTAssertTrue(app.navigationBars["完成任务"].waitForExistence(timeout: 10))
         let notes = app.descendants(matching: .any).matching(NSPredicate(format:
@@ -497,19 +497,16 @@ final class PreviewTests: XCTestCase {
         capture(app, "Fault form lower fields")
     }
 
-    func testNewActionIsSeparateFromTabs() {
+    func testNewActionInTabBarKeepsCurrentPage() {
         let app = XCUIApplication()
         app.launchArguments = ["--screen", "faults"]
         app.launch()
         let add = app.buttons["新建报修"]
         XCTAssertTrue(add.waitForExistence(timeout: 20))
-        let mine = app.buttons["我的"].firstMatch
-        // One round button at the bottom-right corner, above the tab bar and not one of its tabs.
-        XCTAssertLessThanOrEqual(add.frame.maxY, mine.frame.minY + 2)
-        XCTAssertGreaterThan(add.frame.midX, app.frame.midX)
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.buttons["新建报修"].exists)
         XCTAssertTrue(add.isHittable)
-        XCTAssertEqual(app.buttons.matching(identifier: "我的").count, 1)
-        XCTAssertEqual(app.tabBars.firstMatch.buttons.count, 4)
+        XCTAssertEqual(app.buttons.matching(identifier: "新建报修").count, 1)
         // It opens the form as a sheet and the page stays where it was.
         add.tap()
         XCTAssertTrue(app.buttons["取消"].waitForExistence(timeout: 10))
