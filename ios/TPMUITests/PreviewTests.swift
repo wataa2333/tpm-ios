@@ -185,8 +185,8 @@ final class PreviewTests: XCTestCase {
             XCTAssertLessThanOrEqual(submit.frame.maxY, keyboard.frame.minY + 2, "提交按钮必须完整处于键盘上方")
             XCTAssertLessThanOrEqual(save.frame.maxX, dismiss.frame.minX, "保存和收起不能重叠")
             XCTAssertLessThanOrEqual(dismiss.frame.maxX, submit.frame.minX, "收起和提交不能重叠")
-            XCTAssertEqual(save.frame.midY, submit.frame.midY, accuracy: 2)
-            XCTAssertEqual(save.frame.midY, dismiss.frame.midY, accuracy: 2)
+            XCTAssertEqual(save.frame.maxY, submit.frame.maxY, accuracy: 2)
+            XCTAssertEqual(save.frame.maxY, dismiss.frame.maxY, accuracy: 2)
             dismiss.tap()
             let closed = expectation(for: NSPredicate { _, _ in app.keyboards.count == 0 }, evaluatedWith: nil)
             wait(for: [closed], timeout: 5)
@@ -466,7 +466,7 @@ final class PreviewTests: XCTestCase {
         XCTAssertLessThan(expand.frame.maxY - title.frame.minY, 140)
         let reference = app.descendants(matching: .any)["order-reference-FA-CNC-008"].firstMatch
         let time = app.descendants(matching: .any)["order-time-FA-CNC-008"].firstMatch
-        XCTAssertLessThanOrEqual(time.frame.minY - reference.frame.maxY, 14)
+        XCTAssertLessThanOrEqual(time.frame.minY - reference.frame.maxY, 8)
         for _ in 0..<2 {
             expand.tap()
             XCTAssertTrue(expand.label.contains("收起详情"), app.debugDescription)
@@ -507,10 +507,15 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(tabBar.buttons["新建报修"].exists)
         XCTAssertTrue(add.isHittable)
         XCTAssertEqual(app.buttons.matching(identifier: "新建报修").count, 1)
-        // It opens the form as a sheet and the page stays where it was.
+        let originalBarTop = app.navigationBars["故障报修"].frame.minY
         add.tap()
-        XCTAssertTrue(app.buttons["取消"].waitForExistence(timeout: 10))
-        app.buttons["取消"].tap()
+        let cancel = app.buttons["取消"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10))
+        let formBar = app.navigationBars.containing(.button, identifier: "取消").firstMatch
+        XCTAssertTrue(formBar.exists)
+        XCTAssertEqual(formBar.frame.minY, originalBarTop, accuracy: 3)
+        XCTAssertFalse(tabBar.isHittable)
+        cancel.tap()
         XCTAssertTrue(app.buttons["新建报修"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.navigationBars["故障报修"].exists)
     }

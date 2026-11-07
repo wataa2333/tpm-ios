@@ -41,14 +41,22 @@ struct NativeTabShell<Home: View, Todo: View, Workspace: View, Mine: View>: View
             navigation.searchReset = UUID()
             navigation.hideTabs = false
         }
-        .sheet(item: $creating, onDismiss: {
-            navigation.presentingDocument = false
-            navigation.refresh = UUID()
-        }) { kind in
-            NavigationStack {
-                if kind == .fault { OriginalFaultForm(preview: preview) }
-                else { OriginalERPForm(preview: preview) }
-            }.presentationDragIndicator(.visible)
+        .fullScreenCover(isPresented: presenting(.fault), onDismiss: documentClosed) {
+            NavigationStack { OriginalFaultForm(preview: preview) }
         }
+        .sheet(isPresented: presenting(.erp), onDismiss: documentClosed) {
+            NavigationStack { OriginalERPForm(preview: preview) }.presentationDragIndicator(.visible)
+        }
+    }
+
+    private func presenting(_ kind: WorkflowKind) -> Binding<Bool> {
+        Binding(get: { creating == kind }, set: { presented in
+            if !presented && creating == kind { creating = nil }
+        })
+    }
+
+    private func documentClosed() {
+        navigation.presentingDocument = false
+        navigation.refresh = UUID()
     }
 }

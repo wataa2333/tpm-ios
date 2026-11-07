@@ -3,12 +3,12 @@ import UIKit
 
 /// Ends editing in whichever field has the keyboard, wherever it is.
 func endEditing() {
-    if UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) { return }
     for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) where scene.activationState == .foregroundActive {
         for window in scene.windows where window.isKeyWindow {
             if window.endEditing(true) { return }
         }
     }
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 }
 
 /// The one dialog every confirmation and notice in the app uses: a compact bottom card with a

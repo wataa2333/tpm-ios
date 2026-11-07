@@ -131,11 +131,11 @@ struct WorkOrderCard<Destination: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
     private var footer: some View {
-        HStack(alignment: .center, spacing: 12) {
-                Text(time).animatedTextValue(time).font(AppFont.subheadline).foregroundStyle(.secondary).fixedSize()
-                    .accessibilityIdentifier("order-time-" + reference)
-                Spacer(minLength: 0)
-                expandButton
+        HStack(alignment: .top, spacing: 12) {
+            Text(time).animatedTextValue(time).font(AppFont.subheadline).foregroundStyle(.secondary).fixedSize()
+                .accessibilityIdentifier("order-time-" + reference)
+            Spacer(minLength: 0)
+            expandButton
         }
     }
     private var expandButton: some View {
@@ -144,8 +144,8 @@ struct WorkOrderCard<Destination: View>: View {
                 Text(expanded ? "收起详情" : "展开详情").animatedTextValue(expanded ? "收起详情" : "展开详情").font(AppFont.subheadline.weight(.medium))
                 Image(systemName: "chevron.down").font(.system(size: 12, weight: .semibold)).frame(width: 14, height: 20).rotationEffect(.degrees(expanded ? 180 : 0))
             }
-            .foregroundStyle(.white).padding(.horizontal, 12)
-            .frame(minHeight: 44).background(Color.accentColor, in: .capsule)
+            .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 5)
+            .frame(minHeight: 32).background(Color.accentColor, in: .capsule)
         }.buttonStyle(.plain).fixedSize()
             .accessibilityLabel(expanded ? "收起详情" : "展开详情")
             .accessibilityIdentifier("order-expand-" + reference)

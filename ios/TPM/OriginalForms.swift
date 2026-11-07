@@ -907,13 +907,13 @@ struct DocumentActions: View {
     var submitTitle = "提交"
     let submit: () -> Void
     var body: some View {
-        HStack(alignment: .center) {
+        HStack(alignment: .bottom) {
             if let save { BottomAction(title: "保存", symbol: "tray.and.arrow.down", color: Color(red: 0.92, green: 0.73, blue: 0.24), busy: busy && !submitting, action: save) }
             Spacer()
             BottomAction(title: submitTitle, symbol: "checkmark.circle", color: .blue, busy: busy && submitting, action: submit)
         }
         .disabled(busy || disabled)
-        .overlay {
+        .overlay(alignment: .bottom) {
             // Only opacity changes. The footer's height and both action buttons remain
             // stable; a second keyboard toolbar must not overlap this action row.
             Button("收起键盘", action: endEditing)
@@ -929,7 +929,13 @@ struct DocumentActions: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
             keyboardPresented = KeyboardMotionChange(notification).visible
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { notification in
+            keyboardPresented = KeyboardMotionChange(notification).visible
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardPresented = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
             keyboardPresented = false
         }
     }

@@ -15,7 +15,7 @@ struct AssetReportButton: View {
                     .frame(maxWidth: .infinity, minHeight: 44)
             }.accessibilityLabel("使用此资产编码进行新建报修")
                 .accessibilityIdentifier("report-with-asset")
-                .sheet(isPresented: $presenting) {
+                .fullScreenCover(isPresented: $presenting) {
                     NavigationStack { OriginalFaultForm(initialAsset: reference) }
                         .environment(\.queryReading, false)
                 }
