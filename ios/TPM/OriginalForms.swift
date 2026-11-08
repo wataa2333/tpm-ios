@@ -593,8 +593,8 @@ struct OriginalFaultForm: View {
     var draft: FaultDraft? = nil
     var initialAsset: JSONValue? = nil
     var onSaved: (() -> Void)? = nil
-    var onClose: (() -> Void)? = nil
     var isActive = true
+    var template: FaultReportTemplate? = nil
     @State private var loadAttempt = UUID()
     @State private var initialized = false
     private func field(_ key: String) -> Binding<JSONValue> { Binding(get: { model.data[key] ?? .null }, set: { model.data[key] = $0 }) }
@@ -615,20 +615,20 @@ struct OriginalFaultForm: View {
     /// Whether there is something worth keeping: anything typed into a new report, any change to an existing order.
     private var worthKeeping: Bool {
         guard draftsAllowed, !preview else { return false }
-        return existing == nil ? faultFormHasContent(model.data) : (model.data != loadedData || model.selections != loadedSelections)
+        if existing != nil || template != nil {
+            return model.data != loadedData || model.selections != loadedSelections
+        }
+        return faultFormHasContent(model.data)
     }
     private func keepDraft() {
         let draft = FaultDraft(id: draftID ?? UUID(), savedAt: Date(), data: model.data, selections: model.selections,
                                orderID: orderID, orderSN: existing?.text("sn"))
-        do { try DraftStore.shared.save(draft, scope: session.draftScope); finish() }
+        do { try DraftStore.shared.save(draft, scope: session.draftScope); dismiss() }
         catch { model.error = "草稿没有保存成功：" + error.localizedDescription }
-    }
-    private func finish() {
-        if let onClose { onClose() } else { dismiss() }
     }
     /// Closing keeps entered content locally without an extra confirmation.
     private func close() {
-        if worthKeeping { keepDraft() } else { finish() }
+        if worthKeeping { keepDraft() } else { dismiss() }
     }
     private func text(_ key: String) -> Binding<String> { Binding(get: { model.data.text(key) }, set: { model.data[key] = .string($0) }) }
     var body: some View {
@@ -726,12 +726,19 @@ struct OriginalFaultForm: View {
                         model.error = error.localizedDescription
                     }
                 }
-                if draftsAllowed, model.ready, initialAsset == nil {
+                if draftsAllowed, model.ready, initialAsset == nil, template == nil {
                     if let draft, draftTarget.matches(draft) { apply(draft) }
                     else if let last = DraftStore.shared.drafts(scope: session.draftScope, for: draftTarget).first { apply(last, automatic: true) }
                 }
             }
             guard !Task.isCancelled else { return }
+            if let template {
+                if !template.faultName.isEmpty { model.data["faultName"] = .string(template.faultName) }
+                if !template.description.isEmpty { model.data["faultDesc"] = .string(template.description) }
+                if preview, template.asset != .null { model.data["asset"] = template.asset }
+                loadedData = model.data
+                loadedSelections = model.selections
+            }
             draftCount = DraftStore.shared.drafts(scope: session.draftScope, for: draftTarget).count
             initialized = true
         }
@@ -758,7 +765,7 @@ struct OriginalFaultForm: View {
             _ = try await session.request(path, body: .object(payload))
             // The report is on the server now: the draft it came from has done its job.
             if let draftID { DraftStore.shared.remove(id: draftID, scope: session.draftScope) }
-            onSaved?(); finish()
+            onSaved?(); dismiss()
         } catch { model.error = error.localizedDescription }
     }
 }

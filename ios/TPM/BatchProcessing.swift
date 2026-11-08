@@ -100,6 +100,15 @@ enum BatchProcessor {
         var data = repair.object
         data["faultType"] = preset.faultType
         data["content"] = .string(preset.content)
+        if !preset.repairUsers.isEmpty {
+            var repairUsers = repair["repairUsers"].array
+            var names = Set(repairUsers.map { $0["userName"].text.lowercased() })
+            for user in preset.repairUsers {
+                let name = user["userName"].text.lowercased()
+                if !name.isEmpty && names.insert(name).inserted { repairUsers.append(user) }
+            }
+            data["repairUsers"] = .array(repairUsers)
+        }
         if data["spend"] == nil { data["spend"] = .number(0) }
         let now = Date()
         var start = preset.durationMinutes.map { now.addingTimeInterval(-Double($0) * 60) }

@@ -165,6 +165,7 @@ struct BatchPreset: Equatable {
     /// Complete: the work description, and how long the work took in minutes (empty: counted from the sign-in).
     var content = ""
     var durationMinutes: Int?
+    var repairUsers: [JSONValue] = []
     /// The next nodes whose approver is chosen by the person, and the chosen user names per node variable.
     var approverNodes: [Fields] = []
     var approvers: [String: [String]] = [:]
@@ -507,6 +508,7 @@ struct BatchPresetSheet: View {
     @State private var preset: BatchPreset
     @State private var choosingMaterial = false
     @State private var choosingOutbound = false
+    @State private var choosingAssistants = false
     private var action: BatchAction { request.action }
     private var operation: BatchOperation { request.operation }
 
@@ -571,6 +573,19 @@ struct BatchPresetSheet: View {
                 .accessibilityIdentifier("batch-start")
             }
             .keyboardManaged()
+            .sheet(isPresented: $choosingAssistants) {
+                NavigationStack {
+                    ReferencePicker(source: .users, multiple: true, selected: preset.repairUsers.map { $0["userName"].text }) { user in
+                        let name = user["userName"].text
+                        guard !name.isEmpty else { return }
+                        if preset.repairUsers.contains(where: { $0["userName"].text == name }) {
+                            preset.repairUsers.removeAll { $0["userName"].text == name }
+                        } else {
+                            preset.repairUsers.append(user)
+                        }
+                    }
+                }
+            }
             .sheet(isPresented: $choosingOutbound) { NavigationStack { ReferencePicker(source: .outboundMaterials, multiple: true, selected: preset.outboundLines.map(\.id)) { addOutbound($0) } } }
             .sheet(isPresented: $choosingMaterial) { NavigationStack { ReferencePicker(source: .materials, multiple: true, selected: preset.materials.map(\.id)) { addMaterial($0) } } }
         }
@@ -590,6 +605,11 @@ struct BatchPresetSheet: View {
         if action == .complete {
             Section {
                 ReferenceField(title: "维修故障类型", source: .faultTypes, value: $preset.faultType, required: true)
+                Button { choosingAssistants = true } label: {
+                    LabeledContent("辅助维修人") {
+                        Text(preset.repairUsers.isEmpty ? "选填" : preset.repairUsers.map { $0["realName"].text.isEmpty ? $0["userName"].text : $0["realName"].text }.joined(separator: "、"))
+                    }
+                }
             } header: { RequiredFormHeader(title: "维修结果") } footer: {
                 Text("所选 \(count) 张单据都按这个方案提交维修结果；每张单据原有的维修领料不变。").animatedTextValue("所选 \(count) 张单据都按这个方案提交维修结果；每张单据原有的维修领料不变。")
             }

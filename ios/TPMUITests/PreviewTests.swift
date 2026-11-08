@@ -475,8 +475,13 @@ final class PreviewTests: XCTestCase {
             XCTAssertTrue(expand.label.contains("展开详情"), app.debugDescription)
         }
         app.buttons["新建报修"].tap()
+        let blank = app.buttons["blank-fault-report"]
+        XCTAssertTrue(blank.waitForExistence(timeout: 10))
+        blank.tap()
         XCTAssertTrue(app.buttons["取消"].waitForExistence(timeout: 10))
         app.buttons["取消"].tap()
+        XCTAssertTrue(blank.waitForExistence(timeout: 10))
+        app.tabBars.buttons["我的待办"].tap()
         XCTAssertTrue(expand.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["新建报修"].exists)
     }
@@ -509,10 +514,16 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(add.isHittable)
         XCTAssertEqual(app.buttons.matching(identifier: "新建报修").count, 1)
         add.tap()
+        let template = app.buttons["设备无法启动"]
+        XCTAssertTrue(template.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["编辑模板 设备无法启动"].exists)
+        XCTAssertTrue(app.buttons["删除模板 设备无法启动"].exists)
+        template.tap()
         let cancel = app.buttons["取消"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 10))
         let formBar = app.navigationBars.containing(.button, identifier: "取消").firstMatch
         XCTAssertTrue(formBar.exists)
+        XCTAssertEqual(app.textFields["请输入报修名称"].value as? String, "设备无法启动")
         XCTAssertTrue(tabBar.isHittable)
         XCTAssertTrue(tabBar.buttons["新建报修"].isSelected)
         let save = app.buttons["保存"], submit = app.buttons["提交"]
@@ -523,8 +534,9 @@ final class PreviewTests: XCTestCase {
         XCTAssertLessThanOrEqual(save.frame.maxY, tabBar.frame.minY + 2)
         XCTAssertLessThanOrEqual(submit.frame.maxY, tabBar.frame.minY + 2)
         cancel.tap()
-        XCTAssertTrue(app.buttons["新建报修"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.navigationBars["故障报修"].exists)
+        XCTAssertTrue(app.navigationBars["报修模板"].waitForExistence(timeout: 10))
+        tabBar.buttons["我的待办"].tap()
+        XCTAssertTrue(app.navigationBars["故障报修"].waitForExistence(timeout: 10))
     }
 
     func testQuickRepairQueryCardsOpenTheOrderList() {
@@ -652,8 +664,11 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(cancelSearch.waitForExistence(timeout: 5))
         cancelSearch.tap()
         app.buttons["新建报修"].tap()
+        let blank = app.buttons["blank-fault-report"]
+        XCTAssertTrue(blank.waitForExistence(timeout: 10))
+        blank.tap()
         XCTAssertTrue(app.buttons["取消"].waitForExistence(timeout: 10))
-        // The list's search field stays behind the sheet; it must not be reachable from the form.
+        // The previous tab's search field must not be reachable from the form.
         XCTAssertFalse(app.searchFields.allElementsBoundByIndex.contains { $0.isHittable })
         let date = app.datePickers["date-value-故障时间"]
         for _ in 0..<4 where !date.isHittable { app.swipeUp() }
