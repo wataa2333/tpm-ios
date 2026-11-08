@@ -74,18 +74,21 @@ enum class WorkList(val key: String, val title: String, val page: String) {
 }
 
 /** The numbers on the workbench cards: one request per card asking for a single row; only the total is used. */
-class WorkspaceViewModel(private val session: Session) : ViewModel() {
+class WorkspaceViewModel(private val session: Session, autoStart: Boolean = true) : ViewModel() {
+    private var started = autoStart
+    fun ensureStarted() { if (!started) { started = true; reload() } }
     var counts by mutableStateOf<Map<String, Int>>(emptyMap()); private set
     var refreshing by mutableStateOf(false); private set
     var loading by mutableStateOf(true); private set
     var error by mutableStateOf<String?>(null); private set
     private var ticket = 0
 
-    init { reload() }
-    init { viewModelScope.launch { session.changed.drop(1).collect { reload() } } }
-    init { viewModelScope.launch { session.queryAccounts?.changes?.drop(1)?.collect { counts = emptyMap(); reload() } } }
+    init { if (started) reload() }
+    init { viewModelScope.launch { session.changed.drop(1).collect { if (started) reload() } } }
+    init { viewModelScope.launch { session.queryAccounts?.changes?.drop(1)?.collect { counts = emptyMap(); if (started) reload() } } }
 
     fun reload(pull: Boolean = false) {
+        started = true
         val mine = ++ticket
         refreshing = pull; loading = true; error = null
         viewModelScope.launch {
@@ -113,19 +116,17 @@ fun WorkspaceTab(vm: WorkspaceViewModel, gridState: LazyGridState, pullState: Pu
         PageWidth {
             LazyVerticalGrid(
                 state = gridState, columns = GridCells.Adaptive(minSize = 150.dp), modifier = nested.fillMaxSize().scrollEdges(MaterialTheme.colorScheme.background, before = { gridState.canScrollBackward }, after = { gridState.canScrollForward }),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 88.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + LocalGlassContentPadding.current.calculateTopPadding(), bottom = 88.dp + LocalGlassContentPadding.current.calculateBottomPadding()),
                 horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 vm.error?.let { message -> item(span = { GridItemSpan(maxLineSpan) }) { AnimatedLabel(message, color = MaterialTheme.colorScheme.error) } }
-                item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("看板") }
-                if (AppPreferences.management) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Card(onClick=openDashboard,modifier=Modifier.fillMaxWidth(),shape=MaterialTheme.shapes.large,colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surfaceContainerLowest)) {
-                            Row(Modifier.fillMaxWidth().padding(16.dp),horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically) {
-                                Badge(Icons.Filled.Assessment, Color(0xFFD83B70))
-                                Column(Modifier.weight(1f)) { Text("人员与工单分析",style=MaterialTheme.typography.titleMedium); Text("查看维修待处理与人员趋势",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight,contentDescription="进入",tint=MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("统计页面") }
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Card(onClick=openDashboard,modifier=Modifier.fillMaxWidth(),shape=MaterialTheme.shapes.large,colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surfaceContainerLowest)) {
+                        Row(Modifier.fillMaxWidth().padding(16.dp),horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically) {
+                            Badge(Icons.Filled.Assessment, Color(0xFFD83B70))
+                            Column(Modifier.weight(1f)) { Text("人员工单统计",style=MaterialTheme.typography.titleMedium); Text("查看维修待处理与人员趋势",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight,contentDescription="进入",tint=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -167,11 +168,11 @@ private fun QuickQueryCard(title: String, icon: ImageVector, tint: Color, placeh
                 AnimatedLabel(title, style = MaterialTheme.typography.titleMedium)
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                androidx.compose.material3.TextField(colors = blockFieldColors(onCard = true), shape = MaterialTheme.shapes.medium, 
-                    value = text, onValueChange = { text = it }, singleLine = true, placeholder = { AnimatedLabel(placeholder) }, modifier = Modifier.weight(1f),
+                androidx.compose.material3.TextField(colors = searchFieldColors(onCard = true), shape = MaterialTheme.shapes.medium,
+                    value = text, onValueChange = { text = it }, singleLine = true, placeholder = { AnimatedLabel(placeholder) }, modifier = Modifier.weight(1f).glassSearchSurface(MaterialTheme.shapes.medium),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { go() }),
                 )
-                FilledIconButton(onClick = { go() }, enabled = text.isNotBlank()) { Icon(Icons.Filled.Search, contentDescription = "查询") }
+                GlassIconButton(onClick = { go() }, enabled = text.isNotBlank()) { Icon(Icons.Filled.Search, contentDescription = "查询") }
             }
         }
     }

@@ -15,13 +15,9 @@ import androidx.compose.foundation.rememberScrollState
 import com.personal.tpm.ui.pageVerticalScroll as verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.Button
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -69,7 +65,7 @@ fun TaskActionBar(kind: OrderKind, order: Jv, includeNavigationPadding: Boolean 
     var canSubmit by remember(taskId) { mutableStateOf(false) }
     var canReturn by remember(taskId) { mutableStateOf(false) }
     var canHandoff by remember(taskId) { mutableStateOf(false) }
-    LaunchedEffect(taskId, changed) {
+    LaunchedEffect(taskId, changed, session.accountKey) {
         try {
             val (state, form) = coroutineScope {
                 val s = async { session.request("workflow/getWorkflowTaskState", mapOf("processInstanceId" to task["processInstanceId"].text)) }
@@ -83,10 +79,10 @@ fun TaskActionBar(kind: OrderKind, order: Jv, includeNavigationPadding: Boolean 
         catch (e: Exception) { canSubmit = false; canReturn = false; canHandoff = false }
     }
     if (!canSubmit && !canHandoff) return
-    Surface(Modifier.fadeAbove(MaterialTheme.colorScheme.background), color = MaterialTheme.colorScheme.background, shadowElevation = 0.dp) {
+    GlassBottomSurface() {
         Row(Modifier.fillMaxWidth().then(if(includeNavigationPadding) Modifier.navigationBarsPadding() else Modifier).padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical), horizontalArrangement = Arrangement.spacedBy(BarSpec.Gap)) {
             if (canReturn) SoftButton(onClick = { onOpen(true) }, Modifier.weight(1f).height(BarSpec.ButtonHeight)) { Text("退单") }
-            Button(onClick = { onOpen(false) }, Modifier.weight(1f).height(BarSpec.ButtonHeight)) { AnimatedLabel(taskActionTitle(task, kind)) }
+            GlassActionButton(onClick = { onOpen(false) }, Modifier.weight(1f).height(BarSpec.ButtonHeight)) { AnimatedLabel(taskActionTitle(task, kind)) }
         }
     }
 }
@@ -103,7 +99,7 @@ private fun endOfToday(): String {
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> Unit, onDone: (stay: Boolean) -> Unit) {
+fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> Unit, onDone: (stay: Boolean) -> Unit, poolKind: PoolKind? = null) {
     val session = LocalSession.current
     val prefs = LocalPickerPrefs.current
     val scope = rememberCoroutineScope()
@@ -124,6 +120,7 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
     var assignmentsReady by remember { mutableStateOf(false) }
     var autoSubmitAttempted by remember(id) { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = poolKind != null) { if (!submitting) onBack() }
     var loadError by remember { mutableStateOf<String?>(null) }
     var failure by remember { mutableStateOf<String?>(null) }
     var picking by remember { mutableStateOf<String?>(null) } // "group", "assignUser" or "node:<variable>"
@@ -135,7 +132,8 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
     val selectedCondition = conditions.firstOrNull { it["value"].text == condition }
     val returning = selectedCondition?.let(::isReturnCondition) == true
     val rejecting = selectedCondition?.let(::isRejectCondition) == true
-    val needsFaultData = kind == OrderKind.Fault && category in listOf("REPORTED", "RECEIVED")
+    val processCategory = poolKind?.path?.uppercase() ?: kind.prefix
+    val needsFaultData = poolKind == null && kind == OrderKind.Fault && category in listOf("REPORTED", "RECEIVED")
     val needsErpLines = kind == OrderKind.Erp && category in listOf("EXECUTING", "CONFIRM")
 
     suspend fun loadAssignments(forCondition: String, t: Jv) {
@@ -146,7 +144,7 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
         try {
             val values = session.request(
                 "workflow/getAssigneeElementsByProcessCategory",
-                mapOf("processCategory" to kind.prefix, "processInstanceId" to t["processInstanceId"].text, "taskKey" to t["taskDefinitionKey"].text),
+                mapOf("processCategory" to processCategory, "processInstanceId" to t["processInstanceId"].text, "taskKey" to t["taskDefinitionKey"].text),
             ).array
             if (mine != assignmentTicket) return
             val chosen = HashMap<String, List<String>>()
@@ -154,16 +152,16 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
                 val key = node["variableName"].text
                 var names = usernames(node["assignees"])
                 // The step lets the person choose: the person's own default for it comes first. A step the process names by itself keeps its suggestion.
-                if (names.isEmpty() && isChosenApprover(node)) prefs.defaultChoice(session.draftScope, "assignee.task.${kind.prefix}.$key")?.value?.get("userName")?.text?.takeIf { it.isNotEmpty() }?.let { names = listOf(it) }
+                if (names.isEmpty() && isChosenApprover(node)) prefs.defaultChoice(session.draftScope, "assignee.task.${processCategory}.$key")?.value?.get("userName")?.text?.takeIf { it.isNotEmpty() }?.let { names = listOf(it) }
                 chosen[key] = names
             }
             nodes = values; selections = chosen; assignmentsReady = true
         } finally { if (mine == assignmentTicket) assignmentsLoading = false }
     }
 
-    LaunchedEffect(id) {
+    LaunchedEffect(id, session.accountKey) {
         try {
-            val order = session.request(kind.detailPath, mapOf(kind.idKey to id))
+            val order = if (poolKind != null) loadPoolOrder(session, poolKind, id) else session.request(kind.detailPath, mapOf(kind.idKey to id))
             detail = order
             val t = order["taskInfo"]
             if (t["id"].text.isEmpty()) { loadError = "这张单据现在没有待处理的任务，可能已被他人处理。"; return@LaunchedEffect }
@@ -213,6 +211,11 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
                     if (assigning) data.put("assignUser", assignUser.raw).put("assignUserName", assignUser["userName"].text)
                     payload.put("taskData", data.toString())
                 }
+                if (poolKind != null && category == "REPORTED" && condition == "agree") {
+                    check(group["groupId"].text.isNotEmpty()) { "请选择保养班组" }
+                    payload.put("taskData", JSONObject().put(poolKind.idKey, id).put("groupId", group["groupId"].raw)
+                        .put("userGroup", JSONObject().put("groupId", group["groupId"].raw)).toString())
+                }
                 if (needsErpLines) {
                     val sent = JSONArray()
                     lines.forEachIndexed { i, line ->
@@ -234,7 +237,7 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
 
     val ready = !loading && assignmentsReady && !assignmentsLoading && !submitting && state["canSubmit"].bool && condition.isNotEmpty()
     LaunchedEffect(ready) {
-        if (!ready || autoSubmitAttempted || loadError != null) return@LaunchedEffect
+        if (poolKind != null || !ready || autoSubmitAttempted || loadError != null) return@LaunchedEffect
         autoSubmitAttempted = true
         if (startReturn || returning || rejecting || missingAssigneeMessage(nodes, selections) != null) return@LaunchedEffect
         if (needsFaultData && condition in listOf("agree", "assign", "appoint")) {
@@ -248,9 +251,9 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
         }) return@LaunchedEffect
         submit()
     }
-    val processingDefault = !startReturn && loadError == null && failure == null && (!autoSubmitAttempted || submitting) && (loading || assignmentsLoading || !assignmentsReady || state["canSubmit"].bool)
+    val processingDefault = poolKind == null && !startReturn && loadError == null && failure == null && (!autoSubmitAttempted || submitting) && (loading || assignmentsLoading || !assignmentsReady || state["canSubmit"].bool)
     if (processingDefault) {
-        Scaffold(contentWindowInsets = appContentInsets(), containerColor = MaterialTheme.colorScheme.background) { padding ->
+        GlassScaffold(contentWindowInsets = appContentInsets(), containerColor = MaterialTheme.colorScheme.background) { padding ->
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     androidx.compose.material3.CircularProgressIndicator()
@@ -260,15 +263,15 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
         }
         return
     }
-    Scaffold(contentWindowInsets = appContentInsets(),
+    GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppTopBar(
-                title = if (task.isNull) "处理" else taskActionTitle(task, kind), onBack = onBack, loading = loading || assignmentsLoading || submitting,
+                title = if (task.isNull) "处理" else if (poolKind != null) task["name"].text.ifEmpty { "处理任务" } else taskActionTitle(task, kind), onBack = { if (!submitting) onBack() }, loading = loading || assignmentsLoading || submitting, operationLocked = loading || assignmentsLoading || submitting,
                 actions = {
                     // Handing the task to someone else: transfer, delegate, or finish a delegated one.
                     if (state["canDelegate"].bool || state["canResolveDelegate"].bool) Box {
-                        IconButton(onClick = { moreMenu = true }, enabled = !submitting && !loading) { Icon(Icons.Filled.MoreVert, contentDescription = "更多") }
+                        GlassIconButton(onClick = { moreMenu = true }, enabled = !submitting && !loading) { Icon(Icons.Filled.MoreVert, contentDescription = "更多") }
                         AppOptionSheet(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
                             if (state["canDelegate"].bool) {
                                 AppOptionItem(text = { Text("转办") }, onClick = { moreMenu = false; handoff = "transfer" })
@@ -281,8 +284,8 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
             )
         },
         bottomBar = {
-            Surface(Modifier.fadeAbove(MaterialTheme.colorScheme.background), color = MaterialTheme.colorScheme.background, shadowElevation = 0.dp) {
-                Button(
+            GlassBottomSurface() {
+                GlassActionButton(
                     onClick = { submit() }, enabled = ready,
                     modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical).height(BarSpec.ButtonHeight),
                 ) { AnimatedLabel(if (submitting) "正在提交…" else if (category == "SIGNED" && condition == "agree") "签到" else "提交") }
@@ -304,9 +307,8 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
                         }
                         if (conditions.isNotEmpty()) {
                             FormTitle("操作类型")
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                conditions.forEach { c -> ChoiceChip(c["value"].text == condition, { condition = c["value"].text }, c["name"].text) }
-                            }
+                            SingleChoiceGroup(conditions.map { it["name"].text }, conditions.indexOfFirst { it["value"].text == condition },
+                                { condition = conditions[it]["value"].text }, scrollable = conditions.size > 3)
                         }
                         // Only when there is something to fill in: accepting (the group and the date) or assigning (who repairs). Claiming has nothing to ask.
                         val assigningNow = condition == "assign" || condition == "appoint"
@@ -319,6 +321,9 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
                                     DateTimeField("预计完成时间", estimated, dateOnly = false, required = true) { estimated = it }
                                 }
                             }
+                        }
+                        if (poolKind != null && category == "REPORTED" && condition == "agree") {
+                            GroupCard { PickRow("保养班组", group.label, true) { picking = "group" } }
                         }
                         if (needsErpLines) {
                             FormTitle("出库物料")
@@ -356,7 +361,7 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
     }
 
     when (val which = picking) {
-        "group" -> ReferenceSheet(RefSource.Groups, emptySet(), false, null, onToggle = { group = it }, onDismiss = { picking = null })
+        "group" -> if (poolKind == null) ReferenceSheet(RefSource.Groups, emptySet(), false, null, onToggle = { group = it }, onDismiss = { picking = null }) else PoolGroupPicker(onPick = { group = it }, onClose = { picking = null })
         "assignUser" -> ReferenceSheet(RefSource.Users, emptySet(), false, null, onToggle = { assignUser = it }, onDismiss = { picking = null })
         null -> {}
         else -> {
@@ -364,7 +369,7 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
             val node = nodes.firstOrNull { it["variableName"].text == key }
             val multiple = node != null && (isCountersign(node) || node["assigneeMultiple"].bool)
             ReferenceSheet(
-                RefSource.Users, selections[key].orEmpty().toSet(), multiple, "assignee.task.${kind.prefix}.$key".takeIf { node != null && usernames(node["assignees"]).isEmpty() },
+                RefSource.Users, selections[key].orEmpty().toSet(), multiple, "assignee.task.${processCategory}.$key".takeIf { node != null && usernames(node["assignees"]).isEmpty() },
                 onToggle = { user ->
                     val name = user["userName"].text
                     val current = selections[key].orEmpty()
@@ -395,7 +400,7 @@ private fun HandoffSheet(taskId: String, operation: String, onDismiss: () -> Uni
             AnimatedLabel(title, style = MaterialTheme.typography.titleLarge)
             if (operation != "resolve") GroupCard { PickRow(if (operation == "transfer") "转办人" else "委派给", user.label, true) { picking = true } }
             TextEntry(if (operation == "resolve") "处理说明" else "原因", reason, { reason = it }, limit = 255, minLines = 3, required = true, placeholder = "请输入")
-            Button(
+            GlassActionButton(
                 onClick = {
                     saving = true
                     scope.launch {

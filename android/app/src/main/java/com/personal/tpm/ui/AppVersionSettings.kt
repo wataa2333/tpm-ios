@@ -52,12 +52,12 @@ private fun ReleaseHistoryDialog(onDismiss: () -> Unit) {
         catch (e: Exception) { error = e.message ?: "读取日志失败" }
         finally { loading = false }
     }
-    Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+    GlassPanelSurface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
         Column(Modifier.fillMaxWidth().height(dialogHeight).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("历史更新日志", style = MaterialTheme.typography.headlineSmall)
             Text("点版本展开查看更新内容", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (loading) LoadingText("加载中")
-            if (error.isNotBlank()) { AnimatedLabel(error); TextButton(onClick = { attempt++ }) { Text("重试") } }
+            if (error.isNotBlank()) { AnimatedLabel(error); GlassTextButton(onClick = { attempt++ }) { Text("重试") } }
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(entries, key = { it.version }) { entry ->
                     GroupCard { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -75,7 +75,7 @@ private fun ReleaseHistoryDialog(onDismiss: () -> Unit) {
                     } }
                 }
             }
-            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("关闭") }
+            GlassTextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("关闭") }
         }
     }
 }

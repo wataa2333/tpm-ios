@@ -29,7 +29,7 @@ fun AnimatedAppDialog(visible: Boolean, onDismiss: () -> Unit, content: @Composa
             alpha = progress.value
             scaleX = .94f + .06f * progress.value
             scaleY = scaleX
-        }) { content() }
+        }) { GlassWindowContent { content() } }
     }
 }
 
@@ -37,7 +37,7 @@ fun AnimatedAppDialog(visible: Boolean, onDismiss: () -> Unit, content: @Composa
 fun AnimatedMessageDialog(visible: Boolean, onDismissRequest: () -> Unit, title: @Composable () -> Unit,
     text: @Composable () -> Unit, confirmButton: @Composable () -> Unit, dismissButton: @Composable () -> Unit = {}) {
     AnimatedAppDialog(visible, onDismissRequest) {
-        Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        GlassPanelSurface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
             Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 androidx.compose.runtime.CompositionLocalProvider(LocalTextStyle provides MaterialTheme.typography.headlineSmall) { title() }
                 Box(Modifier.weight(1f, fill = false)) { text() }

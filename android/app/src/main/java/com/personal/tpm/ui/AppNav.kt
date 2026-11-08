@@ -23,7 +23,6 @@ import androidx.navigation.navArgument
 import com.personal.tpm.data.FaultSearchField
 import com.personal.tpm.data.OrderKind
 import com.personal.tpm.data.faultStateName
-import com.personal.tpm.license.LicenseState
 
 private const val TABS = "tabs"
 private const val LIST = "list/{state}?q={q}&f={f}"
@@ -46,28 +45,44 @@ private fun newFaultRoute(id: String = "", draft: String = "") = "form/fault?id=
  * tabs, and a list that was left to open an order is found as it was (rows, scroll, expanded cards) when coming back.
  */
 @Composable
-fun AppNav(license: LicenseState.Allowed?) {
+fun AppNav() {
     val nav = rememberNavController()
     val session = LocalSession.current
-    var showDeveloperPassword by remember { mutableStateOf(false) }
-    var developerVerified by remember { mutableStateOf(false) }
-    if(showDeveloperPassword) DeveloperPasswordDialog(
-        onDismiss={showDeveloperPassword=false},
-        onVerified={
-            showDeveloperPassword=false
-            if(nav.currentBackStackEntry?.destination?.route==TABS) {
-                developerVerified=true
-                nav.navigate(DEV) { launchSingleTop=true }
-            }
-        },
-    )
     fun reportAsset(asset: com.personal.tpm.data.Jv) {
         nav.navigate(newFaultRoute())
         val reference=com.personal.tpm.data.Jv.obj("assetId" to asset["assetId"].text,"assetCode" to asset["assetCode"].text,"assetName" to asset["assetName"].text)
         nav.currentBackStackEntry?.savedStateHandle?.set("reportAsset", reference.toString())
     }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val vault = LocalVault.current
+    val pickerPrefs = LocalPickerPrefs.current
+    val drafts = LocalDrafts.current
+    val operators = remember(session.draftScope) { OperationAccounts(context, session, vault) }
+    val quick = viewModel<QuickFinishViewModel>(key = "quick-${session.draftScope}-${session.scope.value}",
+        factory = viewModelFactory { initializer { QuickFinishViewModel(session, pickerPrefs, drafts) } })
+    androidx.compose.runtime.LaunchedEffect(nav) {
+        nav.currentBackStack.collect { stack ->
+            val keys = stack.mapNotNull { entry ->
+                val route = entry.destination.route.orEmpty()
+                val id = entry.arguments?.getString("id").orEmpty()
+                when {
+                    route == "quick-finish" -> quick.operationKey
+                    route == TASK -> entry.arguments?.getString("kind").orEmpty() + ":" + id
+                    route == FAULT || route == FAULT_FORM || route == REPAIR -> "Fault:" + id
+                    route == ERP || route == ERP_FORM -> "Erp:" + id
+                    else -> null
+                }
+            }.toSet()
+            operators.retainOrders(keys + quick.operationKey)
+        }
+    }
+    androidx.compose.runtime.LaunchedEffect(quick.completionAcknowledged, quick.busy) {
+        if (quick.completionAcknowledged && !quick.busy) operators.clear(quick.operationKey)
+    }
     // A page change takes Motion.Page; what arrives decelerates, what leaves eases in and out.
     val duration = Motion.Page
+    androidx.compose.runtime.CompositionLocalProvider(LocalOperationAccounts provides operators,
+        LocalQuickProgress provides QuickProgress(quick.badge, { quick.showProgress = true })) {
     NavHost(
         navController = nav, startDestination = TABS,
         // Slides only, no fade: a fade makes the phone draw the whole page (a long form, a list of cards) into an off-screen buffer and blend it again
@@ -80,21 +95,20 @@ fun AppNav(license: LicenseState.Allowed?) {
         composable(TABS) {
             run {
                 MainShell(
-                    license,
                     openList = { state -> nav.navigate("list/" + Uri.encode(state.ifEmpty { "_" }) + "?q=&f=") },
                     openPool = { kind -> nav.navigate("pool/" + kind.path) },
+                    openPoolOrder = { kind, id -> nav.navigate("pool-order/${kind.path}/" + Uri.encode(id)) },
                     openOrder = { kind, id -> nav.navigate((if (kind == OrderKind.Erp) "erp/" else "fault/") + Uri.encode(id)) },
                     openWork = { list -> nav.navigate("paged/" + list.key) },
                     openQuery = { field, text -> nav.navigate("list/_?q=" + Uri.encode(text) + "&f=" + field.name) },
                     openDrafts = { nav.navigate(DRAFTS) },
                     openNew = { nav.navigate(newFaultRoute()) },
-                    openDev = {
-                        val entry = nav.currentBackStackEntry
-                        if (entry?.destination?.route == TABS && entry.lifecycle.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
-                            showDeveloperPassword=true
-                        }
+                    openQuick = {
+                        if (quick.loading || quick.signing) quick.showProgress = true
+                        else { operators.clear(quick.operationKey); quick.discover() }
                     },
-                    openCards = { nav.navigate("card-settings") },
+                    openDev = { nav.navigate(DEV) { launchSingleTop = true } },
+
                     openDashboard = { nav.navigate("management") },
                     openPrecision = { nav.navigate("precision-dashboard") },
                     openQuerySettings = { nav.navigate("query-account-settings") },
@@ -126,6 +140,7 @@ fun AppNav(license: LicenseState.Allowed?) {
             }
         }
         composable(FAULT, arguments = listOf(navArgument("id") { type = NavType.StringType }, navArgument("independent") { type = NavType.BoolType; defaultValue = false })) { entry ->
+            OperationAccountScope("Fault:" + entry.arguments?.getString("id").orEmpty()) {
             run {
                 val id = entry.arguments?.getString("id").orEmpty()
                 FaultDetailScreen(
@@ -135,8 +150,10 @@ fun AppNav(license: LicenseState.Allowed?) {
                     onReportAsset = ::reportAsset,
                 )
             }
+                    }
         }
         composable(ERP, arguments = listOf(navArgument("id") { type = NavType.StringType }, navArgument("independent") { type = NavType.BoolType; defaultValue = false })) { entry ->
+            OperationAccountScope("Erp:" + entry.arguments?.getString("id").orEmpty()) {
             run {
                 val id = entry.arguments?.getString("id").orEmpty()
                 ErpDetailScreen(
@@ -145,6 +162,7 @@ fun AppNav(license: LicenseState.Allowed?) {
                     onEdit = { nav.navigate("form/erp?id=" + Uri.encode(id)) },
                 )
             }
+                    }
         }
         composable(
             TASK,
@@ -153,39 +171,51 @@ fun AppNav(license: LicenseState.Allowed?) {
                 navArgument("ret") { type = NavType.StringType; defaultValue = "false" },
             ),
         ) { entry ->
+            OperationAccountScope(entry.arguments?.getString("kind").orEmpty() + ":" + entry.arguments?.getString("id").orEmpty()) {
             val kind = if (entry.arguments?.getString("kind") == "Erp") OrderKind.Erp else OrderKind.Fault
             CompactTheme { TaskScreen(
                 kind = kind, id = entry.arguments?.getString("id").orEmpty(), startReturn = entry.arguments?.getString("ret") == "true",
                 onBack = { nav.popBackStack() },
                 // After a step is taken: back to where the order was opened from, except signing in, which stays on the order.
-                onDone = { stay -> nav.popBackStack(); if (!stay) nav.popBackStack() },
+                onDone = { stay -> operators.clear(kind.toString() + ":" + entry.arguments?.getString("id").orEmpty()); nav.popBackStack(); if (!stay) nav.popBackStack() },
             ) }
+                    }
         }
         composable(
             FAULT_FORM,
             arguments = listOf(navArgument("id") { type = NavType.StringType; defaultValue = "" }, navArgument("draft") { type = NavType.StringType; defaultValue = "" }),
         ) { entry ->
+            OperationAccountScope("Fault:" + entry.arguments?.getString("id").orEmpty()) {
             FaultFormScreen(
                 existingId = entry.arguments?.getString("id").orEmpty().ifEmpty { null }, startDraftId = entry.arguments?.getString("draft").orEmpty().ifEmpty { null },
                 onClose = { nav.popBackStack() }, onSaved = {},
                 initialAsset = entry.savedStateHandle.get<String>("reportAsset")?.let { com.personal.tpm.data.Jv.parse(it) },
             )
+                    }
         }
         composable(ERP_FORM, arguments = listOf(navArgument("id") { type = NavType.StringType; defaultValue = "" })) { entry ->
+            OperationAccountScope("Erp:" + entry.arguments?.getString("id").orEmpty()) {
             ErpFormScreen(existingId = entry.arguments?.getString("id").orEmpty().ifEmpty { null }, referenceSn = null, onClose = { nav.popBackStack() }, onSaved = {})
+                    }
         }
         composable(REPAIR, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
+            OperationAccountScope("Fault:" + entry.arguments?.getString("id").orEmpty()) {
             val id = entry.arguments?.getString("id").orEmpty()
             RepairFormScreen(
                 faultId = id, onClose = { nav.popBackStack() },
                 // The result is saved: on to the step itself (choose the approver, write the opinion, send). It replaces this page.
                 onSubmitted = { nav.navigate("task/Fault/" + Uri.encode(id) + "?ret=false") { popUpTo(REPAIR) { inclusive = true } } },
             )
+                    }
         }
-        composable("card-settings") { CardSettingsScreen { nav.popBackStack() } }
+
+        composable("quick-finish") {
+            OperationAccountScope(quick.operationKey) { QuickFinishScreen(quick, onBack = {
+                if (nav.currentDestination?.route == "quick-finish") nav.popBackStack()
+            }) }
+        }
         composable("management") {
-            if (AppPreferences.management) ManagementScreen(onBack = { nav.popBackStack() }, openOrder = { id -> nav.navigate("fault/" + Uri.encode(id) + "?independent=true") })
-            else androidx.compose.runtime.LaunchedEffect(Unit) { nav.popBackStack() }
+            PersonnelManagementScreen(onBack = { nav.popBackStack() }, openOrder = { id -> nav.navigate("fault/" + Uri.encode(id) + "?independent=true") })
         }
         composable("query-account-settings") { QueryAccountSettingsScreen { nav.popBackStack() } }
         composable("precision-dashboard") { PrecisionDashboard(onBack = { nav.popBackStack() }, openAsset = { nav.navigate("precision-asset/" + Uri.encode(it)) }) }
@@ -193,16 +223,15 @@ fun AppNav(license: LicenseState.Allowed?) {
             PrecisionDeviceScreen(entry.arguments?.getString("id").orEmpty()) { nav.popBackStack() }
         }
         composable(DEV) { entry ->
-            if(!developerVerified) {
-                androidx.compose.runtime.LaunchedEffect(Unit) { nav.popBackStack() }
-                return@composable
-            }
-            androidx.compose.runtime.DisposableEffect(Unit) { onDispose { developerVerified=false } }
             DevScreen(onBack = {
             if (nav.currentBackStackEntry == entry && entry.lifecycle.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) nav.popBackStack()
         }) }
         composable(DRAFTS) {
             DraftBoxScreen(onBack = { nav.popBackStack() }, onOpenNew = { draft -> nav.navigate(newFaultRoute(draft = draft)) })
+        }
+        composable("pool-order/{kind}/{id}", arguments = listOf(navArgument("kind") { type = NavType.StringType }, navArgument("id") { type = NavType.StringType })) { entry ->
+            val kind = PoolKind.byPath(entry.arguments?.getString("kind").orEmpty()) ?: PoolKind.Maintenance
+            PoolOrderDetail(kind, entry.arguments?.getString("id").orEmpty()) { nav.popBackStack() }
         }
         composable(POOL, arguments = listOf(navArgument("kind") { type = NavType.StringType })) { entry ->
             val kind = PoolKind.byPath(entry.arguments?.getString("kind").orEmpty()) ?: PoolKind.Maintenance
@@ -212,10 +241,12 @@ fun AppNav(license: LicenseState.Allowed?) {
                     initializer { PagedViewModel(session, kind.page, kind.waitingFilters(), listOf(SearchChoice("工单名称", kind.nameKey), SearchChoice("资产编码", "asset.assetCode"))) }
                 },
             )
+            var selectedPoolOrder by remember { mutableStateOf<String?>(null) }
             PagedScreen(
             vm, kind.title, "暂无待接单工单", modelOf = { row, index -> poolCardModel(kind, row, index) }, onBack = { nav.popBackStack() },
-            openNotice = "功能暂未完善，仅供查看。", cardType = if (kind == PoolKind.Maintenance) CardType.Maintenance else CardType.Precision,
+            open = { model, _ -> selectedPoolOrder = model.openId }, poolKind = kind, cardType = if (kind == PoolKind.Maintenance) CardType.Maintenance else CardType.Precision,
         )
+            SlideInOverlayFor(selectedPoolOrder) { id -> PoolOrderDetail(kind, id) { selectedPoolOrder = null } }
         }
         composable(PAGED, arguments = listOf(navArgument("type") { type = NavType.StringType })) { entry ->
             val list = WorkList.byKey(entry.arguments?.getString("type").orEmpty()) ?: WorkList.Assets
@@ -237,5 +268,11 @@ fun AppNav(license: LicenseState.Allowed?) {
         composable(FLOW, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
             WorkflowScreen(processId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.popBackStack() })
         }
+    }
+    OperationAccountScope(quick.operationKey) {
+        QuickFinishDialogs(quick, openForm = { nav.navigate("quick-finish") { launchSingleTop = true } },
+            openOrder = { item -> nav.navigate(if (item.poolPrefix.isEmpty()) "fault/" + Uri.encode(item.id) else "pool-order/${item.poolPrefix}/" + Uri.encode(item.id)) })
+    }
+    OperationAccountDialog()
     }
 }

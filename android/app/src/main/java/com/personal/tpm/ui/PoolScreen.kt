@@ -27,6 +27,23 @@ fun poolFacts(row: Jv): List<Pair<String, String>> = listOf(
 fun poolCardModel(kind: PoolKind, row: Jv, index: Int) = CardModel(
     key = row[kind.idKey].text.ifEmpty { "${row["sn"].text}#$index" }, title = row[kind.nameKey].text, status = "待接单", colorCode = "RECEIVED", isApproval = false,
     reference = row["asset"]["assetCode"].text.ifEmpty { "—" } + row["asset"]["addressCode"].text.let { if (it.isEmpty()) "" else " · $it" },
-    time = row["planStartDate"].dateText, facts = poolFacts(row), kind = null, openId = "", cardType = if (kind == PoolKind.Maintenance) CardType.Maintenance else CardType.Precision,
+    time = row["planStartDate"].dateText, facts = poolFacts(row), kind = null, openId = row[kind.idKey].text, cardType = if (kind == PoolKind.Maintenance) CardType.Maintenance else CardType.Precision,
 )
 
+
+fun poolKindForTask(task: Jv): PoolKind? = when {
+    task["processDefinitionKey"].text.startsWith("MAINTAIN") -> PoolKind.Maintenance
+    task["processDefinitionKey"].text.startsWith("PRECISE") -> PoolKind.Precision
+    else -> null
+}
+
+/** The original App resolves the current user task separately when detail omits taskInfo. */
+suspend fun loadPoolOrder(session: com.personal.tpm.data.Session, kind: PoolKind, id: String): Jv {
+    val name = if (kind == PoolKind.Maintenance) "Maintain" else "Precise"
+    val detail = session.request("${kind.path}/get${name}DetailById", mapOf(kind.idKey to id))
+    if (detail["taskInfo"]["id"].text.isNotEmpty() || detail["processInstanceId"].text.isEmpty()) return detail
+    val task = session.request("workflow/getUserTaskByProcessInstanceId", mapOf("processInstanceId" to detail["processInstanceId"].text))
+    return Jv(org.json.JSONObject(detail.raw.toString()).put("taskInfo", task.raw))
+}
+
+fun poolBatchItem(kind: PoolKind, row: Jv) = com.personal.tpm.data.BatchItem(row[kind.idKey].text, com.personal.tpm.data.OrderKind.Fault, row[kind.nameKey].text, row["asset"]["assetCode"].text, kind.path.uppercase() + ":" + row[kind.stateKey].text, kind.path)
