@@ -483,12 +483,10 @@ private fun PlannedTimeOptions(planned: String, prefs: SharedPreferences, onChan
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("计划完成时间", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
             DateTimeField("计划完成时间", exact, dateOnly = false, required = false,
-                trigger = { open -> TextButton(onClick = open) { Text(exact.ifBlank { "具体时间" }) } },
+                trigger = { open -> TextButton(onClick = open) { Text(exact.ifBlank { "手动选择时间" }) } },
                 onChange = onChange,
             )
-            IconButton(onClick = { editing = true }) {
-                Icon(Icons.Filled.Edit, contentDescription = "编辑计划时间预设", tint = MaterialTheme.colorScheme.primary)
-            }
+            TextButton(onClick = { editing = true }) { Text("编辑预设") }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             groups.forEach { group ->
