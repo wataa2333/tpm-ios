@@ -93,24 +93,29 @@ fun StatusBarIcons(dark: Boolean) {
     }
 }
 
-/**
- * The soft edge of a bar: a band of the bar's colour that fades out over the page just below it ([fadeBelow]) or just above it ([fadeAbove]),
- * so what scrolls under a bar melts into it instead of being cut off by a hard line. It is drawn outside the bar's own bounds and takes no touches.
- */
+/** Measure the fade as part of the bar so it never paints over resting page content. */
 fun Modifier.fadeBelow(color: Color, height: androidx.compose.ui.unit.Dp = 18.dp): Modifier = drawBehind {
-    val h = height.toPx()
-    drawRect(
-        Brush.verticalGradient(listOf(color, color.copy(alpha = 0.55f), color.copy(alpha = 0.18f), Color.Transparent), startY = size.height, endY = size.height + h),
-        topLeft = Offset(0f, size.height), size = androidx.compose.ui.geometry.Size(size.width, h),
-    )
-}
+    val h = height.toPx().coerceAtMost(size.height)
+    if (h > 0f) {
+        val start = size.height - h
+        drawRect(
+            Brush.verticalGradient(listOf(color, color.copy(alpha = 0.55f), color.copy(alpha = 0.18f), Color.Transparent),
+                startY = start, endY = size.height),
+            topLeft = Offset(0f, start), size = androidx.compose.ui.geometry.Size(size.width, h),
+        )
+    }
+}.padding(bottom = height)
+
 fun Modifier.fadeAbove(color: Color, height: androidx.compose.ui.unit.Dp = 22.dp): Modifier = drawBehind {
-    val h = height.toPx()
-    drawRect(
-        Brush.verticalGradient(listOf(Color.Transparent, color.copy(alpha = 0.18f), color.copy(alpha = 0.55f), color), startY = -h, endY = 0f),
-        topLeft = Offset(0f, -h), size = androidx.compose.ui.geometry.Size(size.width, h),
-    )
-}
+    val h = height.toPx().coerceAtMost(size.height)
+    if (h > 0f) {
+        drawRect(
+            Brush.verticalGradient(listOf(Color.Transparent, color.copy(alpha = 0.18f), color.copy(alpha = 0.55f), color),
+                startY = 0f, endY = h),
+            size = androidx.compose.ui.geometry.Size(size.width, h),
+        )
+    }
+}.padding(top = height)
 
 /** The refresh button: while [spinning] it turns round and round; when the work ends it finishes the turn it is in and rests at its starting place. */
 @Composable

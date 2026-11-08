@@ -21,6 +21,12 @@ class RepairTextTest {
         assertEquals("DB570", normalizeReportMachineCode("DB570"))
     }
 
+    @Test fun plannedWeekRepliesUseOneWeekPrefix() {
+        assertEquals("本周日", formatRepairPlannedTime("本周", "周日"))
+        assertEquals("下周三", formatRepairPlannedTime("下周", "周三"))
+        assertEquals("今天夜班", formatRepairPlannedTime("今天", "夜班"))
+    }
+
     @Test fun replyPreservesOriginalLinesAndKeepsRepeatMachinesInTheirOriginalPositions() {
         val lines = listOf("故障报备", "3夹", "BI29原描述", "", "4夹", "BI29另一条")
         val notes = listOf("", "", "没报修", "", "", "计划完成：2026-11-09 15:00")

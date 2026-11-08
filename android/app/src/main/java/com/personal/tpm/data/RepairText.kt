@@ -24,3 +24,8 @@ fun buildRepairReply(lines: List<String>, annotations: List<String>, manualLines
     lines.mapIndexed { index, line ->
         repairReplyLine(line, annotations.getOrNull(index).orEmpty(), manualLines.getOrNull(index))
     }.joinToString("\n")
+
+fun formatRepairPlannedTime(group: String, child: String): String {
+    val suffix = if (group == "本周" || group == "下周") child.removePrefix("周") else child
+    return group + suffix
+}

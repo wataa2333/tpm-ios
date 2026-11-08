@@ -3,6 +3,7 @@ package com.personal.tpm.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -146,41 +147,43 @@ fun RepairTextQueryScreen(onBack: () -> Unit, openOrder: (String) -> Unit) {
                         },
                         snackbar = snackbar,
                         bottomBar = {
-                            val line = selected.getOrNull(index)
-                            Row(
-                                Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 12.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                when (step) {
-                                    TextQueryStep.Paste -> GlassActionButton(onClick = ::identify, enabled = text.isNotBlank(), modifier = Modifier.weight(1f)) { Text("识别机台号") }
-                                    TextQueryStep.Mark -> GlassActionButton(onClick = { reviewIndex = 0; open(TextQueryStep.Review) }, enabled = selected.isNotEmpty(), modifier = Modifier.weight(1f)) {
-                                        Text("开始核对（${selected.size} 行 · ${selected.map { normalizeReportMachineCode(machineCodes[it]) }.distinct().size} 台）")
+                            GlassBottomSurface {
+                                val line = selected.getOrNull(index)
+                                Row(
+                                    Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    when (step) {
+                                        TextQueryStep.Paste -> GlassActionButton(onClick = ::identify, enabled = text.isNotBlank(), modifier = Modifier.weight(1f)) { Text("识别机台号") }
+                                        TextQueryStep.Mark -> GlassActionButton(onClick = { reviewIndex = 0; open(TextQueryStep.Review) }, enabled = selected.isNotEmpty(), modifier = Modifier.weight(1f)) {
+                                            Text("开始核对（${selected.size} 行 · ${selected.map { normalizeReportMachineCode(machineCodes[it]) }.distinct().size} 台）")
+                                        }
+                                        TextQueryStep.Revisit -> {
+                                            GlassTextButton(onClick = ::returnToReply, modifier = Modifier.weight(1f)) { Text("取消") }
+                                            GlassActionButton(onClick = {
+                                                if (line != null && manualLines.getOrNull(line) != null && pendingReply != replies[line]) {
+                                                    confirmReplace = true
+                                                } else {
+                                                    saveReviewedLine(replaceManual = false)
+                                                }
+                                            }, modifier = Modifier.weight(1f)) { Text("保存并返回") }
+                                        }
+                                        TextQueryStep.Review -> {
+                                            GlassTextButton(onClick = {
+                                                if (line != null) updateLine(line, "", "")
+                                                advance()
+                                            }, modifier = Modifier.weight(1f)) { Text("跳过") }
+                                            GlassTextButton(onClick = { open(TextQueryStep.Reply) }, modifier = Modifier.weight(1f)) { Text("就此完成") }
+                                            GlassActionButton(onClick = ::advance, enabled = line != null && replies.getOrNull(line).orEmpty().isNotEmpty(),
+                                                modifier = Modifier.weight(1f)) { Text(if (index == selected.lastIndex) "生成回复" else "下一条") }
+                                        }
+                                        TextQueryStep.Reply -> GlassActionButton(
+                                            onClick = {
+                                                clipboard?.setPrimaryClip(ClipData.newPlainText("维修交期", buildRepairReply(lines, replies, manualLines)))
+                                                uiScope.launch { snackbar.showSnackbar("已复制回复") }
+                                            }, modifier = Modifier.weight(1f),
+                                        ) { Text("复制回复") }
                                     }
-                                    TextQueryStep.Revisit -> {
-                                        GlassTextButton(onClick = ::returnToReply, modifier = Modifier.weight(1f)) { Text("取消") }
-                                        GlassActionButton(onClick = {
-                                            if (line != null && manualLines.getOrNull(line) != null && pendingReply != replies[line]) {
-                                                confirmReplace = true
-                                            } else {
-                                                saveReviewedLine(replaceManual = false)
-                                            }
-                                        }, modifier = Modifier.weight(1f)) { Text("保存并返回") }
-                                    }
-                                    TextQueryStep.Review -> {
-                                        GlassTextButton(onClick = {
-                                            if (line != null) updateLine(line, "", "")
-                                            advance()
-                                        }, modifier = Modifier.weight(1f)) { Text("跳过") }
-                                        GlassTextButton(onClick = { open(TextQueryStep.Reply) }, modifier = Modifier.weight(1f)) { Text("就此完成") }
-                                        GlassActionButton(onClick = ::advance, enabled = line != null && replies.getOrNull(line).orEmpty().isNotEmpty(),
-                                            modifier = Modifier.weight(1f)) { Text(if (index == selected.lastIndex) "生成回复" else "下一条") }
-                                    }
-                                    TextQueryStep.Reply -> GlassActionButton(
-                                        onClick = {
-                                            clipboard?.setPrimaryClip(ClipData.newPlainText("维修交期", buildRepairReply(lines, replies, manualLines)))
-                                            uiScope.launch { snackbar.showSnackbar("已复制回复") }
-                                        }, modifier = Modifier.weight(1f),
-                                    ) { Text("复制回复") }
                                 }
                             }
                         },
@@ -371,7 +374,7 @@ private fun MachineReview(
     var presetId by rememberSaveable { mutableStateOf(restored["preset"].text) }
     var children by rememberSaveable { mutableStateOf(restored["children"].text) }
     var planned by rememberSaveable { mutableStateOf(restored["planned"].text) }
-    var presetList by remember { mutableStateOf(readReplyPresets(presets.getString("projects-v2", null), presets.getString("projects", null))) }
+    var presetList by remember { mutableStateOf(readReplyPresets(presets.getString("projects-v3", null), presets.getString("projects-v2", null), presets.getString("projects", null))) }
     var editingPresets by remember { mutableStateOf(false) }
     val current = presetList.firstOrNull { it.id == presetId }
 
@@ -380,7 +383,7 @@ private fun MachineReview(
         children = detail
         planned = time
         val note = if (preset == null) "" else listOf(
-            preset.name, detail, if (time.isNotBlank() && preset.id != NotReported) "计划完成：$time" else "",
+            preset.name, detail, if (time.isNotBlank() && preset.acceptsPlan) "计划完成：$time" else "",
         ).filter(String::isNotBlank).joinToString("，")
         onChange(Jv.obj("preset" to presetId, "children" to detail, "planned" to time).toString(), note)
     }
@@ -405,7 +408,7 @@ private fun MachineReview(
                 presetList.forEach { option ->
                     FilterChip(selected = presetId == option.id, onClick = {
                         if (presetId == option.id) record(preset = null, detail = "")
-                        else record(option, "", if (option.id == NotReported) "" else planned)
+                        else record(option, "", if (option.acceptsPlan) planned else "")
                     }, label = { Text(option.name) })
                 }
             }
@@ -432,18 +435,18 @@ private fun MachineReview(
                 }
             }
             AnimatedVisibility(
-                visible = presetId != NotReported,
+                visible = current?.acceptsPlan != false,
                 enter = expandVertically(tween(Motion.Normal)),
                 exit = shrinkVertically(tween(Motion.Normal)),
             ) {
-                PlannedTimeOptions(planned) { record(time = it) }
+                PlannedTimeOptions(planned, presets) { record(time = it) }
             }
         }
     }
     MachineRecentOrders(machine, openOrder)
     if (editingPresets) {
         ReplyPresetEditor(presetList, onClose = { editingPresets = false }) { updated ->
-            presets.edit().putString("projects-v2", JSONArray(updated.map { it.encode() }).toString()).apply()
+            presets.edit().putString("projects-v3", JSONArray(updated.map { it.encode() }).toString()).apply()
             presetList = updated
             val kept = updated.firstOrNull { it.id == presetId }
             val keptChildren = children.split("、").filter { it in kept?.children.orEmpty() }.joinToString("、")
@@ -453,77 +456,119 @@ private fun MachineReview(
     }
 }
 
-private val plannedDays = listOf("今天", "明天", "后天")
-private val plannedSlots = listOf("上午", "下午", "晚上", "夜班")
+private val dailySlots = listOf("上午", "下午", "晚上", "夜班")
+private val weekdays = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+private val defaultTimePresets = listOf(
+    ReplyPreset("today", "今天", dailySlots),
+    ReplyPreset("tomorrow", "明天", dailySlots),
+    ReplyPreset("day-after", "后天", dailySlots),
+    ReplyPreset("this-week", "本周", weekdays),
+    ReplyPreset("next-week", "下周", weekdays),
+)
+
+private fun plannedLabel(group: ReplyPreset, child: String): String =
+    formatRepairPlannedTime(group.name, child)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PlannedTimeOptions(planned: String, onChange: (String) -> Unit) {
-    val day = plannedDays.firstOrNull { planned.startsWith(it) }
-    val exact = planned.takeIf { day == null }.orEmpty()
+private fun PlannedTimeOptions(planned: String, prefs: SharedPreferences, onChange: (String) -> Unit) {
+    var groups by remember { mutableStateOf(decodeReplyPresets(prefs.getString("planned-projects", null)) ?: defaultTimePresets) }
+    var editing by remember { mutableStateOf(false) }
+    val selected = groups.firstOrNull { group ->
+        group.name == planned || group.children.any { plannedLabel(group, it) == planned }
+    }
+    val selectedChild = selected?.children?.firstOrNull { plannedLabel(selected, it) == planned }.orEmpty()
+    val exact = planned.takeIf { selected == null }.orEmpty()
     Column {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("计划完成时间", style = MaterialTheme.typography.labelLarge)
+            Text("计划完成时间", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
             DateTimeField("计划完成时间", exact, dateOnly = false, required = false,
-                trigger = { open ->
-                    TextButton(onClick = open) { Text(exact.ifBlank { "具体时间" }) }
-                },
+                trigger = { open -> TextButton(onClick = open) { Text(exact.ifBlank { "具体时间" }) } },
                 onChange = onChange,
             )
+            IconButton(onClick = { editing = true }) {
+                Icon(Icons.Filled.Edit, contentDescription = "编辑计划时间预设", tint = MaterialTheme.colorScheme.primary)
+            }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            plannedDays.forEach { option ->
-                FilterChip(selected = day == option,
-                    onClick = { onChange(if (day == option) "" else option) }, label = { Text(option) })
+            groups.forEach { group ->
+                FilterChip(selected = selected?.id == group.id,
+                    onClick = { onChange(if (selected?.id == group.id) "" else group.name) }, label = { Text(group.name) })
             }
         }
-        AnimatedVisibility(
-            visible = day != null,
-            enter = expandVertically(tween(Motion.Normal)),
-            exit = shrinkVertically(tween(Motion.Normal)),
-        ) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                plannedSlots.forEach { slot ->
-                    FilterChip(selected = day != null && planned == day + slot,
-                        onClick = { if (day != null) onChange(if (planned == day + slot) day else day + slot) },
-                        label = { Text(slot) })
+        AnimatedContent(
+            targetState = selected?.takeIf { it.children.isNotEmpty() },
+            transitionSpec = { fadeIn(tween(Motion.Fast)) togetherWith fadeOut(tween(Motion.Fast)) },
+            label = "计划时间子项",
+        ) { group ->
+            if (group != null) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    group.children.forEach { child ->
+                        FilterChip(selected = selected?.id == group.id && planned == plannedLabel(group, child),
+                            onClick = {
+                                if (selected?.id == group.id) {
+                                    val label = plannedLabel(group, child)
+                                    onChange(if (planned == label) group.name else label)
+                                }
+                            },
+                            label = { Text(child) })
+                    }
                 }
             }
+        }
+    }
+    if (editing) {
+        ReplyPresetEditor(groups, onClose = { editing = false }, timePresets = true) { updated ->
+            prefs.edit().putString("planned-projects", JSONArray(updated.map { it.encode() }).toString()).apply()
+            groups = updated
+            if (selected != null) {
+                val kept = updated.firstOrNull { it.id == selected.id }
+                onChange(if (kept == null) "" else plannedLabel(kept, selectedChild.takeIf { it in kept.children }.orEmpty()))
+            }
+            editing = false
         }
     }
 }
 
 private const val NotReported = "not-reported"
+private const val Repaired = "repaired"
 private data class ReplyPreset(val id: String, val name: String, val children: List<String> = emptyList()) {
+    val acceptsPlan: Boolean get() = id != NotReported && id != Repaired
     fun encode() = Jv.obj("id" to id, "name" to name, "children" to JSONArray(children))
 }
 
-private fun readReplyPresets(stored: String?, legacy: String?): List<ReplyPreset> {
-    fun decode(text: String?): List<ReplyPreset>? {
-        val parsed = text?.let { Jv.parse(it) }
-        return if (parsed?.raw is JSONArray) {
-            parsed.array.map { row -> ReplyPreset(row["id"].text, row["name"].text, row["children"].array.map { it.text }) }
-        } else null
-    }
-    decode(stored)?.let { return it }
+private fun decodeReplyPresets(text: String?): List<ReplyPreset>? {
+    val parsed = text?.let { Jv.parse(it) }
+    return if (parsed?.raw is JSONArray) {
+        parsed.array.map { row -> ReplyPreset(row["id"].text, row["name"].text, row["children"].array.map { it.text }) }
+    } else null
+}
+
+private fun readReplyPresets(stored: String?, previous: String?, legacy: String?): List<ReplyPreset> {
+    decodeReplyPresets(stored)?.let { return it }
     val waitingMaterial = ReplyPreset("waiting-material", "待物料")
-    val old = decode(legacy)
-    if (old != null) {
-        return if (old.any { it.id == waitingMaterial.id || it.name.trim() == waitingMaterial.name }) old
-        else old + waitingMaterial
-    }
+    val repaired = ReplyPreset(Repaired, "已修复", listOf("昨天", "前天"))
+    fun List<ReplyPreset>.addMissing(option: ReplyPreset) =
+        if (any { it.id == option.id || it.name.trim() == option.name }) this else this + option
+    decodeReplyPresets(previous)?.let { return it.addMissing(repaired) }
+    decodeReplyPresets(legacy)?.let { return it.addMissing(waitingMaterial).addMissing(repaired) }
     return listOf(
         ReplyPreset(NotReported, "未报修"),
         ReplyPreset("cnc", "已报CNC维修部", listOf("主轴", "X轴丝杆", "Y轴丝杆", "Z轴丝杆",
             "X轴导轨", "Y轴导轨", "Z轴导轨", "主轴电机")),
         ReplyPreset("in-progress", "处理中"),
         waitingMaterial,
+        repaired,
     )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ReplyPresetEditor(presets: List<ReplyPreset>, onClose: () -> Unit, onSave: (List<ReplyPreset>) -> Unit) {
+private fun ReplyPresetEditor(
+    presets: List<ReplyPreset>, onClose: () -> Unit, timePresets: Boolean = false, onSave: (List<ReplyPreset>) -> Unit,
+) {
+    val groupLabel = if (timePresets) "日期大类" else "项目"
+    val childLabel = if (timePresets) "子项" else "子类"
     var drafts by remember { mutableStateOf(presets) }
     var editing by remember { mutableStateOf<ReplyPreset?>(null) }
     var childInput by remember { mutableStateOf("") }
@@ -536,7 +581,9 @@ private fun ReplyPresetEditor(presets: List<ReplyPreset>, onClose: () -> Unit, o
 
     GlassAlertDialog(
         onDismissRequest = { if (item == null) onClose() else editing = null },
-        title = { Text(if (item == null) "编辑交期回复预设" else if (drafts.any { it.id == item.id }) "编辑项目" else "新增项目") },
+        title = { Text(if (item == null) {
+            if (timePresets) "编辑计划时间预设" else "编辑交期回复预设"
+        } else if (drafts.any { it.id == item.id }) "编辑$groupLabel" else "新增$groupLabel") },
         text = {
             key(item?.id) {
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
@@ -545,7 +592,7 @@ private fun ReplyPresetEditor(presets: List<ReplyPreset>, onClose: () -> Unit, o
                         drafts.forEach { project ->
                             ListItem(
                                 headlineContent = { Text(project.name) },
-                                supportingContent = { Text(if (project.children.isEmpty()) "无子类" else "${project.children.size} 个子类") },
+                                supportingContent = { Text(if (project.children.isEmpty()) "无$childLabel" else "${project.children.size} 个$childLabel") },
                                 trailingContent = { Icon(Icons.Filled.Edit, contentDescription = "编辑 ${project.name}") },
                                 modifier = Modifier.clickable(role = Role.Button) { edit(project) },
                                 colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
@@ -554,31 +601,31 @@ private fun ReplyPresetEditor(presets: List<ReplyPreset>, onClose: () -> Unit, o
                         TextButton(onClick = { edit(ReplyPreset(UUID.randomUUID().toString(), "")) }) {
                             Icon(Icons.Filled.Add, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
-                            Text("新增项目")
+                            Text("新增$groupLabel")
                         }
                     } else {
                         OutlinedTextField(item.name, { editing = item.copy(name = it.take(60)) },
-                            label = { Text("项目名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        Text("子类", style = MaterialTheme.typography.labelLarge)
-                        if (item.children.isEmpty()) Text("还没有子类", style = MaterialTheme.typography.bodySmall)
+                            label = { Text("${groupLabel}名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Text(childLabel, style = MaterialTheme.typography.labelLarge)
+                        if (item.children.isEmpty()) Text("还没有$childLabel", style = MaterialTheme.typography.bodySmall)
                         else FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             item.children.forEach { child ->
                                 InputChip(selected = false, onClick = { editing = item.copy(children = item.children - child) },
                                     label = { Text(child) },
-                                    trailingIcon = { Icon(Icons.Filled.Close, contentDescription = "删除子类 $child", modifier = Modifier.size(16.dp)) })
+                                    trailingIcon = { Icon(Icons.Filled.Close, contentDescription = "删除$childLabel $child", modifier = Modifier.size(16.dp)) })
                             }
                         }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            OutlinedTextField(childInput, { childInput = it.take(60) }, label = { Text("新增子类") },
+                            OutlinedTextField(childInput, { childInput = it.take(60) }, label = { Text("新增$childLabel") },
                                 singleLine = true, modifier = Modifier.weight(1f))
                             IconButton(enabled = newChild.isNotBlank() && newChild !in item.children, onClick = {
                                 editing = item.copy(children = item.children + newChild)
                                 childInput = ""
-                            }) { Icon(Icons.Filled.Add, contentDescription = "添加子类") }
+                            }) { Icon(Icons.Filled.Add, contentDescription = "添加$childLabel") }
                         }
                         if (drafts.any { it.id == item.id }) {
                             TextButton(onClick = { drafts = drafts.filterNot { it.id == item.id }; editing = null }) {
-                                Text("删除项目", color = MaterialTheme.colorScheme.error)
+                                Text("删除$groupLabel", color = MaterialTheme.colorScheme.error)
                             }
                         }
                     }

@@ -3,6 +3,7 @@ package com.personal.tpm.ui
 import androidx.compose.material.icons.filled.Bolt
 
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -195,6 +196,7 @@ fun MainShell(
                     enter = androidx.compose.animation.scaleIn(tween(Motion.Normal)) + androidx.compose.animation.fadeIn(tween(Motion.Normal)),
                     exit = androidx.compose.animation.scaleOut(tween(Motion.Fast)) + androidx.compose.animation.fadeOut(tween(Motion.Fast))) {
                     GlassActionButton(onClick = openQuick, modifier = Modifier.heightIn(min = 56.dp),
+                        border = if (AppPreferences.liquidGlass) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)) {
                         Icon(Icons.Filled.Bolt, contentDescription = null)
                         androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
