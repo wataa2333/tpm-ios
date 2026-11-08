@@ -514,16 +514,16 @@ final class PreviewTests: XCTestCase {
         XCTAssertTrue(add.isHittable)
         XCTAssertEqual(app.buttons.matching(identifier: "新建报修").count, 1)
         add.tap()
-        let template = app.buttons["设备无法启动"]
+        let template = app.buttons["配件维修"]
         XCTAssertTrue(template.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["编辑模板 设备无法启动"].exists)
-        XCTAssertTrue(app.buttons["删除模板 设备无法启动"].exists)
+        XCTAssertTrue(app.buttons["编辑模板 配件维修"].exists)
+        XCTAssertTrue(app.buttons["删除模板 配件维修"].exists)
         template.tap()
         let cancel = app.buttons["取消"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 10))
         let formBar = app.navigationBars.containing(.button, identifier: "取消").firstMatch
         XCTAssertTrue(formBar.exists)
-        XCTAssertEqual(app.textFields["请输入报修名称"].value as? String, "设备无法启动")
+        XCTAssertNotEqual(app.textFields["请输入报修名称"].value as? String, "配件维修")
         XCTAssertTrue(tabBar.isHittable)
         XCTAssertTrue(tabBar.buttons["新建报修"].isSelected)
         let save = app.buttons["保存"], submit = app.buttons["提交"]

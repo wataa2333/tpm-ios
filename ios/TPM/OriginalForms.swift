@@ -705,7 +705,9 @@ struct OriginalFaultForm: View {
             else {
                 await model.load(session, existing: existing)
                 guard model.ready, !Task.isCancelled else { return }
-                if existing == nil { await model.applyDefaults(session) }
+                if existing == nil, template == nil || template?.id == FaultReportTemplate.blank.id {
+                    await model.applyDefaults(session)
+                }
                 guard !Task.isCancelled else { return }
                 loadedData = model.data; loadedSelections = model.selections
                 // The form opens with what was saved last time for the same order (a new report: the last
@@ -733,9 +735,13 @@ struct OriginalFaultForm: View {
             }
             guard !Task.isCancelled else { return }
             if let template {
-                if !template.faultName.isEmpty { model.data["faultName"] = .string(template.faultName) }
-                if !template.description.isEmpty { model.data["faultDesc"] = .string(template.description) }
-                if preview, template.asset != .null { model.data["asset"] = template.asset }
+                if template.id != FaultReportTemplate.blank.id {
+                    let values = template.values
+                    for field in FaultTemplateField.allCases where field != .asset {
+                        model.data[field.rawValue] = values[field.rawValue]
+                    }
+                }
+                if preview, let initialAsset { model.data["asset"] = initialAsset }
                 loadedData = model.data
                 loadedSelections = model.selections
             }

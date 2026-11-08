@@ -2,6 +2,8 @@ import SwiftUI
 
 /// Opens a new operator-owned form. The reference contains no source order or workflow fields.
 struct AssetReportButton: View {
+    @EnvironmentObject private var session: LiveSession
+    @Environment(\.previewReferences) private var preview
     let asset: JSONValue
     var screenEdge = false
     var compact = false
@@ -9,10 +11,9 @@ struct AssetReportButton: View {
     var body: some View {
         if !asset["assetId"].text.isEmpty && !asset["assetCode"].text.isEmpty {
             let button = NavigationLink {
-                OriginalFaultForm(initialAsset: reference)
+                FaultReportTemplatePage(scope: preview ? "preview" : session.draftScope, preview: preview,
+                                        isActive: true, initialAsset: reference)
                     .environment(\.queryReading, false)
-                    .navigationBarBackButtonHidden()
-                    .modifier(DetailTabVisibility())
             } label: {
                 Text(compact ? "使用此资产编码报修" : "使用此资产编码进行新建报修")
                     .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
