@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -36,6 +37,37 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 private const val ApkMime = "application/vnd.android.package-archive"
+private const val ClickLanzouDownload = """
+    (() => {
+        function clickDownload(doc) {
+            if (!doc || doc.location.hostname !== 'wataa.lanzoum.com') return false;
+            for (const frame of doc.querySelectorAll('iframe')) {
+                try {
+                    if (clickDownload(frame.contentDocument)) return true;
+                } catch (_) {}
+            }
+            const controls = doc.querySelectorAll(
+                '#down a, a#down, #down[onclick], #go, a, button, [role=button], [onclick], input[type=button]'
+            );
+            for (const control of controls) {
+                const label = (control.value || control.textContent || '').replace(/\s+/g, '');
+                if (!/^(下载|立即下载|点击下载|普通下载|本地下载|直接下载|下载文件|点击此处下载|免费下载)$/.test(label)) continue;
+                if (!control.getClientRects().length || control.disabled || control.dataset.tpmDownloadClicked) continue;
+                const link = control.getAttribute('href');
+                if (link && !link.startsWith('#') && !link.startsWith('javascript:')) {
+                    const destination = new URL(link, doc.baseURI);
+                    if (destination.protocol !== 'https:') continue;
+                }
+                control.dataset.tpmDownloadClicked = '1';
+                control.removeAttribute('target');
+                control.click();
+                return true;
+            }
+            return false;
+        }
+        clickDownload(document);
+    })();
+"""
 private data class ApkTransfer(val id: Long, val file: File)
 
 @Composable
@@ -46,6 +78,18 @@ internal fun OnlineApkDownload(update: OnlineApk, onClose: () -> Unit) {
     var progress by remember(update) { mutableStateOf<Float?>(null) }
     var ready by remember(update) { mutableStateOf<Uri?>(null) }
     var error by remember(update) { mutableStateOf<String?>(null) }
+    var downloadPage by remember(update) { mutableStateOf<WebView?>(null) }
+
+    LaunchedEffect(downloadPage, transfer) {
+        val page = downloadPage ?: return@LaunchedEffect
+        if (transfer != null) return@LaunchedEffect
+        repeat(40) {
+            delay(500)
+            if (transfer != null || error != null) return@LaunchedEffect
+            page.evaluateJavascript(ClickLanzouDownload, null)
+        }
+        if (transfer == null) error = "蓝奏云暂时无法自动开始下载，请稍后重试。"
+    }
 
     fun install(uri: Uri) {
         try {
@@ -131,9 +175,10 @@ internal fun OnlineApkDownload(update: OnlineApk, onClose: () -> Unit) {
                         else LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
                     }
                     else -> {
-                        Text("在下方蓝奏云页面点下载，进度会显示在这里。")
+                        Text("正在准备下载 APK…")
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
                         AndroidView(
-                            modifier = Modifier.fillMaxWidth().height(320.dp),
+                            modifier = Modifier.fillMaxWidth().height(1.dp).alpha(0f),
                             factory = { webContext ->
                                 WebView(webContext).apply {
                                     settings.javaScriptEnabled = true
@@ -168,10 +213,14 @@ internal fun OnlineApkDownload(update: OnlineApk, onClose: () -> Unit) {
                                             }
                                         }
                                     }
+                                    downloadPage = this
                                     loadUrl(update.link)
                                 }
                             },
-                            onRelease = { it.destroy() },
+                            onRelease = {
+                                if (downloadPage === it) downloadPage = null
+                                it.destroy()
+                            },
                         )
                     }
                 }

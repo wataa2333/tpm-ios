@@ -14,7 +14,7 @@ const val AndroidUpdateFolder = "https://wataa.lanzoum.com/s/wataa2333"
 private val versionPattern = Regex("""[0-9]{1,9}(?:\.[0-9]{1,9}){2,5}""")
 private val apkPattern = Regex("""wataa-([0-9]{1,9}(?:\.[0-9]{1,9}){2,5})\.apk""", RegexOption.IGNORE_CASE)
 private val shareId = Regex("""[a-zA-Z0-9_-]{1,80}""")
-private val folderEndpoint = Regex("""url\s*:\s*'(/filemoreajax\.php\?file=\d+)'\s*,\s*data\s*:\s*\{([^}]+)}""")
+private val folderEndpoint by lazy { Regex("""url\s*:\s*'(/filemoreajax\.php\?file=\d+)'\s*,\s*data\s*:\s*\{([^\}]+)\}""") }
 private val scriptVariable = Regex("""\bvar\s+(\w+)\s*=\s*'([^']*)'""")
 private val formValue = Regex("""'(\w+)'\s*:\s*('(?:[^']*)'|\w+)""")
 private val formKeys = setOf("lx", "fid", "uid", "puid", "pg", "rep", "t", "k", "up", "vip", "webfoldersign")

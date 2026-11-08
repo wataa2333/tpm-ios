@@ -19,8 +19,8 @@ android {
         applicationId = "com.personal.tpm"
         minSdk = 29            // Android 10
         targetSdk = 35
-        versionCode = 138
-        versionName = "2.1.22"
+        versionCode = 139
+        versionName = "2.1.23"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEFAULT_QUERY_USERNAME", queryConfigLiteral("C0382522"))
         buildConfigField("String", "DEFAULT_QUERY_PASSWORD", queryConfigLiteral(queryLocalSettings.getProperty("tpm.defaultQueryPassword", "")))
