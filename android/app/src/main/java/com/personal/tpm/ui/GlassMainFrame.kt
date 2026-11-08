@@ -2,6 +2,7 @@ package com.personal.tpm.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.FabPosition
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
@@ -25,6 +26,7 @@ fun GlassMainFrame(
         CompositionLocalProvider(LocalGlassContentPadding provides PaddingValues(0.dp), LocalGlassBackdrop provides null) {
             Scaffold(contentWindowInsets = appContentInsets(), containerColor = MaterialTheme.colorScheme.background,
                 topBar = topBar, bottomBar = bottomBar, floatingActionButton = floatingActionButton,
+                floatingActionButtonPosition = FabPosition.Start,
                 snackbarHost = snackbarHost, content = content)
         }
         return
@@ -53,7 +55,7 @@ fun GlassMainFrame(
                 if (bottomHeight > 0) GlassFooterBackground(Modifier.matchParentSize())
                 bottomBar()
             }
-            Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = bottomInset + 16.dp)) { floatingActionButton() }
+            Box(Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = bottomInset + 16.dp)) { floatingActionButton() }
             Box(Modifier.align(Alignment.BottomCenter).padding(bottom = bottomInset + 80.dp)) { snackbarHost() }
         }
     }
