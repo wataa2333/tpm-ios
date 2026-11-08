@@ -41,6 +41,7 @@ fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.
     }
     val scope by session.scope.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val updates = androidx.compose.runtime.remember(context) { OnlineUpdateState(context) }
     val launchReady = LocalLaunchReady.current
     androidx.compose.runtime.LaunchedEffect(screen) {
         if (screen == Screen.Login) { androidx.compose.runtime.withFrameNanos { }; launchReady() }
@@ -51,6 +52,7 @@ fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.
     CompositionLocalProvider(
         LocalSession provides session, LocalVault provides vault, LocalPickerPrefs provides prefs, LocalDrafts provides drafts,
         LocalQueryAccounts provides queries,
+        LocalOnlineUpdate provides updates,
         androidx.compose.material3.LocalRippleConfiguration provides if (AppPreferences.liquidGlass) null else androidx.compose.material3.LocalRippleConfiguration.current,
     ) {
         // The keyboard pushes the whole page up, so a text box that is being typed in is never under it.
@@ -71,6 +73,7 @@ fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.
             }
         }
         }
+        OnlineUpdatePrompt(updates)
     }
 }
 

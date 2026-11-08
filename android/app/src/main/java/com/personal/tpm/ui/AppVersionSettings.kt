@@ -16,14 +16,23 @@ import com.personal.tpm.BuildConfig
 import com.personal.tpm.data.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
 fun AppVersionSettings() {
     var showing by remember { mutableStateOf(false) }
+    val updates = LocalOnlineUpdate.current
+    val scope = rememberCoroutineScope()
     SectionTitle("版本信息")
     GroupCard {
         ListItem(headlineContent = { Text("当前版本") }, supportingContent = { AnimatedLabel("${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）") }, colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+        if (updates != null) {
+            GroupDivider()
+            ListItem(headlineContent = { Text(if (updates.checking) "正在检查更新…" else "检查更新") },
+                modifier = Modifier.clickable(enabled = !updates.checking) { scope.launch { updates.check(manual = true) } },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+        }
         GroupDivider()
         ListItem(headlineContent = { Text("历史更新日志") }, supportingContent = { Text("随安装包提供，可离线查看") }, modifier = Modifier.clickable { showing = true }, colors = ListItemDefaults.colors(containerColor = Color.Transparent))
     }
