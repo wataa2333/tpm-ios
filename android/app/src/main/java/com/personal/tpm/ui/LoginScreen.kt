@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,16 +19,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -64,7 +60,7 @@ fun LoginScreen(session: Session, vault: AccountVault) {
     val context = LocalContext.current
     val remembered by vault.accounts.collectAsState()
     val latest = remember { vault.accounts.value.firstOrNull() }
-    val prefillPassword = remember { latest?.takeIf { !BiometricGate.isEnabled(context) }?.let { vault.password(it.username) } }
+    val prefillPassword = remember { latest?.let { vault.password(it.username) } }
     var username by remember { mutableStateOf(latest?.username.orEmpty()) }
     var password by remember { mutableStateOf(prefillPassword.orEmpty()) }
     var showPassword by remember { mutableStateOf(false) }
@@ -105,7 +101,7 @@ fun LoginScreen(session: Session, vault: AccountVault) {
 
     Box(Modifier.fillMaxSize()) {
     // The one loading animation of the app: a thin bar along the top edge.
-    if (busy) LinearProgressIndicator(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding())
+    if (busy) AppProgressIndicator(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding())
     PageWidth {
         Column(
             Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
@@ -115,7 +111,7 @@ fun LoginScreen(session: Session, vault: AccountVault) {
             Spacer(Modifier.height(32.dp))
             androidx.compose.material3.TextField(colors = blockFieldColors(), shape = MaterialTheme.shapes.medium, 
                 value = username, onValueChange = { username = it }, label = { Text("账号") }, singleLine = true, enabled = !busy,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth().glassSearchSurface(MaterialTheme.shapes.medium),
             )
             Spacer(Modifier.height(12.dp))
             androidx.compose.material3.TextField(colors = blockFieldColors(), shape = MaterialTheme.shapes.medium, 
@@ -124,19 +120,19 @@ fun LoginScreen(session: Session, vault: AccountVault) {
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { signIn() }),
                 trailingIcon = {
-                    IconButton(onClick = { showPassword = !showPassword }) {
+                    GlassIconButton(onClick = { showPassword = !showPassword }) {
                         Icon(if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, contentDescription = if (showPassword) "隐藏密码" else "显示密码")
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().glassSearchSurface(MaterialTheme.shapes.medium),
             )
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("记住密码", style = MaterialTheme.typography.bodyLarge)
-                Switch(checked = keepPassword, onCheckedChange = { keepPassword = it }, enabled = !busy)
+                GlassSwitch(checked = keepPassword, onCheckedChange = { keepPassword = it }, enabled = !busy)
             }
             Spacer(Modifier.height(16.dp))
-            Button(onClick = { signIn() }, enabled = canSignIn, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            GlassActionButton(onClick = { signIn() }, enabled = canSignIn, modifier = Modifier.fillMaxWidth().height(52.dp)) {
                 AnimatedLabel(if (busy && signingInAs == null) "登录中…" else "登录")
             }
             if (remembered.isNotEmpty()) {

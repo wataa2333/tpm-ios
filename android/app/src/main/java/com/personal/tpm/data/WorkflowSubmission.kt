@@ -26,6 +26,13 @@ fun isReturnCondition(condition: Jv): Boolean = condition["name"].text.let { it.
 fun isRejectCondition(condition: Jv): Boolean =
     isReturnCondition(condition) || condition["name"].text.contains("驳回") || condition["name"].text.contains("拒绝") || condition["value"].text == "reject"
 
+/** Returning must never silently fall back to an agree branch after a task changes. */
+fun initialTaskCondition(conditions: List<Jv>, returning: Boolean, requested: String? = null): String = when {
+    requested != null -> conditions.firstOrNull { it["value"].text == requested && (!returning || isRejectCondition(it)) }
+    returning -> conditions.firstOrNull(::isReturnCondition) ?: conditions.firstOrNull(::isRejectCondition)
+    else -> conditions.firstOrNull { it["value"].text == "agree" } ?: conditions.firstOrNull()
+}?.get("value")?.text.orEmpty()
+
 /** `assignees` of a submission: ASSIGN/SUPERVISOR nodes map their variable to the chosen user name (countersign: comma separated), CANDIDATE_USERS pass through. */
 fun assigneesPayload(nodes: List<Jv>, selections: Map<String, List<String>>): JSONObject {
     val result = JSONObject()
@@ -72,4 +79,4 @@ fun taskActionTitle(task: Jv, kind: OrderKind): String {
 
 /** The server's date format for a time: "yyyy-MM-dd HH:mm". */
 fun serverDate(date: Date, dateOnly: Boolean = false): String =
-    SimpleDateFormat(if (dateOnly) "yyyy-MM-dd" else "yyyy-MM-dd HH:mm", Locale.US).format(date)
+    SimpleDateFormat(if (dateOnly) "yyyy-MM-dd" else "yyyy-MM-dd HH:mm", Locale.US).apply { timeZone = businessTimeZone() }.format(date)

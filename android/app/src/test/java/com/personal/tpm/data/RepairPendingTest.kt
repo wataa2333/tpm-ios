@@ -51,7 +51,7 @@ class RepairPendingTest {
         for(outsideState in listOf(false,true)) {
             val result=loadRepairPending(initial,span=span) { state,_,_ ->
                 val later=state=="FINISHED"
-                val actual=if(later && outsideState) "VERIFIED" else state
+                val actual=if(later && outsideState) "SIGNED" else state
                 val end=if(later && !outsideState) "2026-10-01 12:00" else "2026-10-20 12:00"
                 Jv(Jv.obj("content" to JSONArray(listOf(row(1,actual).put("faultTime",end))),"last" to true))
             }

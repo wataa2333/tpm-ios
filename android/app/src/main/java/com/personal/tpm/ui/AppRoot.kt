@@ -26,32 +26,32 @@ import com.personal.tpm.data.AccountVault
 import com.personal.tpm.data.Session
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
-import com.personal.tpm.license.LicenseState
-import com.personal.tpm.license.LicenseViewModel
 
-private enum class Screen { Checking, Key, Login, Main }
+private enum class Screen { Login, Main }
 
-/** The licence first, then the sign-in, then the app. Each change is a plain cross-fade. */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+/** Sign in, then open the app. Each change is a plain cross-fade. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun AppRoot(license: LicenseViewModel, session: Session, vault: AccountVault, prefs: com.personal.tpm.data.PickerPrefs, drafts: com.personal.tpm.data.DraftStore) {
+fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.PickerPrefs, drafts: com.personal.tpm.data.DraftStore, launchFinished: Boolean = true) {
     TransparentSystemBars()
-    val state by license.state.collectAsState()
     val auth by session.auth.collectAsState()
     val screen = when {
-        state is LicenseState.Checking -> Screen.Checking
-        state is LicenseState.NeedKey -> Screen.Key
         auth["token"].text.isEmpty() -> Screen.Login
         else -> Screen.Main
     }
     val scope by session.scope.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val launchReady = LocalLaunchReady.current
+    androidx.compose.runtime.LaunchedEffect(screen) {
+        if (screen == Screen.Login) { androidx.compose.runtime.withFrameNanos { }; launchReady() }
+    }
     val queries = androidx.compose.runtime.remember { com.personal.tpm.data.QueryAccounts(context).also { session.queryAccounts = it } }
     androidx.compose.runtime.LaunchedEffect(scope) { queries.invalidate() }
     // Scrolling containers own their platform overscroll effect; do not disable or duplicate it here.
     CompositionLocalProvider(
         LocalSession provides session, LocalVault provides vault, LocalPickerPrefs provides prefs, LocalDrafts provides drafts,
         LocalQueryAccounts provides queries,
+        androidx.compose.material3.LocalRippleConfiguration provides if (AppPreferences.liquidGlass) null else androidx.compose.material3.LocalRippleConfiguration.current,
     ) {
         // The keyboard pushes the whole page up, so a text box that is being typed in is never under it.
         // The area of the screen the owner chose (see 我的 > 显示区域): the app lies inside it, the rest is plain background.
@@ -62,18 +62,16 @@ fun AppRoot(license: LicenseViewModel, session: Session, vault: AccountVault, pr
         ) {
             Crossfade(targetState = screen, label = "root") { current ->
                 when (current) {
-                    Screen.Checking -> StartupSkeleton()
-                    Screen.Key -> LicenseScreen(license, (state as? LicenseState.NeedKey)?.reason.orEmpty())
                     Screen.Login -> LoginScreen(session, vault)
                     // The pages are rebuilt when the account or the factory changes (the key), like the iOS app.
                     Screen.Main -> Box(Modifier.fillMaxSize()) {
-                        key(scope) { AppNav(state as? LicenseState.Allowed) }
-                        StartupCover()
+                        key(scope) { AppNav() }
                     }
                 }
             }
         }
         }
+        if (launchFinished) GlassIntroduction()
     }
 }
 

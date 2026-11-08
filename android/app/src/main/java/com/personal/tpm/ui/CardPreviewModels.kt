@@ -20,7 +20,7 @@ fun previewCard(type: CardType): CardModel {
         CardType.Stock -> stockCardModel(Jv(Jv.obj("id" to "preview-stock", "materialDesc" to "示例库存 · 接近开关", "materialCode" to "7.4.09.0869", "onhandQty" to 200, "uomDesc" to "件", "erpTpmCompany" to Jv.obj("organizationName" to "一厂库存组织"), "lot" to "261021", "subInv" to "维修仓", "locatorCode" to "H4.08", "locatorDesc" to "备件区", "updateTime" to "2026-10-21 08:00")), 0)
         CardType.Maintenance, CardType.Precision -> {
             val kind = if (type == CardType.Maintenance) PoolKind.Maintenance else PoolKind.Precision
-            poolCardModel(kind, Jv(Jv.obj(kind.idKey to "preview-pool", kind.nameKey to if (type == CardType.Maintenance) "示例保养 · 月度设备保养" else "示例精密度检查 · 主轴精度检查", "sn" to if (type == CardType.Maintenance) "MA261021001" else "PR261021001", "asset" to asset, "applyUser" to person, "user" to person, "dept" to dept, "userGroup" to Jv.obj("groupName" to "保养一组"), "planStartDate" to "2026-10-21 08:00", "planEndDate" to "2026-10-22 17:00")), 0)
+            poolCardModel(kind, Jv(Jv.obj(kind.idKey to "preview-pool", kind.stateKey to "RECEIVED", kind.nameKey to if (type == CardType.Maintenance) "示例保养 · 月度设备保养" else "示例精密度检查 · 主轴精度检查", "sn" to if (type == CardType.Maintenance) "MA261021001" else "PR261021001", "asset" to asset, "applyUser" to person, "user" to person, "dept" to dept, "userGroup" to Jv.obj("groupName" to "保养一组"), "planStartDate" to "2026-10-21 08:00", "planEndDate" to "2026-10-22 17:00")), 0)
         }
     }
     return model.copy(key = "preview-${type.name}", openId = "", cardType = type)

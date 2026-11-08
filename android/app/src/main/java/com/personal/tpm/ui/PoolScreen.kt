@@ -2,6 +2,7 @@ package com.personal.tpm.ui
 
 import com.personal.tpm.data.Jv
 import com.personal.tpm.data.filter
+import com.personal.tpm.data.maintenanceStateName
 
 /** The two pools the iOS app shows read-only: maintenance orders and precision-check orders waiting to be taken ("待接单"). */
 enum class PoolKind(val path: String, val title: String) {
@@ -20,13 +21,32 @@ enum class PoolKind(val path: String, val title: String) {
 fun poolFacts(row: Jv): List<Pair<String, String>> = listOf(
     "单号" to row["sn"].text, "资产编码" to row["asset"]["assetCode"].text, "资产名称" to row["asset"]["assetName"].text,
     "机台号" to row["asset"]["addressCode"].text, "地址" to row["asset"]["address"].text, "申请人" to row["applyUser"].label, "受理部门" to row["dept"].label,
-    "受理组别" to row["userGroup"].label, "受理人" to row["user"].label, "计划开始" to row["planStartDate"].dateText,
+    "受理组别" to row["userGroup"].label, "受理人" to row["user"].label, "接单人" to row["maintainUser"].label, "计划开始" to row["planStartDate"].dateText,
     "计划结束" to row["planEndDate"].dateText,
 ).filter { it.second.isNotEmpty() }
 
 fun poolCardModel(kind: PoolKind, row: Jv, index: Int) = CardModel(
-    key = row[kind.idKey].text.ifEmpty { "${row["sn"].text}#$index" }, title = row[kind.nameKey].text, status = "待接单", colorCode = "RECEIVED", isApproval = false,
+    key = row[kind.idKey].text.ifEmpty { "${row["sn"].text}#$index" }, title = row[kind.nameKey].text,
+    status = if (kind == PoolKind.Maintenance) maintenanceStateName(row[kind.stateKey].text) else com.personal.tpm.data.batchGroupName("PRECISE:" + row[kind.stateKey].text).substringAfter(" · "),
+    colorCode = row[kind.stateKey].text, isApproval = row[kind.stateKey].text in setOf("APPROVED", "VERIFIED", "RESOLVED"),
     reference = row["asset"]["assetCode"].text.ifEmpty { "—" } + row["asset"]["addressCode"].text.let { if (it.isEmpty()) "" else " · $it" },
-    time = row["planStartDate"].dateText, facts = poolFacts(row), kind = null, openId = "", cardType = if (kind == PoolKind.Maintenance) CardType.Maintenance else CardType.Precision,
+    time = row["planStartDate"].dateText, facts = poolFacts(row), kind = null, openId = row[kind.idKey].text, cardType = if (kind == PoolKind.Maintenance) CardType.Maintenance else CardType.Precision,
 )
 
+
+fun poolKindForTask(task: Jv): PoolKind? = when {
+    task["processDefinitionKey"].text.startsWith("MAINTAIN") -> PoolKind.Maintenance
+    task["processDefinitionKey"].text.startsWith("PRECISE") -> PoolKind.Precision
+    else -> null
+}
+
+/** The original App resolves the current user task separately when detail omits taskInfo. */
+suspend fun loadPoolOrder(session: com.personal.tpm.data.Session, kind: PoolKind, id: String): Jv {
+    val name = if (kind == PoolKind.Maintenance) "Maintain" else "Precise"
+    val detail = session.request("${kind.path}/get${name}DetailById", mapOf(kind.idKey to id))
+    if (detail["taskInfo"]["id"].text.isNotEmpty() || detail["processInstanceId"].text.isEmpty()) return detail
+    val task = session.request("workflow/getUserTaskByProcessInstanceId", mapOf("processInstanceId" to detail["processInstanceId"].text))
+    return Jv(org.json.JSONObject(detail.raw.toString()).put("taskInfo", task.raw))
+}
+
+fun poolBatchItem(kind: PoolKind, row: Jv) = com.personal.tpm.data.BatchItem(row[kind.idKey].text, com.personal.tpm.data.OrderKind.Fault, row[kind.nameKey].text, row["asset"]["assetCode"].text, kind.path.uppercase() + ":" + row[kind.stateKey].text, kind.path)

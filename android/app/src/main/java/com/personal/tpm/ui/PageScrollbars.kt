@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalLayoutDirection
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import com.kyant.backdrop.backdrops.layerBackdrop
 
 /** Thumb is visible whenever the page has a scroll range. Only the rightmost 20dp captures dragging. */
 private fun Modifier.pageScrollbar(position:()->Float, fraction:()->Float, canScroll:()->Boolean,
@@ -102,16 +103,34 @@ fun ScrollableLazyColumn(modifier:Modifier=Modifier,state:LazyListState=remember
         return (viewport/(average*info.totalItemsCount)).toFloat().coerceIn(.04f,1f)
     }
     val surface = LocalScrollSurface.current ?: MaterialTheme.colorScheme.background
+    val sheetEdges = AppPreferences.liquidGlass && LocalScrollSurface.current != null
+    val captureEdges = sheetEdges && AppPreferences.glassEffects.blur != GlassBlur.Off &&
+        currentGlassRendering() in listOf(GlassRendering.Blur, GlassRendering.Liquid)
+    // Capture only the list. Edge readers are siblings, so they never sample their own output.
+    val edgeBackdrop = if (captureEdges) rememberGlassPageBackdrop(surface) else null
     val direction = LocalLayoutDirection.current
     val sheetBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val glassPadding = LocalGlassContentPadding.current
     val listPadding = PaddingValues(start = contentPadding.calculateStartPadding(direction), end = contentPadding.calculateEndPadding(direction),
-        top = contentPadding.calculateTopPadding(), bottom = contentPadding.calculateBottomPadding() + sheetBottom)
-    Box(modifier.scrollEdges(surface, before = { if (reverseLayout) state.canScrollForward else state.canScrollBackward },
-        after = { if (reverseLayout) state.canScrollBackward else state.canScrollForward }),propagateMinConstraints=true) {
-        NativeLazyColumn(state=state,contentPadding=listPadding,reverseLayout=reverseLayout,
-            verticalArrangement=verticalArrangement,horizontalAlignment=horizontalAlignment,
-            flingBehavior=flingBehavior,userScrollEnabled=userScrollEnabled,content=content)
+        top = contentPadding.calculateTopPadding() + glassPadding.calculateTopPadding(), bottom = contentPadding.calculateBottomPadding() + maxOf(sheetBottom, glassPadding.calculateBottomPadding()))
+    Box(modifier.then(if (AppPreferences.liquidGlass) Modifier else Modifier.scrollEdges(surface,
+        before = { if (reverseLayout) state.canScrollForward else state.canScrollBackward },
+        after = { if (reverseLayout) state.canScrollBackward else state.canScrollForward })),propagateMinConstraints=true) {
+        CompositionLocalProvider(LocalGlassContentPadding provides PaddingValues(0.dp)) {
+            NativeLazyColumn(modifier=if (edgeBackdrop != null) Modifier.layerBackdrop(edgeBackdrop) else Modifier,
+                state=state,contentPadding=listPadding,reverseLayout=reverseLayout,
+                verticalArrangement=verticalArrangement,horizontalAlignment=horizontalAlignment,
+                flingBehavior=flingBehavior,userScrollEnabled=userScrollEnabled,content=content)
+        }
         Box(Modifier.matchParentSize()) {
+            if (sheetEdges) {
+                SheetScrollEdge(edgeBackdrop, surface, top = true,
+                    visible = if (reverseLayout) state.canScrollForward else state.canScrollBackward,
+                    modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(24.dp))
+                SheetScrollEdge(edgeBackdrop, surface, top = false,
+                    visible = if (reverseLayout) state.canScrollBackward else state.canScrollForward,
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(24.dp))
+            }
             Box(Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(20.dp).pageScrollbar(
                 position={
                     val info=state.layoutInfo
@@ -139,12 +158,13 @@ fun ScrollableLazyColumn(modifier:Modifier=Modifier,state:LazyListState=remember
 fun Modifier.pageVerticalScroll(state:ScrollState,enabled:Boolean=true,flingBehavior:FlingBehavior?=null,
     reverseScrolling:Boolean=false):Modifier = composed {
     val surface = LocalScrollSurface.current ?: MaterialTheme.colorScheme.background
-    this.scrollEdges(surface, before = { if (reverseScrolling) state.canScrollForward else state.canScrollBackward },
-        after = { if (reverseScrolling) state.canScrollBackward else state.canScrollForward }).pageScrollbar(
+    this.then(if (AppPreferences.liquidGlass) Modifier else Modifier.scrollEdges(surface, before = { if (reverseScrolling) state.canScrollForward else state.canScrollBackward },
+        after = { if (reverseScrolling) state.canScrollBackward else state.canScrollForward })).pageScrollbar(
         position={val progress=state.value.toFloat()/state.maxValue.coerceAtLeast(1);if(reverseScrolling) 1-progress else progress},
         fraction={state.viewportSize.toFloat()/(state.viewportSize.toLong()+state.maxValue).coerceAtLeast(1)},
         canScroll={enabled && state.maxValue in 1 until Int.MAX_VALUE},
         seek={value->state.scrollTo(((if(reverseScrolling) 1-value else value)*state.maxValue).toInt())}
     ).nativeVerticalScroll(state,enabled,flingBehavior,reverseScrolling)
-        .navigationBarsPadding()
+        .padding(top = LocalGlassContentPadding.current.calculateTopPadding(),
+            bottom = maxOf(LocalGlassContentPadding.current.calculateBottomPadding(), WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()))
 }

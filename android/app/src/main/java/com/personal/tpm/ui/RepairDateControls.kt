@@ -16,11 +16,11 @@ fun DateSpan.dayCount():Long=ChronoUnit.DAYS.between(days.first,days.second)+1
 @Composable
 fun RepairDateControls(vm:RepairPendingViewModel) {
     var choosing by remember { mutableStateOf(false) }
-    FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-        listOf(7,30,90,365).forEach { days -> ChoiceChip(vm.days==days && vm.customSpan==null && !vm.thisMonth,{vm.selectDays(days)},if(days==365) "近一年" else "近${days}天",enabled=!vm.loading) }
-        ChoiceChip(vm.thisMonth,vm::selectThisMonth,"这个月",enabled=!vm.loading)
-        ChoiceChip(vm.customSpan!=null,{choosing=true},"自定义",enabled=!vm.loading)
-    }
+    val ranges = listOf(7, 30, 90, 365)
+    val selected = when { vm.customSpan != null -> 5; vm.thisMonth -> 4; else -> ranges.indexOf(vm.days) }
+    SingleChoiceGroup(listOf("近7天", "近30天", "近90天", "近一年", "这个月", "自定义"), selected,
+        { when(it) { 4 -> vm.selectThisMonth(); 5 -> choosing = true; else -> vm.selectDays(ranges[it]) } },
+        enabled = !vm.loading, columns = 3)
     vm.selectedSpan?.let { AnimatedLabel("${it.summary} · ${it.dayCount()}天",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
     AnimatedAppDialog(choosing, {choosing=false}) {
         val current=vm.selectedSpan
@@ -31,8 +31,8 @@ fun RepairDateControls(vm:RepairPendingViewModel) {
         Column {
             DateRangePicker(state,Modifier.weight(1f,fill=false).heightIn(max=440.dp),title={Text("选择故障发现日期",Modifier.padding(16.dp))})
             Row(Modifier.fillMaxWidth().padding(8.dp),horizontalArrangement=Arrangement.End) {
-                TextButton(onClick={choosing=false}){Text("取消")}
-                TextButton(enabled=state.selectedStartDateMillis!=null,onClick={
+                GlassTextButton(onClick={choosing=false}){Text("取消")}
+                GlassTextButton(enabled=state.selectedStartDateMillis!=null,onClick={
             val from=day(state.selectedStartDateMillis!!); val to=day(state.selectedEndDateMillis ?: state.selectedStartDateMillis!!)
             vm.selectSpan(DateSpan(from,to));choosing=false
         }){Text("确定")}

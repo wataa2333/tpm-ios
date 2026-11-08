@@ -46,10 +46,7 @@ fun RepairTrendTable(series:List<RepairTrend>,focus:Int,onFocus:(Int)->Unit,mont
     GroupCard {
         Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             AnimatedLabel("统计表 · ${if(monthly) "按月" else "按天"}",style=MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                ChoiceChip(!transposed,{transposed=false},"日期为行")
-                ChoiceChip(transposed,{transposed=true},"人员为行")
-            }
+            SingleChoiceGroup(listOf("日期为行", "人员为行"), if(transposed) 1 else 0, { transposed = it == 1 })
             if(!complete) Text("已加载数量，—表示未知",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             AnimatedContent(targetState=transposed,transitionSpec={
                 (fadeIn(tween(Motion.Normal,easing=Motion.Change)) togetherWith fadeOut(tween(Motion.Fast,easing=Motion.Change))).using(SizeTransform(clip=false))

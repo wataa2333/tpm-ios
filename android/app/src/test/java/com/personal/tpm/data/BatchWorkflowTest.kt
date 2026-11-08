@@ -17,6 +17,7 @@ class BatchWorkflowTest {
         var conditions = Jv.parse("""[{"value":"agree","name":"提交任务"},{"value":"back-to-accept","name":"退单"}]""")
         var repairTask = "T-1"
         var existing = Jv.parse("[]")
+        var repairUsers = Jv.parse("[]")
         var hasGroup = true
         var failCommit = false
         val calls = mutableListOf<String>()
@@ -30,7 +31,7 @@ class BatchWorkflowTest {
                 "workflow/getWorkflowTaskState" -> Jv(JSONObject().put("canSubmit", allowed))
                 "workflow/getFormPropertiesConditionsByTaskId" -> Jv(JSONObject().put("flowConditions", conditions.raw))
                 "workflow/getAssigneeElementsByProcessCategory" -> nodes
-                "fault/getLatestRepairByFaultId" -> Jv.parse("""{"repairId":"R-1","createTime":"2026-01-01 08:00","assetFault":{"taskInfo":{"id":"$repairTask"}},"repairUsers":[],"albums":[{"url":"test-picture"}]}""")
+                "fault/getLatestRepairByFaultId" -> Jv.parse("""{"repairId":"R-1","createTime":"2026-01-01 08:00","assetFault":{"taskInfo":{"id":"$repairTask"}},"repairUsers":$repairUsers,"albums":[{"url":"test-picture"}]}""")
                 "erpOutbound/getErpRepairMaterialsByRepairId" -> existing
                 "repair/handleRepair", "process/commitTask" -> Jv.parse("{}")
                 else -> error("Unexpected request $path")
@@ -66,6 +67,23 @@ class BatchWorkflowTest {
         assertEquals("approver-1", api.writes.getValue("process/commitTask").getJSONObject("assignees").getString("confirmUser"))
         assertEquals("test-picture", api.writes.getValue("repair/handleRepair").getJSONArray("albums").getJSONObject(0).getString("url"))
     }
+    @Test fun batchCompletionKeepsExistingAssistantsAndAddsSelectedPeopleOnce() = runTest {
+        val api = Fake().apply { repairUsers = j("""[{"userName":"existing","realName":"原辅助人"}]""") }
+        process(api, completePreset.copy(repairUsers = listOf(
+            j("""{"userName":"EXISTING"}"""),
+            j("""{"userName":"helper-1"}"""),
+            j("""{"userName":"helper-2"}"""),
+            j("""{"userName":"helper-1"}"""),
+        )))
+        val users = api.writes.getValue("repair/handleRepair").getJSONArray("repairUsers")
+        assertEquals(listOf("existing", "helper-1", "helper-2"), List(users.length()) { users.getJSONObject(it).getString("userName") })
+        assertEquals("原辅助人", users.getJSONObject(0).getString("realName"))
+
+        val noSelection = Fake().apply { repairUsers = api.repairUsers }
+        process(noSelection)
+        assertEquals(api.repairUsers.toString(), noSelection.writes.getValue("repair/handleRepair").getJSONArray("repairUsers").toString())
+    }
+
     @Test fun taskChangedWhileReadingRepairCannotWriteAnything() = runTest {
         val api = Fake().apply { repairTask = "T-other" }
         assertTrue(fails { process(api) }.contains("任务已改变"))

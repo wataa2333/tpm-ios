@@ -18,11 +18,9 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.filled.Edit
@@ -83,10 +81,10 @@ fun ErpDetailScreen(id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit
     }
     val queryAccounts = LocalQueryAccounts.current
     val changed by session.changed.collectAsState()
-    LaunchedEffect(id, changed, if (independent) queryAccounts.revision else 0) { load() }
+    LaunchedEffect(id, session.accountKey, changed, if (independent) queryAccounts.revision else 0) { load() }
 
     Box(Modifier.fillMaxSize()) {
-    Scaffold(contentWindowInsets = appContentInsets(),
+    GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = { if (!peeking) operatorDetail?.let { TaskActionBar(com.personal.tpm.data.OrderKind.Erp, it, onOpen=onOpenTask) } },
         topBar = {
@@ -94,7 +92,7 @@ fun ErpDetailScreen(id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit
                 title = "出库详情", subtitle = detail?.get("outNumber")?.text?.ifEmpty { null }, onBack = onBack, loading = loading,
                 actions = {
                     if (!peeking && operatorDetail != null && onEdit != null && detail?.get("processInstanceId")?.text.orEmpty().isEmpty() && detail?.get("createBy")?.text == session.accountName) {
-                        IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "编辑") }
+                        GlassIconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "编辑") }
                     }
                     RefreshButton(spinning = loading) { load() }
                 },
@@ -108,7 +106,7 @@ fun ErpDetailScreen(id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit
                     if (order == null) Box(Modifier.fillMaxSize(), Alignment.Center) {
                         if (error != null) Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             AnimatedLabel(error ?: "", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
-                            TextButton(onClick = { load() }) { Text("重试") }
+                            GlassTextButton(onClick = { load() }) { Text("重试") }
                         }
                     } else SelectionContainer { Column(Modifier.fillMaxSize().fadeInOnShow().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         SectionTitle("ERP出库详情")
@@ -116,7 +114,7 @@ fun ErpDetailScreen(id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit
                             FactRow("出库单号", order["outNumber"].text)
                             FactRow("单号", order["sn"].text)
                             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                Text("状态", Modifier.width(96.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("状态", Modifier.width(112.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 AnimatedLabel(approvalStateName(order["approvalState"].text), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = approvalColor(order["approvalState"].text))
                             }
                             FactRow("申请人", order["user"]["realName"].text)

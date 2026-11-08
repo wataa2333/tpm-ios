@@ -45,10 +45,8 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -87,6 +85,22 @@ import java.time.ZoneOffset
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, onOpen: (String) -> Unit, onNew: (() -> Unit)? = null, reportAsset: ((com.personal.tpm.data.Jv) -> Unit)? = null) {
+    val skeletonCount = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp / 80 + 2).coerceIn(4, 40)
+    val categoryMotion = remember { androidx.compose.animation.core.Animatable(0f) }
+    var previousCategory by remember { mutableStateOf(vm.state) }
+    LaunchedEffect(vm.state) {
+        if (previousCategory != vm.state) {
+            val codes = listOf("") + com.personal.tpm.data.FaultState.entries.map { it.code }
+            val direction = if (codes.indexOf(vm.state) >= codes.indexOf(previousCategory)) 1f else -1f
+            previousCategory = vm.state
+            categoryMotion.snapTo(direction)
+            categoryMotion.animateTo(0f, tween(Motion.Page, easing = Motion.Arrive))
+        }
+    }
+    fun pageMotion() = Modifier.graphicsLayer {
+        translationX = size.width * .22f * categoryMotion.value
+        alpha = 1f - .45f * kotlin.math.abs(categoryMotion.value)
+    }
     val focus = LocalFocusManager.current
     val batch = vm.batch
     var activeList by remember { mutableStateOf<androidx.compose.foundation.lazy.LazyListState?>(null) }
@@ -118,19 +132,32 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
         vm.reload(pull = true)
     }
 
-    Scaffold(contentWindowInsets = appContentInsets(),
+    val filtersOrderListScreen: @Composable () -> Unit = {
+                        Column(Modifier.then(if (AppPreferences.liquidGlass) Modifier else Modifier.scrollHide(hide))) {
+                            SearchRow(vm, input, { input = it }, focus)
+                            if (!vm.searchMode) StatusStrip(vm)
+                            vm.span?.let { span ->
+                                BlockChip(
+                                    "日期 " + span.summary, { choosingDates = true }, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), selected = true,
+                                    trailing = { Icon(Icons.Filled.Close, contentDescription = "清除日期", Modifier.size(18.dp).clickable { vm.changeSpan(null) }) },
+                                )
+                            }
+                        }
+    }
+    GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
+        floatingOverlay = { if (onNew != null) NewButton(visible = !batch.active, label = "新建报修", onClick = onNew) },
         bottomBar = { BatchBarHost(batch.active) { BatchBar(batch) { vm.rows.map { batchItem(com.personal.tpm.data.OrderKind.Fault, it) } } } },
         topBar = {
             AppTopBar(
                 title = title, onBack = onBack,
                 subtitle = vm.total?.let { "共 $it 单" },
-                loading = vm.loading || vm.refreshing || vm.loadingMore, pull = if (vm.refreshing) 0f else pull.distanceFraction,
+                loading = vm.loading || vm.refreshing, pull = if (vm.refreshing) 0f else pull.distanceFraction,
                 actions = {
                     SelectButton(batch.active) { if (batch.active) batch.end() else batch.begin() }
                     RefreshButton(spinning = vm.loading || vm.refreshing) { refreshFromTop() }
-                    IconButton(onClick = { choosingDates = true }) { Icon(Icons.Filled.DateRange, contentDescription = "按日期筛选") }
+                    GlassIconButton(onClick = { choosingDates = true }) { Icon(Icons.Filled.DateRange, contentDescription = "按日期筛选") }
                 },
             )
         },
@@ -141,49 +168,33 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
                     Column(Modifier.fillMaxSize()) {
                         // The search box, the way of searching, the status tabs and the date chip fold away while the list is
                         // scrolled towards its end and come back at the first scroll the other way.
-                        Column(Modifier.scrollHide(hide)) {
-                            SearchRow(vm, input, { input = it }, focus)
-                            if (!vm.searchMode) StatusStrip(vm)
-                            vm.span?.let { span ->
-                                BlockChip(
-                                    "日期 " + span.summary, { choosingDates = true }, Modifier.padding(horizontal = 16.dp, vertical = 4.dp), selected = true,
-                                    trailing = { Icon(Icons.Filled.Close, contentDescription = "清除日期", Modifier.size(18.dp).clickable { vm.changeSpan(null) }) },
-                                )
-                            }
-                        }
-                        // Another status slides in from the side it lies on in the strip (the next one from the right), with grey cards while it loads.
-                        val statusOrder = FaultState.entries.map { it.code }
-                        androidx.compose.animation.AnimatedContent(
-                            targetState = vm.state,
-                            transitionSpec = {
-                                val forward = statusOrder.indexOf(targetState) >= statusOrder.indexOf(initialState)
-                                val curve = androidx.compose.animation.core.FastOutSlowInEasing
-                                (androidx.compose.animation.slideInHorizontally(tween(Motion.Slow, easing = Motion.Change)) { if (forward) it else -it } + androidx.compose.animation.fadeIn(tween(Motion.Normal, easing = Motion.Change))) togetherWith
-                                    (androidx.compose.animation.slideOutHorizontally(tween(Motion.Slow, easing = Motion.Change)) { if (forward) -it else it } + androidx.compose.animation.fadeOut(tween(Motion.Fast, easing = Motion.Change)))
-                            },
-                            modifier = Modifier.weight(1f).fillMaxWidth(), label = "status",
-                        ) { stateCode ->
+                        if (!AppPreferences.liquidGlass) filtersOrderListScreen()
+                        // Keep the filters and page identity stable when changing category.
+                        Box(Modifier.weight(1f).fillMaxWidth()) {
+                        val stateCode = vm.state
                         val listState = rememberLazyListState()
+                        LaunchedEffect(stateCode) { listState.scrollToItem(0) }
                         AutoLoadMore(listState, vm.rows.size, stateCode == vm.state && !vm.loading && !vm.last && vm.error == null) { vm.loadMore() }
                         if (stateCode == vm.state) SideEffect { activeList = listState }
                         PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.reload(pull = true) }, state = pull, indicator = {}, modifier = Modifier.fillMaxSize()) {
                             // While a search or a date is loading, the old rows stay but dim; they fade out as the new ones fade in.
                             val dim by animateFloatAsState(if (vm.loading && vm.rows.isNotEmpty()) 0.45f else 1f, tween(Motion.Fast, easing = Motion.Change), label = "dim")
-                            Box(Modifier.fillMaxSize().nestedScroll(hide.connection)) {
+                            Box(Modifier.fillMaxSize().then(if (AppPreferences.liquidGlass) Modifier else Modifier.nestedScroll(hide.connection))) {
                                 LazyColumn(
                                     state = listState, modifier = Modifier.fillMaxSize().then(if (dim < 1f) Modifier.graphicsLayer { alpha = dim } else Modifier),
                                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = if (onNew != null) 88.dp else 24.dp),
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
+                                    if (AppPreferences.liquidGlass) item(key = "glass-filters") { filtersOrderListScreen() }
                                     if (vm.loading && vm.rows.isEmpty()) {
-                                        items(4, key = { "skeleton$it" }, contentType = { "skeleton" }) { SkeletonCard(fadeItem(skeleton = true)) }
+                                        items(skeletonCount, key = { "skeleton$it" }, contentType = { "skeleton" }) { SkeletonCard(fadeItem(skeleton = true).then(pageMotion())) }
                                     }
                                     // The key carries the position: a page that shifts under the list can repeat an order, and a repeated key crashes a lazy list.
                                     itemsIndexed(vm.rows, key = { index, row -> row["faultId"].text + "#" + index }, contentType = { _, _ -> "order" }) { _, item ->
                                         val model = remember(item) { faultCardModel(item) }
                                         val entry = remember(item) { batchItem(com.personal.tpm.data.OrderKind.Fault, item) }
                                         OrderCard(
-                                            model, vm.expanded[model.key] == true, { vm.expanded[model.key] = vm.expanded[model.key] != true }, fadeItem(),
+                                            model, vm.expanded[model.key] == true, { vm.expanded[model.key] = vm.expanded[model.key] != true }, fadeItem().then(pageMotion()),
                                             onOpen = { OrderPreview.put("Fault", model.openId, item); onOpen(model.openId) },
                                             bottomAction = if(reportAsset!=null && item["asset"]["assetId"].text.isNotBlank() && item["asset"]["assetCode"].text.isNotBlank()) ({
                                                 AssetReportButton(onClick={reportAsset(item["asset"])},modifier=Modifier.fillMaxWidth().padding(top=12.dp))
@@ -195,7 +206,7 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
                                         when {
                                             !vm.loading && vm.rows.isEmpty() && vm.error == null -> EmptyState()
                                             // More pages are read only when the list is pulled up past its end (the loading animation of the top bar runs then).
-                                            vm.rows.isNotEmpty() && !vm.last -> { Text("加载更多内容", Modifier.fillMaxWidth().padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+                                            vm.rows.isNotEmpty() && !vm.last -> { LoadMoreFooter(vm.loadingMore) }
                                             vm.rows.isNotEmpty() -> Text(
                                                 vm.total?.let { "共 $it 单" } ?: "已显示全部 ${vm.rows.size} 条",
                                                 Modifier.fillMaxWidth().padding(8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -214,7 +225,6 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
     }
     // The "+" button is laid over the screen, not placed by the Scaffold: the Scaffold put it above the bottom bar, so when the batch bar slid away
     // the button dropped with it. Here it stays where it is, and shows itself once the bar is on its way out.
-    if (onNew != null) NewButton(visible = !batch.active, label = "新建报修", onClick = onNew)
     BatchOverlays(batch)
     if (choosingDates) DateRangeDialog(vm.span, onDismiss = { choosingDates = false }) { choosingDates = false; vm.changeSpan(it) }
 }
@@ -224,21 +234,22 @@ private fun SearchRow(vm: OrderListViewModel, input: String, onInput: (String) -
     var fieldMenu by remember { mutableStateOf(false) }
     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextField(
-            value = input, onValueChange = onInput, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            value = input, onValueChange = onInput, singleLine = true, modifier = Modifier.fillMaxWidth().glassSearchSurface(),
             placeholder = { AnimatedLabel("搜索" + vm.field.label) },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-            trailingIcon = { if (input.isNotEmpty()) IconButton(onClick = { onInput(""); if (vm.searchMode) vm.search("") }) { Icon(Icons.Filled.Close, contentDescription = "清空") } },
+            trailingIcon = {
+                Row {
+                    if (input.isNotEmpty()) androidx.compose.material3.IconButton(onClick = { onInput(""); if (vm.searchMode) vm.search("") }) { Icon(Icons.Filled.Close, contentDescription = "清空") }
+                    androidx.compose.material3.IconButton(onClick = { fieldMenu = true }) { Icon(Icons.Filled.ExpandMore, contentDescription = "搜索方式：" + vm.field.label) }
+                }
+            },
             shape = CircleShape,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh, unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-            ),
+            colors = searchFieldColors(),
             // Return (the keyboard's search key) searches at once and puts the keyboard away.
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { vm.search(input); focus.clearFocus() }),
         )
         Box {
-            BlockChip("按" + vm.field.label + "搜索", { fieldMenu = true }, trailing = { Icon(Icons.Filled.ExpandMore, contentDescription = null, Modifier.size(18.dp)) })
             AppOptionSheet(expanded = fieldMenu, onDismissRequest = { fieldMenu = false }, title = "搜索方式") {
                 FaultSearchField.entries.forEach { option ->
                     AppOptionItem(text = { AnimatedLabel(option.label) }, selected = option == vm.field, onClick = { fieldMenu = false; vm.changeField(option) })
@@ -256,30 +267,10 @@ private fun SearchRow(vm: OrderListViewModel, input: String, onInput: (String) -
 private fun StatusStrip(vm: OrderListViewModel) {
     val states = FaultState.entries
     val selected = states.indexOfFirst { it.code == vm.state }
-    val scroll = rememberScrollState()
-    val lefts = remember { androidx.compose.runtime.mutableStateMapOf<Int, Int>() }
-    LaunchedEffect(selected, lefts[selected]) {
-        val left = lefts[selected] ?: return@LaunchedEffect
-        scroll.animateScrollTo((left - 48).coerceAtLeast(0))
-    }
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(scroll).padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
-    ) {
-        states.forEachIndexed { index, st ->
-            val on = index == selected
-            val background by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.Normal, easing = Motion.Change), label = "capsule")
-            val content by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, tween(Motion.Normal, easing = Motion.Change), label = "capsuleText")
-            Row(
-                Modifier.onGloballyPositioned { lefts[index] = it.positionInParent().x.toInt() }.clip(CircleShape).background(background)
-                    .clickable { vm.select(st.code) }.padding(horizontal = 14.dp, vertical = 7.dp),
-                horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AnimatedLabel(st.title, style = MaterialTheme.typography.labelLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = content, maxLines = 1, softWrap = false)
-                if (st.hasCount) AnimatedCount(vm.counts[st.code], MaterialTheme.typography.labelLarge, content, weight = if (on) FontWeight.SemiBold else FontWeight.Normal)
-            }
-        }
-    }
+    val labels = states.map { it.title }
+    SingleChoiceGroup(labels, selected, { vm.select(states[it].code) }, scrollable = true,
+        counts = states.map { if(it.hasCount) vm.counts[it.code] else null },
+        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -293,11 +284,11 @@ private fun DateRangeDialog(current: DateSpan?, onDismiss: () -> Unit, onPick: (
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(
+            GlassTextButton(
                 enabled = state.selectedStartDateMillis != null,
                 onClick = { val from = day(state.selectedStartDateMillis)!!; onPick(DateSpan(from, day(state.selectedEndDateMillis) ?: from)) },
             ) { Text("确定") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { GlassTextButton(onClick = onDismiss) { Text("取消") } },
     ) { DateRangePicker(state, Modifier.height(500.dp), title = { Text("按故障时间筛选", Modifier.padding(start = 24.dp, top = 16.dp)) }) }
 }

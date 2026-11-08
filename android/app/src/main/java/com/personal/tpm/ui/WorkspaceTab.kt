@@ -1,5 +1,6 @@
 package com.personal.tpm.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -40,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.ImeAction
@@ -74,18 +76,21 @@ enum class WorkList(val key: String, val title: String, val page: String) {
 }
 
 /** The numbers on the workbench cards: one request per card asking for a single row; only the total is used. */
-class WorkspaceViewModel(private val session: Session) : ViewModel() {
+class WorkspaceViewModel(private val session: Session, autoStart: Boolean = true) : ViewModel() {
+    private var started = autoStart
+    fun ensureStarted() { if (!started) { started = true; reload() } }
     var counts by mutableStateOf<Map<String, Int>>(emptyMap()); private set
     var refreshing by mutableStateOf(false); private set
     var loading by mutableStateOf(true); private set
     var error by mutableStateOf<String?>(null); private set
     private var ticket = 0
 
-    init { reload() }
-    init { viewModelScope.launch { session.changed.drop(1).collect { reload() } } }
-    init { viewModelScope.launch { session.queryAccounts?.changes?.drop(1)?.collect { counts = emptyMap(); reload() } } }
+    init { if (started) reload() }
+    init { viewModelScope.launch { session.changed.drop(1).collect { if (started) reload() } } }
+    init { viewModelScope.launch { session.queryAccounts?.changes?.drop(1)?.collect { counts = emptyMap(); if (started) reload() } } }
 
     fun reload(pull: Boolean = false) {
+        started = true
         val mine = ++ticket
         refreshing = pull; loading = true; error = null
         viewModelScope.launch {
@@ -108,28 +113,35 @@ class WorkspaceViewModel(private val session: Session) : ViewModel() {
 /** 工作台: the asset ledger, ERP outbound orders and stock, and the two quick queries for a repair order (by machine number, by asset code). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WorkspaceTab(vm: WorkspaceViewModel, gridState: LazyGridState, pullState: PullToRefreshState, nested: Modifier, openList: (WorkList) -> Unit, openQuery: (FaultSearchField, String) -> Unit, openDashboard: () -> Unit, openPrecision: () -> Unit) {
+fun WorkspaceTab(vm: WorkspaceViewModel, gridState: LazyGridState, pullState: PullToRefreshState, nested: Modifier, openList: (WorkList) -> Unit, openQuery: (FaultSearchField, String) -> Unit, openDashboard: () -> Unit, openPrecision: () -> Unit, openMaintenanceStats: () -> Unit, openTextRepairQuery: () -> Unit) {
+    val layout = rememberDashboardLayout("workspace", listOf("statistics", "assets", "erp", "quick"))
     PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.reload(pull = true) }, state = pullState, indicator = {}, modifier = Modifier.fillMaxSize()) {
         PageWidth {
             LazyVerticalGrid(
                 state = gridState, columns = GridCells.Adaptive(minSize = 150.dp), modifier = nested.fillMaxSize().scrollEdges(MaterialTheme.colorScheme.background, before = { gridState.canScrollBackward }, after = { gridState.canScrollForward }),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 88.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + LocalGlassContentPadding.current.calculateTopPadding(), bottom = 88.dp + LocalGlassContentPadding.current.calculateBottomPadding()),
                 horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 vm.error?.let { message -> item(span = { GridItemSpan(maxLineSpan) }) { AnimatedLabel(message, color = MaterialTheme.colorScheme.error) } }
-                item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("看板") }
-                if (AppPreferences.management) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Card(onClick=openDashboard,modifier=Modifier.fillMaxWidth(),shape=MaterialTheme.shapes.large,colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surfaceContainerLowest)) {
-                            Row(Modifier.fillMaxWidth().padding(16.dp),horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically) {
-                                Badge(Icons.Filled.Assessment, Color(0xFFD83B70))
-                                Column(Modifier.weight(1f)) { Text("人员与工单分析",style=MaterialTheme.typography.titleMedium); Text("查看维修待处理与人员趋势",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight,contentDescription="进入",tint=MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                layout.order.forEach { section ->
+                item(key = "section-$section", span = { GridItemSpan(maxLineSpan) }) {
+                DashboardSection(layout, section, when(section) { "statistics" -> "统计页面"; "assets" -> "资产"; "erp" -> "ERP"; else -> "快速查询维修" }) {
+                when (section) {
+                "statistics" -> {
+                    Card(onClick=openDashboard,modifier=Modifier.fillMaxWidth(),shape=MaterialTheme.shapes.large,colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surfaceContainerLowest)) {
+                        Row(Modifier.fillMaxWidth().padding(16.dp),horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically) {
+                            Badge(Icons.Filled.Assessment, Color(0xFFD83B70))
+                            Column(Modifier.weight(1f)) { Text("人员工单统计",style=MaterialTheme.typography.titleMedium); Text("查看维修待处理与人员趋势",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight,contentDescription="进入",tint=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                }
-                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Card(onClick = openMaintenanceStats, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)) {
+                        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Badge(Icons.Filled.Assessment, Color(0xFF00897B))
+                            Column(Modifier.weight(1f)) { Text("保养工单统计", style = MaterialTheme.typography.titleMedium); Text("接单人待处理量与保养处理趋势", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "进入", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                     Card(onClick = openPrecision, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)) {
                         Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Badge(Icons.Filled.Straighten, Color(0xFFB8860B))
@@ -138,15 +150,47 @@ fun WorkspaceTab(vm: WorkspaceViewModel, gridState: LazyGridState, pullState: Pu
                         }
                     }
                 }
-                item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("资产") }
-                item(span = { GridItemSpan(maxLineSpan) }) { WideCard("资产台账", "全部资产", Icons.Filled.FactCheck, Color(0xFF1E88E5), vm.counts[WorkList.Assets.key]) { openList(WorkList.Assets) } }
-                item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("ERP") }
-                item { StateCard("ERP 出库", Icons.Filled.LocalShipping, Color(0xFFFB8C00), vm.counts[WorkList.Outbound.key]) { openList(WorkList.Outbound) } }
-                item { StateCard("ERP 库存", Icons.Filled.Inventory2, Color(0xFF00897B), vm.counts[WorkList.Stock.key]) { openList(WorkList.Stock) } }
-                item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("快速查询维修") }
-                item(span = { GridItemSpan(maxLineSpan) }) { QuickQueryCard("按机台号查询", Icons.Filled.SettingsSuggest, Color(0xFF8E24AA), "输入机台号") { openQuery(FaultSearchField.Machine, it) } }
-                item(span = { GridItemSpan(maxLineSpan) }) { QuickQueryCard("按资产编码查询", Icons.Filled.QrCode2, Color(0xFF26A69A), "输入编码的尾号或中间一段") { openQuery(FaultSearchField.AssetCode, it) } }
+                "assets" -> {
+                WideCard("资产台账", "全部资产", Icons.Filled.FactCheck, Color(0xFF1E88E5), vm.counts[WorkList.Assets.key]) { openList(WorkList.Assets) }
+                }
+                "erp" -> {
+                DashboardTiles(listOf(WorkList.Outbound, WorkList.Stock), { it.key }) { list ->
+                    if (list == WorkList.Outbound) StateCard("ERP 出库", Icons.Filled.LocalShipping, Color(0xFFFB8C00), vm.counts[list.key]) { openList(list) }
+                    else StateCard("ERP 库存", Icons.Filled.Inventory2, Color(0xFF00897B), vm.counts[list.key]) { openList(list) }
+                }
+                }
+                "quick" -> {
+                QuickQueryCard("按机台号查询", Icons.Filled.SettingsSuggest, Color(0xFF8E24AA), "输入机台号") { openQuery(FaultSearchField.Machine, it) }
+                QuickQueryCard("按资产编码查询", Icons.Filled.QrCode2, Color(0xFF26A69A), "输入编码的尾号或中间一段") { openQuery(FaultSearchField.AssetCode, it) }
+                TextRepairQueryCard(openTextRepairQuery)
+                }
+                }
+                }
+                }
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun TextRepairQueryCard(open: () -> Unit) {
+    val shape = MaterialTheme.shapes.large
+    GlassPanelSurface(
+        Modifier.fillMaxWidth(), shape = shape, color = MaterialTheme.colorScheme.surfaceContainerLowest,
+    ) {
+        Row(
+            Modifier.fillMaxWidth().clip(shape).clickable(onClick = open).padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Badge(Icons.Filled.Search, Color(0xFF007C84))
+            Column(Modifier.weight(1f)) {
+                Text("文本查询维修", style = MaterialTheme.typography.titleMedium)
+                Text("粘贴报备，逐台核对维修工单", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "进入",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -156,22 +200,18 @@ fun WorkspaceTab(vm: WorkspaceViewModel, gridState: LazyGridState, pullState: Pu
 private fun QuickQueryCard(title: String, icon: ImageVector, tint: Color, placeholder: String, onSearch: (String) -> Unit) {
     var text by rememberSaveable { mutableStateOf("") }
     fun go() { val typed = text.trim(); if (typed.isNotEmpty()) { text = ""; onSearch(typed) } }
-    Card(
-        Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
+    GlassPanelSurface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLowest) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Badge(icon, tint)
                 AnimatedLabel(title, style = MaterialTheme.typography.titleMedium)
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                androidx.compose.material3.TextField(colors = blockFieldColors(onCard = true), shape = MaterialTheme.shapes.medium, 
-                    value = text, onValueChange = { text = it }, singleLine = true, placeholder = { AnimatedLabel(placeholder) }, modifier = Modifier.weight(1f),
+                androidx.compose.material3.TextField(colors = searchFieldColors(onCard = true), shape = MaterialTheme.shapes.medium,
+                    value = text, onValueChange = { text = it }, singleLine = true, placeholder = { AnimatedLabel(placeholder) }, modifier = Modifier.weight(1f).glassSearchSurface(MaterialTheme.shapes.medium),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { go() }),
                 )
-                FilledIconButton(onClick = { go() }, enabled = text.isNotBlank()) { Icon(Icons.Filled.Search, contentDescription = "查询") }
+                GlassIconButton(onClick = { go() }, enabled = text.isNotBlank()) { Icon(Icons.Filled.Search, contentDescription = "查询") }
             }
         }
     }

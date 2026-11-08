@@ -8,17 +8,19 @@ import androidx.activity.compose.setContent
 import android.graphics.Color
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels
 import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
-import com.personal.tpm.license.LicenseViewModel
 import com.personal.tpm.ui.AppRoot
 import com.personal.tpm.ui.theme.AppTheme
 import com.personal.tpm.ui.theme.ThemeConfig
 import kotlin.math.roundToInt
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.asImageBitmap
 
 class MainActivity : FragmentActivity() {
+    private var launchIconBounds by androidx.compose.runtime.mutableStateOf<androidx.compose.ui.geometry.Rect?>(null)
+    private var launchIconSnapshot by androidx.compose.runtime.mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null)
+    private var launchSystemReleased by androidx.compose.runtime.mutableStateOf(Build.VERSION.SDK_INT < 31)
     @Suppress("DEPRECATION")
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -28,33 +30,6 @@ class MainActivity : FragmentActivity() {
             if(Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
         }
     }
-    private var credentialResult: kotlinx.coroutines.CancellableContinuation<com.personal.tpm.ui.BiometricGate.Outcome>? = null
-    @Suppress("DEPRECATION")
-    suspend fun confirmScreenLock(reason: String): com.personal.tpm.ui.BiometricGate.Outcome {
-        val manager = getSystemService(android.app.KeyguardManager::class.java)
-        val intent = manager.createConfirmDeviceCredentialIntent("验证身份", reason)
-            ?: return com.personal.tpm.ui.BiometricGate.Outcome.Failed("请先在系统设置中设置锁屏密码")
-        if (credentialResult?.isActive == true) return com.personal.tpm.ui.BiometricGate.Outcome.Failed("已有身份验证正在进行")
-        return kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
-            credentialResult = continuation
-            continuation.invokeOnCancellation { if (credentialResult === continuation) credentialResult = null }
-            try { startActivityForResult(intent, 7441) }
-            catch (_: Exception) {
-                credentialResult = null
-                continuation.resumeWith(Result.success(com.personal.tpm.ui.BiometricGate.Outcome.Failed("无法打开系统锁屏验证")))
-            }
-        }
-    }
-    @Deprecated("System credential compatibility callback")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 7441) {
-            val pending = credentialResult; credentialResult = null
-            if (pending?.isActive == true) pending.resumeWith(Result.success(if (resultCode == RESULT_OK) com.personal.tpm.ui.BiometricGate.Outcome.Passed else com.personal.tpm.ui.BiometricGate.Outcome.Cancelled))
-        }
-    }
-    private val license: LicenseViewModel by viewModels()
-
     /**
      * The interface size (the owner's step times the fit to the screen width) is applied here, to the density of the Activity's own resources,
      * not by a Compose override: sheets, dialogs and pickers are windows of their own, and all of them take their size from the Activity, so
@@ -86,6 +61,39 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= 31) splashScreen.setOnExitAnimationListener { splash ->
+            splash.iconView?.let { icon ->
+                val location = IntArray(2)
+                icon.getLocationInWindow(location)
+                if (icon.width > 0 && icon.height > 0) {
+                    runCatching {
+                        val bitmap = android.graphics.Bitmap.createBitmap(icon.width, icon.height, android.graphics.Bitmap.Config.ARGB_8888)
+                        icon.draw(android.graphics.Canvas(bitmap))
+                        bitmap.asImageBitmap()
+                    }.getOrNull()?.let { snapshot ->
+                        launchIconSnapshot = snapshot
+                        launchIconBounds = androidx.compose.ui.geometry.Rect(location[0].toFloat(), location[1].toFloat(),
+                            (location[0] + icon.width).toFloat(), (location[1] + icon.height).toFloat())
+                    }
+                }
+            }
+            launchSystemReleased = true
+            // Keep the system frame until Compose has drawn the matching snapshot once.
+            val observer = window.decorView.viewTreeObserver
+            val listener = object : android.view.ViewTreeObserver.OnDrawListener {
+                private var scheduled = false
+                override fun onDraw() {
+                    if (scheduled) return
+                    scheduled = true
+                    window.decorView.post {
+                        if (observer.isAlive) observer.removeOnDrawListener(this)
+                        splash.remove()
+                    }
+                }
+            }
+            observer.addOnDrawListener(listener)
+            window.decorView.invalidate()
+        }
         // Both system bars are transparent: the app draws behind the status bar and behind the navigation bar / gesture line, and the
         // navigation buttons get no grey scrim of their own (on phones that still draw one, the contrast enforcement is switched off).
         enableEdgeToEdge(
@@ -96,10 +104,11 @@ class MainActivity : FragmentActivity() {
         applyRefreshRate()
         val session = (application as TpmApp).session
         setContent {
-            // Back in the foreground after a while: the month may have turned.
-            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { license.recheck() }
             AppTheme {
-                AppRoot(license, session, (application as TpmApp).vault, (application as TpmApp).pickerPrefs, (application as TpmApp).drafts)
+                com.personal.tpm.ui.CharacterLaunch(systemReleased = launchSystemReleased, systemIconBounds = launchIconBounds,
+                    systemIconSnapshot = launchIconSnapshot, onFinished = { launchIconSnapshot = null; launchIconBounds = null }) { finished ->
+                    AppRoot(session, (application as TpmApp).vault, (application as TpmApp).pickerPrefs, (application as TpmApp).drafts, launchFinished = finished)
+                }
             }
         }
     }

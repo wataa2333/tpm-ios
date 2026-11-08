@@ -21,18 +21,19 @@ import kotlin.coroutines.resume
 // before anything is written. A port of BatchSelection.swift / BatchProcessing.swift.
 
 enum class BatchAction(val title: String) {
-    Accept("批量受理"), Claim("批量接单"), SignIn("批量签到"), Complete("批量完成"), Approve("批量审批");
+    Accept("批量受理"), Claim("批量接单"), SignIn("批量签到"), Complete("批量完成"), Approve("批量审批"), Requisition("批量新建领料");
 
     /** Accepting and completing need the same answers for every order, filled in once. */
-    val needsPreset: Boolean get() = this == Accept || this == Complete
+    val needsPreset: Boolean get() = this == Accept || this == Complete || this == Requisition
     /** The other way out of the step: a sent-back order ("退单") or a rejected one ("驳回"). */
     val rejectWord: String get() = if (this == Claim || this == SignIn || this == Complete) "退单" else "驳回"
     val rejectTitle: String get() = "批量$rejectWord"
 
     companion object {
         /** The one batch action that fits orders of a status, or null when that status has none. */
-        fun forGroup(group: String): BatchAction? = when (group) {
+        fun forGroup(group: String): BatchAction? = when (if (group.startsWith("MAINTAIN:") || group.startsWith("PRECISE:")) group.substringAfter(":") else group) {
             "REPORTED" -> Accept; "RECEIVED" -> Claim; "SIGNED" -> SignIn; "REPAIRED" -> Complete
+            "MAINTAINED", "PRECISED" -> Complete
             "VERIFIED", "RESOLVED" -> Approve
             "ERP:PENDING", "ERP:APPROVED", "ERP:EXECUTING", "ERP:CONFIRM" -> Approve
             else -> null
@@ -45,10 +46,17 @@ enum class BatchOperation { Proceed, Reject }
 
 /** The status an order is in, as the batch tells statuses apart: the fault state, or "ERP:" and the approval state. */
 fun batchGroup(kind: OrderKind, faultState: String, approvalState: String): String = if (kind == OrderKind.Fault) faultState else "ERP:$approvalState"
-fun batchGroupName(group: String): String = if (group.startsWith("ERP:")) "ERP " + approvalStateName(group.removePrefix("ERP:")) else faultStateName(group)
+fun batchGroupName(group: String): String = if (group.startsWith("MAINTAIN:")) "保养 · " + maintenanceStateName(group.substringAfter(":"))
+    else if (group.startsWith("PRECISE:")) "精度 · " + when(group.substringAfter(":")) { "REPORTED" -> "待受理"; "RECEIVED" -> "待接单"; "SIGNED" -> "待签到"; "PRECISED" -> "待完成"; "VERIFIED" -> "待确认"; else -> group.substringAfter(":") }
+    else if (group.startsWith("ERP:")) "ERP " + approvalStateName(group.removePrefix("ERP:")) else faultStateName(group)
 
 /** One order that can be selected. */
-data class BatchItem(val id: String, val kind: OrderKind, val name: String, val reference: String, val group: String)
+data class BatchItem(val id: String, val kind: OrderKind, val name: String, val reference: String, val group: String, val poolPrefix: String = "") {
+    val key get() = "$poolPrefix:${kind.name}:$id"
+}
+
+fun supportsPoolRequisition(item: BatchItem): Boolean = item.kind == OrderKind.Fault && item.poolPrefix == "maintain" &&
+    item.id.isNotBlank() && item.group in setOf("MAINTAIN:SIGNED", "MAINTAIN:MAINTAINED")
 
 fun batchItem(kind: OrderKind, item: Jv) = BatchItem(
     id = item[kind.idKey].text, kind = kind, name = if (kind == OrderKind.Fault) item["faultName"].text else erpCardTitle(item),
@@ -58,6 +66,13 @@ fun batchItem(kind: OrderKind, item: Jv) = BatchItem(
 
 /** A todo task carries its order in `data`; the order's id is the task's business key. */
 fun batchItem(todo: Jv): BatchItem? {
+    val pool = poolPrefixForTask(todo)
+    if (pool.isNotEmpty()) {
+        if (todo["suspended"].bool || todo["businessKey"].text.isEmpty()) return null
+        val data = todo["data"]
+        return BatchItem(todo["businessKey"].text, OrderKind.Fault, data[pool + "Name"].text.ifEmpty { todo["processInstanceName"].text },
+            data["asset"]["assetCode"].text, pool.uppercase() + ":" + data[pool + "State"].text.ifEmpty { todo["category"].text }, pool)
+    }
     val kind = todoKind(todo) ?: return null
     if (todo["suspended"].bool || todo["businessKey"].text.isEmpty()) return null
     val data = todo["data"]
@@ -72,7 +87,7 @@ const val BATCH_LIMIT = 100
 
 /** The end of today, the date a repair should be done by when nobody says otherwise. */
 fun defaultEstimatedTime(now: Date = Date()): String =
-    serverDate(Calendar.getInstance().apply { time = now; set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59) }.time)
+    serverDate(Calendar.getInstance(businessTimeZone()).apply { time = now; set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59) }.time)
 
 val Jv.isFilled: Boolean get() = isObject && keys.isNotEmpty()
 
@@ -95,6 +110,7 @@ data class BatchPreset(
     val assignUser: Jv = Jv.NULL,
     val content: String = "",
     val durationMinutes: Int? = null,
+    val repairUsers: List<Jv> = emptyList(),
     val approverNodes: List<Jv> = emptyList(),
     val approvers: Map<String, List<String>> = emptyMap(),
     /** The reason written on every order that is sent back or rejected. */
@@ -109,12 +125,15 @@ data class BatchPreset(
     val erpDivision: Jv = Jv.NULL,
     val erpNodes: List<Jv> = emptyList(),
     val erpApprovers: Map<String, List<String>> = emptyMap(),
+    val poolTemplate: String? = null,
 ) {
     /** Assigning a repairer ends the accept step in "指派", which names no approver. */
     fun needsApprovers(action: BatchAction) = approverNodes.isNotEmpty() && !(action == BatchAction.Accept && assignUser.isFilled)
 
     fun isComplete(action: BatchAction, operation: BatchOperation = BatchOperation.Proceed): Boolean {
         if (operation == BatchOperation.Reject) return comment.isNotBlank()
+        if (action == BatchAction.Requisition) return materials.isNotEmpty() && validErpMaterials()
+        if (poolTemplate != null) return poolExecutionError(Jv(JSONObject(poolTemplate)), if (JSONObject(poolTemplate).has("maintainRecords")) "maintain" else "precise") == null && missingAssigneeMessage(approverNodes, approvers) == null
         when (action) {
             BatchAction.Accept -> {
                 if (estimated.isBlank()) return false
@@ -136,6 +155,10 @@ data class BatchPreset(
         if (needsApprovers(action) && missingAssigneeMessage(approverNodes, approvers) != null) return false
         return true
     }
+
+    private fun validErpMaterials() = materials.all { it.quantity.isFinite() && it.quantity >= 1 } &&
+        erpProject.isFilled && erpRemark.isNotBlank() && erpRecipient.isFilled && erpDept.isFilled && erpDivision.isFilled &&
+        missingAssigneeMessage(erpNodes, erpApprovers) == null
 }
 
 // ---- problems the person decides during a run ----
@@ -164,6 +187,7 @@ object BatchProcessor {
         process(item, action, operation, preset, LiveBatchApi(session, prefs), ask)
 
     internal suspend fun process(item: BatchItem, action: BatchAction, operation: BatchOperation, preset: BatchPreset, session: BatchApi, ask: BatchAsk) {
+        if (item.poolPrefix.isNotEmpty()) { PoolProcessingEngine(session).process(item, action, operation, preset, ask); return }
         if (BatchAction.forGroup(item.group) != action || !preset.isComplete(action, operation)) throw BatchError("批量处理方案不完整或与单据状态不匹配")
         val detail = wrap("读取单据") { session.request(item.kind.detailPath, mapOf(item.kind.idKey to item.id)) }
         ensureStillAtStep(detail, item)
@@ -205,6 +229,15 @@ object BatchProcessor {
         val data = JSONObject(repair.raw.toString())
         data.put("faultType", preset.faultType.raw)
         data.put("content", preset.content)
+        if (preset.repairUsers.isNotEmpty()) {
+            val original = repair["repairUsers"].array
+            val names = original.mapTo(mutableSetOf()) { it["userName"].text.lowercase() }
+            val additions = preset.repairUsers.filter { user ->
+                val name = user["userName"].text.lowercase()
+                name.isNotBlank() && names.add(name)
+            }
+            data.put("repairUsers", JSONArray((original + additions).map { it.raw }))
+        }
         if (!data.has("spend") || data.isNull("spend")) data.put("spend", 0)
         val now = Date()
         var start = preset.durationMinutes?.let { Date(now.time - it * 60_000L) } ?: parsedDate(if (repair["signTime"].isNull) repair["createTime"] else repair["signTime"])
@@ -241,7 +274,7 @@ object BatchProcessor {
     }
 
     /** Links the preset outbound lines to this order's repair, each in the preset quantity, after checking what is left of each right now. Null means "complete without material". */
-    private suspend fun linkOutbound(item: BatchItem, preset: BatchPreset, existing: List<Jv>, session: BatchApi, ask: BatchAsk): List<Jv>? {
+    internal suspend fun linkOutbound(item: BatchItem, preset: BatchPreset, existing: List<Jv>, session: BatchApi, ask: BatchAsk): List<Jv>? {
         val rows = mutableListOf<Jv>()
         val problems = mutableListOf<String>()
         for (want in preset.outboundLines) {
@@ -276,8 +309,14 @@ object BatchProcessor {
 
     private fun describe(material: Jv) = listOf(material["materialDesc"].text, material["materialCode"].text.takeIf { it.isNotEmpty() }?.let { "料号 $it" }.orEmpty()).filter { it.isNotEmpty() }.joinToString(" · ")
 
+    internal suspend fun createPoolRequisition(item: BatchItem, detail: Jv, preset: BatchPreset, session: BatchApi, ask: BatchAsk) {
+        check(supportsPoolRequisition(item) && preset.isComplete(BatchAction.Requisition)) { "保养批量领料方案不完整或当前状态不支持" }
+        check(detail["sn"].text.isNotBlank()) { "未取得保养单号，本单未创建领料" }
+        takeMaterials(item, detail, preset, session, ask, linkLines = false) ?: throw BatchSkipped("本单未创建领料单")
+    }
+
     /** Makes this order's own ERP outbound order for the preset material and returns the lines to link to the repair. Null means "complete without material". */
-    private suspend fun takeMaterials(item: BatchItem, detail: Jv, preset: BatchPreset, session: BatchApi, ask: BatchAsk): Made? {
+    private suspend fun takeMaterials(item: BatchItem, detail: Jv, preset: BatchPreset, session: BatchApi, ask: BatchAsk, linkLines: Boolean = true): Made? {
         suspend fun decide(title: String, message: String): Made? = when (ask(BatchProblem(item, title, message))) {
             BatchChoice.WithoutMaterials, BatchChoice.SkipShortages -> null
             BatchChoice.Stop -> throw BatchStopped()
@@ -326,10 +365,17 @@ object BatchProcessor {
         val payload = FormRules.payload(OrderKind.Erp, data, preset.erpNodes, preset.erpApprovers, true).also { it.remove("project") }
         val result = try { session.request("erpOutbound/addErpOutbound", body = payload) }
         catch (e: CancellationException) { throw e }
-        catch (e: Exception) { return decide("创建 ERP 出库单失败", stageFailure("创建 ERP 出库单", e)) }
+        catch (e: Exception) {
+            if (!linkLines) throw BatchError(stageFailure("创建 ERP 出库单", e) + "。创建结果未确认，请按保养单号在 ERP 出库核对，勿直接重复领料。")
+            return decide("创建 ERP 出库单失败", stageFailure("创建 ERP 出库单", e))
+        }
 
         // 3. Its lines, linked to the repair with the preset quantity.
         val outboundId = result["outboundId"].text
+        if (!linkLines) {
+            if (outboundId.isBlank()) throw BatchError("服务器未返回出库单编号，创建结果未确认；请按保养单号核对，勿直接重复领料。")
+            return Made(emptyList(), result["outNumber"].text.ifEmpty { outboundId })
+        }
         if (outboundId.isEmpty()) return decide("创建 ERP 出库单失败", "服务器没有返回出库单编号，请到 ERP 出库里核对是否已创建。")
         val created = try { session.request("erpOutbound/getErpMaterialOutboundsByOutboundId", mapOf("outboundId" to outboundId)) }
         catch (e: CancellationException) { throw e }
@@ -385,6 +431,7 @@ object BatchProcessor {
 
     /** For the preset sheet: the approver nodes the first selected order leads to, with what is already ticked. Every order of one status leads to the same next node. */
     suspend fun approverSetup(item: BatchItem, session: Session, prefs: PickerPrefs): Pair<List<Jv>, Map<String, List<String>>> {
+        if (item.poolPrefix.isNotEmpty()) return PoolProcessingEngine(LiveBatchApi(session, prefs)).prepare(item).let { it.nodes to it.selections }
         val detail = wrap("读取单据") { session.request(item.kind.detailPath, mapOf(item.kind.idKey to item.id)) }
         ensureStillAtStep(detail, item)
         val task = detail["taskInfo"]

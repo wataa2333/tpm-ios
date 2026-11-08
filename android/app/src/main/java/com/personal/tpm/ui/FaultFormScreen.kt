@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -33,14 +32,14 @@ import org.json.JSONObject
  * A draft belongs to one order: a new report is offered the last new-report draft, an order only its own.
  */
 @Composable
-fun FaultFormScreen(existingId: String?, startDraftId: String?, onClose: () -> Unit, onSaved: () -> Unit, initialAsset: com.personal.tpm.data.Jv? = null) {
+fun FaultFormScreen(existingId: String?, startDraftId: String?, onClose: () -> Unit, onSaved: () -> Unit, initialAsset: com.personal.tpm.data.Jv? = null, template: FaultTemplate? = null) {
     val session = LocalSession.current
     val prefs = LocalPickerPrefs.current
     val store = LocalDrafts.current
     val scope = rememberCoroutineScope()
     val form = remember { FormState(OrderKind.Fault) }
     val snackbar = remember { SnackbarHostState() }
-    val scopeKey = session.draftScope
+    val scopeKey = remember { session.draftScope }
     var request by remember { mutableStateOf<PickRequest?>(null) }
     var photoBusy by remember { mutableStateOf(false) }
     var showDrafts by remember { mutableStateOf(false) }
@@ -51,22 +50,26 @@ fun FaultFormScreen(existingId: String?, startDraftId: String?, onClose: () -> U
     var draftCount by remember { mutableStateOf(0) }
     val orderTarget = if (existingId == null) DraftTarget.NewReport else DraftTarget.Order(existingId)
     val draftsAllowed = existingId == null || existingId.isNotBlank()
-    val worthKeeping = draftsAllowed && (if (existingId == null) FormRules.faultHasContent(form.jv) else (form.data.toString() != loadedData || form.selections != loadedSelections))
+    val worthKeeping = draftsAllowed && form.ready && (if (existingId == null && template == null) FormRules.faultHasContent(form.jv) else (form.data.toString() != loadedData || form.selections != loadedSelections))
 
     fun applyDraft(draft: FormDraft, automatic: Boolean) {
         form.applyDraft(draft)
         draftId = draft.id
         scope.launch { snackbar.showSnackbar((if (automatic) "已加载上次保存的草稿（" else "已加载草稿（") + draft.title + "）") }
     }
+    val useTemplate = template != null && template.id != FaultTemplate.blank.id
+    val seededAsset = initialAsset ?: template?.takeIf { FaultTemplateField.Asset in it.checked }
+        ?.value(FaultTemplateField.Asset)?.takeUnless { it.isNull }
+
     suspend fun initialize() {
         form.load(session, existingId)
-        if (existingId == null && form.ready) form.applyDefaults(session, prefs)
+        if (existingId == null && form.ready && !useTemplate) form.applyDefaults(session, prefs)
         loadedData = form.data.toString(); loadedSelections = form.selections
-        if(existingId==null && initialAsset!=null && form.ready) {
+        if (existingId == null && seededAsset != null && form.ready) {
             form.loading=true
             try {
-                val id=initialAsset["assetId"].text
-                val code=initialAsset["assetCode"].text
+                val id=seededAsset["assetId"].text
+                val code=seededAsset["assetCode"].text
                 require(id.isNotBlank() && code.isNotBlank()) { "资产信息不完整，请手动选择报修资产" }
                 val result=session.page("asset/pageAsset",filters=listOf(com.personal.tpm.data.filter("assetId",id)),limit=2)
                 val asset=result["content"].array.singleOrNull { it["assetId"].text==id && it["assetCode"].text==code }
@@ -76,7 +79,20 @@ fun FaultFormScreen(existingId: String?, startDraftId: String?, onClose: () -> U
             catch(e: Exception) { failure=e.message ?: "资产带入失败，请手动选择报修资产" }
             finally { form.loading=false }
         }
-        if (draftsAllowed && form.ready && initialAsset==null) {
+        if (existingId == null && template != null && form.ready) {
+            if (useTemplate) {
+                for (field in FaultTemplateField.entries) {
+                    if (field == FaultTemplateField.Asset) {
+                        if (seededAsset == null) form.set(field.key, null)
+                    } else {
+                        form.set(field.key, template.value(field).raw.takeIf { field in template.checked })
+                    }
+                }
+            }
+            loadedData = form.data.toString()
+            loadedSelections = form.selections
+        }
+        if (draftsAllowed && form.ready && seededAsset == null && template == null) {
             val all = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { store.drafts(scopeKey) }
             val chosen = startDraftId?.let { id -> all.firstOrNull { it.id == id && orderTarget.matches(it) } }
             if (chosen != null) applyDraft(chosen, false)
@@ -84,7 +100,9 @@ fun FaultFormScreen(existingId: String?, startDraftId: String?, onClose: () -> U
         }
         draftCount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { store.drafts(scopeKey, orderTarget).size }
     }
-    LaunchedEffect(existingId,scopeKey,initialAsset?.toString()) { initialize() }
+    LaunchedEffect(existingId, session.accountKey, initialAsset?.toString()) {
+        if (form.ready) form.refreshActor(session, existingId) else initialize()
+    }
 
     fun keepDraft() {
         try {
@@ -115,13 +133,13 @@ fun FaultFormScreen(existingId: String?, startDraftId: String?, onClose: () -> U
     FormPage(
         title = if (existingId == null) "故障报修" else "编辑报修", busy = form.loading || form.saving || photoBusy, onClose = { if (!form.saving && !photoBusy) close() }, snackbar = snackbar, backEnabled = !form.saving && !photoBusy, interceptBack = worthKeeping, onBackGesture = { close() },
         actions = {
-            if (draftsAllowed) IconButton(onClick = { showDrafts = true }) { Icon(Icons.Filled.Inbox, contentDescription = if (draftCount > 0) "草稿箱（$draftCount）" else "草稿箱") }
+            if (draftsAllowed) GlassIconButton(onClick = { showDrafts = true }) { Icon(Icons.Filled.Inbox, contentDescription = if (draftCount > 0) "草稿箱（$draftCount）" else "草稿箱") }
         },
         bottomBar = { FormActionBar(busy = form.saving || form.loading, enabled = form.ready && !form.loading && !photoBusy, onSave = { if (draftsAllowed) keepDraft() else submit(false) }, onSubmit = { submit(true) }) },
     ) {
         if (form.error != null && !form.ready) {
             AnimatedLabel(form.error ?: "", color = MaterialTheme.colorScheme.error)
-            androidx.compose.material3.TextButton(onClick = { scope.launch { initialize() } }) { Text("重试") }
+            GlassTextButton(onClick = { scope.launch { initialize() } }) { Text("重试") }
             return@FormPage
         }
         FormTitle("故障报修")
