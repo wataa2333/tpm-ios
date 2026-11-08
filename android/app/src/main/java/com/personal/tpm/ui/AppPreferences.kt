@@ -8,8 +8,6 @@ import androidx.compose.runtime.setValue
 object AppPreferences {
     private var prefs: android.content.SharedPreferences? = null
     var liquidGlass by mutableStateOf(false); private set
-    var showGlassIntroduction by mutableStateOf(false); private set
-    fun dismissGlassIntroduction() { showGlassIntroduction = false; prefs?.edit()?.putInt("liquidGlassIntroductionVersion", com.personal.tpm.BuildConfig.VERSION_CODE)?.apply() }
     fun updateLiquidGlass(on: Boolean) { liquidGlass = on; prefs?.edit()?.putBoolean("liquidGlass", on)?.apply() }
     var glassEffects by mutableStateOf(GlassEffects()); private set
     fun updateGlassEffects(value: GlassEffects) {
@@ -30,7 +28,6 @@ object AppPreferences {
         prefs = context.getSharedPreferences("ui_options", Context.MODE_PRIVATE)
         prefs!!.edit().remove("repairExcelMode").apply()
         liquidGlass = prefs!!.getBoolean("liquidGlass", android.os.Build.VERSION.SDK_INT >= 31)
-        showGlassIntroduction = prefs!!.getInt("liquidGlassIntroductionVersion", 0) < com.personal.tpm.BuildConfig.VERSION_CODE
         glassEffects = GlassEffects(
             blur = GlassBlur.fromKey(prefs!!.getString("glassBlur", null)),
             highlight = prefs!!.getBoolean("glassHighlight", true),

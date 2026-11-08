@@ -32,7 +32,7 @@ private enum class Screen { Login, Main }
 /** Sign in, then open the app. Each change is a plain cross-fade. */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.PickerPrefs, drafts: com.personal.tpm.data.DraftStore, launchFinished: Boolean = true) {
+fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.PickerPrefs, drafts: com.personal.tpm.data.DraftStore) {
     TransparentSystemBars()
     val auth by session.auth.collectAsState()
     val screen = when {
@@ -71,7 +71,6 @@ fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.
             }
         }
         }
-        if (launchFinished) GlassIntroduction()
     }
 }
 

@@ -27,6 +27,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -301,6 +302,8 @@ private fun ReplyLines(
 private fun MarkedReport(lines: List<String>, machineCodes: List<String>, onCode: (Int, String) -> Unit) {
     var editing by rememberSaveable { mutableIntStateOf(-1) }
     var machine by rememberSaveable { mutableStateOf("") }
+    val colors = MaterialTheme.colorScheme
+    val markedColor = colors.primary.copy(alpha = 0.23f).compositeOver(colors.surfaceContainerLowest)
     Text("有底色的行会查询。点任意行可补填、修改或取消机台号。", style = MaterialTheme.typography.bodySmall)
     GroupCard {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -312,7 +315,8 @@ private fun MarkedReport(lines: List<String>, machineCodes: List<String>, onCode
                     Surface(
                         onClick = { editing = index; machine = code },
                         shape = MaterialTheme.shapes.medium,
-                        color = if (code.isEmpty()) MaterialTheme.colorScheme.surfaceContainerLowest else MaterialTheme.colorScheme.primaryContainer,
+                        color = if (code.isEmpty()) colors.surfaceContainerLowest else markedColor,
+                        contentColor = colors.onSurface,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {

@@ -107,7 +107,7 @@ class MainActivity : FragmentActivity() {
             AppTheme {
                 com.personal.tpm.ui.CharacterLaunch(systemReleased = launchSystemReleased, systemIconBounds = launchIconBounds,
                     systemIconSnapshot = launchIconSnapshot, onFinished = { launchIconSnapshot = null; launchIconBounds = null }) { finished ->
-                    AppRoot(session, (application as TpmApp).vault, (application as TpmApp).pickerPrefs, (application as TpmApp).drafts, launchFinished = finished)
+                    AppRoot(session, (application as TpmApp).vault, (application as TpmApp).pickerPrefs, (application as TpmApp).drafts)
                 }
             }
         }
