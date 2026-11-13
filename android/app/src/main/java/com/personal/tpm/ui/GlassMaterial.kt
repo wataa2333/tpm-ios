@@ -91,6 +91,7 @@ fun Modifier.glassSurface(
     illumination: (DrawScope.() -> Unit)? = null,
     highlightAngle: () -> Float = { 45f },
     quiet: Boolean = false,
+    tintStrength: Float? = null,
 ): Modifier {
     val rendering = currentGlassRendering()
     val effects = AppPreferences.glassEffects
@@ -103,7 +104,7 @@ fun Modifier.glassSurface(
     if (rendering == GlassRendering.Solid) return graphicsLayer(layerBlock ?: {}).background(surfaceTint, shape)
     if (rendering == GlassRendering.Translucent) return graphicsLayer(layerBlock ?: {}).background(surfaceTint.copy(alpha = .90f * surfaceTint.alpha), shape)
     val rim = MaterialTheme.colorScheme.onSurface.copy(alpha = .14f)
-    val alpha = (if (prominent) .32f else .28f) * surfaceTint.alpha
+    val alpha = (tintStrength ?: if (prominent) .32f else .28f) * surfaceTint.alpha
     return drawBackdrop(
         backdrop = material, shape = { shape },
         effects = {
@@ -134,18 +135,22 @@ fun GlassActionButton(
     shape: Shape = ButtonDefaults.shape, colors: ButtonColors = ButtonDefaults.buttonColors(),
     elevation: ButtonElevation? = ButtonDefaults.buttonElevation(), border: BorderStroke? = null,
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding, interactionSource: MutableInteractionSource? = null,
+    strongAccent: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
     val feedback = rememberGlassFeedback(source, AppPreferences.liquidGlass && enabled)
     val glass = AppPreferences.liquidGlass
     val fill = if (enabled) colors.containerColor else colors.disabledContainerColor
+    val strength = if (strongAccent && enabled) .42f else null
     val ink = glassContentColor(if (enabled) colors.contentColor else colors.disabledContentColor,
-        glassTintColor(fill, MaterialTheme.colorScheme.surface), MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.onSurface)
+        glassTintColor(fill, MaterialTheme.colorScheme.surface), MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.onSurface,
+        tintStrength = strength ?: .32f)
     Button(onClick = onClick,
         modifier = if (glass) modifier.then(feedback.input)
             .glassSurface(shape = shape as? RoundedCornerShape ?: RoundedCornerShape(28.dp), tint = fill, prominent = true,
-                layerBlock = feedback.layer, illumination = feedback.illumination, highlightAngle = feedback.highlightAngle) else modifier,
+                layerBlock = feedback.layer, illumination = feedback.illumination, highlightAngle = feedback.highlightAngle,
+                tintStrength = strength) else modifier,
         enabled = enabled, shape = shape,
         colors = if (glass) colors.copy(containerColor = Color.Transparent, disabledContainerColor = Color.Transparent,
             contentColor = ink, disabledContentColor = ink) else colors,

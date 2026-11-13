@@ -1,12 +1,16 @@
 package com.personal.tpm.ui
 
 import android.app.DownloadManager
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.provider.Settings
+import android.view.View
 import android.webkit.CookieManager
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -24,7 +28,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -78,17 +82,20 @@ internal fun OnlineApkDownload(update: OnlineApk, onClose: () -> Unit) {
     var progress by remember(update) { mutableStateOf<Float?>(null) }
     var ready by remember(update) { mutableStateOf<Uri?>(null) }
     var error by remember(update) { mutableStateOf<String?>(null) }
+    var browserError by remember(update) { mutableStateOf<String?>(null) }
     var downloadPage by remember(update) { mutableStateOf<WebView?>(null) }
+    var automaticAttemptEnded by remember(update) { mutableStateOf(false) }
+    val pageHeight = (LocalConfiguration.current.screenHeightDp * 0.45f).coerceIn(150f, 320f).dp
 
     LaunchedEffect(downloadPage, transfer) {
         val page = downloadPage ?: return@LaunchedEffect
         if (transfer != null) return@LaunchedEffect
-        repeat(40) {
+        repeat(16) {
             delay(500)
-            if (transfer != null || error != null) return@LaunchedEffect
+            if (downloadPage !== page || transfer != null || error != null) return@LaunchedEffect
             page.evaluateJavascript(ClickLanzouDownload, null)
         }
-        if (transfer == null) error = "蓝奏云暂时无法自动开始下载，请稍后重试。"
+        automaticAttemptEnded = true
     }
 
     fun install(uri: Uri) {
@@ -141,7 +148,7 @@ internal fun OnlineApkDownload(update: OnlineApk, onClose: () -> Unit) {
             }
             if (result == null) {
                 downloads.remove(current.id)
-                error = "下载失败，或安装包与更新版本不匹配。请重新检查更新。"
+                error = "应用内下载失败，或安装包版本不匹配。可用浏览器重新下载。"
                 break
             }
             progress = result.first
@@ -159,12 +166,27 @@ internal fun OnlineApkDownload(update: OnlineApk, onClose: () -> Unit) {
         if (ready == null) transfer?.let { downloads.remove(it.id) }
         onClose()
     }
+
+    fun openInBrowser() {
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(update.link)).addCategory(Intent.CATEGORY_BROWSABLE))
+        } catch (_: ActivityNotFoundException) {
+            browserError = "系统没有可用的浏览器。"
+            return
+        } catch (_: SecurityException) {
+            browserError = "系统无法打开浏览器下载页。"
+            return
+        }
+        close()
+    }
+
     GlassAlertDialog(
         onDismissRequest = ::close,
         title = { Text("更新 " + update.version) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(update.name)
+                browserError?.let { Text(it) }
                 when {
                     error != null -> Text(error.orEmpty())
                     ready != null -> Text("下载完成，可以覆盖安装。")
@@ -175,19 +197,34 @@ internal fun OnlineApkDownload(update: OnlineApk, onClose: () -> Unit) {
                         else LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
                     }
                     else -> {
-                        Text("正在准备下载 APK…")
-                        LinearProgressIndicator(Modifier.fillMaxWidth())
-                        AndroidView(
-                            modifier = Modifier.fillMaxWidth().height(1.dp).alpha(0f),
+                        Text(if (automaticAttemptEnded) "可点击网页上的下载按钮，或用浏览器下载。" else "正在尝试开始下载…")
+                        if (!automaticAttemptEnded) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        AndroidView<View>(
+                            modifier = Modifier.fillMaxWidth().height(pageHeight),
                             factory = { webContext ->
-                                WebView(webContext).apply {
+                                val webView = try {
+                                    WebView(webContext)
+                                } catch (_: RuntimeException) {
+                                    error = "应用内下载页无法打开，请用浏览器下载。"
+                                    null
+                                }
+                                webView?.apply {
                                     settings.javaScriptEnabled = true
                                     settings.domStorageEnabled = true
                                     settings.allowFileAccess = false
                                     settings.allowContentAccess = false
+                                    settings.useWideViewPort = true
                                     webViewClient = object : WebViewClient() {
                                         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                                             return request.url.scheme != "https"
+                                        }
+
+                                        override fun onReceivedError(view: WebView, request: WebResourceRequest, problem: WebResourceError) {
+                                            if (request.isForMainFrame && transfer == null) error = "下载页加载失败，请用浏览器下载。"
+                                        }
+
+                                        override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
+                                            if (request.isForMainFrame && transfer == null) error = "下载页返回 HTTP ${response.statusCode}，请用浏览器下载。"
                                         }
                                     }
                                     setDownloadListener { url, agent, _, _, _ ->
@@ -202,24 +239,26 @@ internal fun OnlineApkDownload(update: OnlineApk, onClose: () -> Unit) {
                                                     .setTitle(update.name)
                                                     .setMimeType(ApkMime)
                                                     .setDestinationUri(Uri.fromFile(file))
-                                                    .addRequestHeader("User-Agent", agent)
+                                                    .addRequestHeader("User-Agent", agent.orEmpty().ifBlank { settings.userAgentString })
                                                     .addRequestHeader("Referer", this.url ?: update.link)
                                                 CookieManager.getInstance().getCookie(url)?.let {
                                                     request.addRequestHeader("Cookie", it)
                                                 }
                                                 transfer = ApkTransfer(downloads.enqueue(request), file)
                                             } catch (_: Exception) {
-                                                error = "无法开始下载，请重新检查更新。"
+                                                error = "应用内下载无法开始，请用浏览器下载。"
                                             }
                                         }
                                     }
                                     downloadPage = this
                                     loadUrl(update.link)
-                                }
+                                } ?: View(webContext)
                             },
-                            onRelease = {
-                                if (downloadPage === it) downloadPage = null
-                                it.destroy()
+                            onRelease = { view ->
+                                if (view is WebView) {
+                                    if (downloadPage === view) downloadPage = null
+                                    view.destroy()
+                                }
                             },
                         )
                     }
@@ -227,8 +266,11 @@ internal fun OnlineApkDownload(update: OnlineApk, onClose: () -> Unit) {
             }
         },
         confirmButton = {
-            ready?.let { uri ->
-                GlassTextButton(onClick = { requestInstall(uri) }) { Text("安装") }
+            val uri = ready
+            when {
+                uri != null -> GlassTextButton(onClick = { requestInstall(uri) }) { Text("安装") }
+                transfer == null || error != null -> GlassTextButton(onClick = ::openInBrowser) { Text("用浏览器下载") }
+                else -> Unit
             }
         },
         dismissButton = {

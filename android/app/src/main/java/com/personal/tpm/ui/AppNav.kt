@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
@@ -23,25 +24,30 @@ import androidx.navigation.navArgument
 import com.personal.tpm.data.FaultSearchField
 import com.personal.tpm.data.OrderKind
 import com.personal.tpm.data.faultStateName
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 
 private const val TABS = "tabs"
-private const val LIST = "list/{state}?q={q}&f={f}"
+private const val LIST = "list/{state}?q={q}&f={f}&assetCode={assetCode}"
 private const val FAULT = "fault/{id}?independent={independent}"
 private const val ERP = "erp/{id}?independent={independent}"
 private const val FLOW = "flow/{id}"
 private const val POOL = "pool/{kind}?state={state}"
 private const val PAGED = "paged/{type}"
 private const val TASK = "task/{kind}/{id}?ret={ret}"
-private const val FAULT_FORM = "form/fault?id={id}&draft={draft}&template={template}&asset={asset}"
+private const val FAULT_FORM = "form/fault?id={id}&draft={draft}&template={template}&asset={asset}&batch={batch}&codes={codes}"
 private const val ASSET_FAULT_TEMPLATES = "report-templates?asset={asset}"
+private const val FAULT_TEMPLATE_EDITOR = "report-template-editor?id={id}"
 private const val ERP_FORM = "form/erp?id={id}"
 private const val REPAIR = "repair/{id}"
 private const val DRAFTS = "drafts"
+private const val COMPLETED_ORDERS = "completed-orders"
 private const val DEV = "dev"
 
-private fun newFaultRoute(id: String = "", draft: String = "", template: String = "", asset: String = "") =
+private fun newFaultRoute(id: String = "", draft: String = "", template: String = "", asset: String = "", batch: Boolean = false, codes: List<String> = emptyList()) =
     "form/fault?id=" + Uri.encode(id) + "&draft=" + Uri.encode(draft) +
-        "&template=" + Uri.encode(template) + "&asset=" + Uri.encode(asset)
+        "&template=" + Uri.encode(template) + "&asset=" + Uri.encode(asset) + "&batch=" + batch +
+        "&codes=" + if (codes.isEmpty()) "" else Uri.encode(org.json.JSONArray(codes).toString())
 
 /**
  * The screens above the tabs. Each slides in from the right and back out on an ease-in-out curve (half a second); the tab bar is only on the
@@ -51,6 +57,26 @@ private fun newFaultRoute(id: String = "", draft: String = "", template: String 
 fun AppNav() {
     val nav = rememberNavController()
     val session = LocalSession.current
+    var taskRefreshPending by remember { mutableStateOf(false) }
+    LaunchedEffect(taskRefreshPending, nav) {
+        if (taskRefreshPending) {
+            nav.visibleEntries.first { entries ->
+                entries.singleOrNull()?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED
+            }
+            delay(Motion.Instant.toLong())
+            taskRefreshPending = false
+            session.notifyChanged()
+        }
+    }
+    fun editFaultTemplate(id: String) {
+        nav.navigate("report-template-editor?id=" + Uri.encode(id))
+    }
+    fun openAssetReports(code: String) {
+        nav.navigate("list/_?assetCode=" + Uri.encode(code))
+    }
+    fun openSelectedReports(codes: List<String>) {
+        nav.navigate(newFaultRoute(batch = true, codes = codes))
+    }
     fun reportAsset(asset: com.personal.tpm.data.Jv) {
         val reference = com.personal.tpm.data.Jv.obj(
             "assetId" to asset["assetId"].text, "assetCode" to asset["assetCode"].text, "assetName" to asset["assetName"].text,
@@ -108,9 +134,15 @@ fun AppNav() {
                     openTextRepairQuery = { nav.navigate("repair-text-query") },
                     openQuery = { field, text -> nav.navigate("list/_?q=" + Uri.encode(text) + "&f=" + field.name) },
                     openDrafts = { nav.navigate(DRAFTS) },
+                    openCompletedOrders = { nav.navigate(COMPLETED_ORDERS) { launchSingleTop = true } },
                     openNew = { template ->
                         nav.navigate(newFaultRoute(template = template.id))
                     },
+                    openBatchReport = { template -> nav.navigate(newFaultRoute(template = template.id, batch = true)) },
+                    editFaultTemplate = ::editFaultTemplate,
+                    openAssetReports = ::openAssetReports,
+                    reportAsset = ::reportAsset,
+                    openSelectedReports = ::openSelectedReports,
                     openQuick = {
                         if (quick.loading || quick.signing) quick.showProgress = true
                         else { operators.clear(quick.operationKey); quick.discover() }
@@ -135,20 +167,31 @@ fun AppNav() {
                 navArgument("state") { type = NavType.StringType },
                 navArgument("q") { type = NavType.StringType; defaultValue = "" },
                 navArgument("f") { type = NavType.StringType; defaultValue = "" },
+                navArgument("assetCode") { type = NavType.StringType; defaultValue = "" },
             ),
         ) { entry: NavBackStackEntry ->
             run {
                 val state = entry.arguments?.getString("state").orEmpty().let { if (it == "_") "" else it }
                 val query = entry.arguments?.getString("q").orEmpty()
                 val field = FaultSearchField.entries.firstOrNull { it.name == entry.arguments?.getString("f") } ?: FaultSearchField.Name
-                val vm = viewModel<OrderListViewModel>(factory = viewModelFactory { initializer { OrderListViewModel(session, state, query, field) } })
+                val assetCode = entry.arguments?.getString("assetCode").orEmpty()
+                val vm = viewModel<OrderListViewModel>(factory = viewModelFactory {
+                    initializer { OrderListViewModel(session, state, query, field, assetCode) }
+                })
                 OrderListScreen(
                     vm = vm,
                     // A quick-query page is titled by what it searches now, following each confirmed search and the chosen field.
-                    title = if (vm.searchMode) vm.field.label + " " + vm.query else if (vm.state.isEmpty()) "所有工单" else faultStateName(vm.state),
+                    title = when {
+                        assetCode.isNotEmpty() -> "资产报修记录"
+                        vm.searchMode -> vm.field.label + " " + vm.query
+                        vm.state.isEmpty() -> "所有工单"
+                        else -> faultStateName(vm.state)
+                    },
                     onBack = { nav.popBackStack() },
                     onOpen = { id -> nav.navigate("fault/" + Uri.encode(id) + "?independent=" + vm.searchMode) },
                     reportAsset = ::reportAsset,
+                    assetReports = if (assetCode.isBlank()) ::openAssetReports else null,
+                    reportSelected = ::openSelectedReports,
                 )
             }
         }
@@ -161,6 +204,7 @@ fun AppNav() {
                     onOpenTask = { returning -> nav.navigate("task/Fault/" + Uri.encode(id) + "?ret=" + returning) },
                     onEdit = { nav.navigate(newFaultRoute(id)) }, onOpenRepair = { nav.navigate("repair/" + Uri.encode(id)) },
                     onReportAsset = ::reportAsset,
+                    onAssetReports = ::openAssetReports,
                 )
             }
                     }
@@ -190,15 +234,25 @@ fun AppNav() {
                 kind = kind, id = entry.arguments?.getString("id").orEmpty(), startReturn = entry.arguments?.getString("ret") == "true",
                 onBack = { nav.popBackStack() },
                 // After a step is taken: back to where the order was opened from, except signing in, which stays on the order.
-                onDone = { stay -> operators.clear(kind.toString() + ":" + entry.arguments?.getString("id").orEmpty()); nav.popBackStack(); if (!stay) nav.popBackStack() },
+                onDone = { stay ->
+                    val detailRoute = if (kind == OrderKind.Fault) FAULT else ERP
+                    if (stay || nav.previousBackStackEntry?.destination?.route != detailRoute) nav.popBackStack()
+                    else nav.popBackStack(detailRoute, inclusive = true)
+                    operators.clear(kind.toString() + ":" + entry.arguments?.getString("id").orEmpty())
+                    taskRefreshPending = true
+                },
+                refreshOnDone = false,
             ) }
                     }
         }
         composable(ASSET_FAULT_TEMPLATES, arguments = listOf(navArgument("asset") { type = NavType.StringType })) { entry ->
             val asset = entry.arguments?.getString("asset").orEmpty()
-            AssetFaultTemplateScreen(com.personal.tpm.data.Jv.parse(asset), onBack = { nav.popBackStack() }) { template ->
+            AssetFaultTemplateScreen(com.personal.tpm.data.Jv.parse(asset), onBack = { nav.popBackStack() }, edit = ::editFaultTemplate) { template ->
                 nav.navigate(newFaultRoute(template = template.id, asset = asset))
             }
+        }
+        composable(FAULT_TEMPLATE_EDITOR, arguments = listOf(navArgument("id") { type = NavType.StringType; defaultValue = "" })) { entry ->
+            FaultTemplateEditorScreen(entry.arguments?.getString("id").orEmpty()) { nav.popBackStack() }
         }
         composable(
             FAULT_FORM,
@@ -207,20 +261,28 @@ fun AppNav() {
                 navArgument("draft") { type = NavType.StringType; defaultValue = "" },
                 navArgument("template") { type = NavType.StringType; defaultValue = "" },
                 navArgument("asset") { type = NavType.StringType; defaultValue = "" },
+                navArgument("batch") { type = NavType.BoolType; defaultValue = false },
+                navArgument("codes") { type = NavType.StringType; defaultValue = "" },
             ),
         ) { entry ->
-            OperationAccountScope("Fault:" + entry.arguments?.getString("id").orEmpty()) {
-            FaultFormScreen(
-                existingId = entry.arguments?.getString("id").orEmpty().ifEmpty { null }, startDraftId = entry.arguments?.getString("draft").orEmpty().ifEmpty { null },
-                onClose = { nav.popBackStack() }, onSaved = {},
-                initialAsset = entry.arguments?.getString("asset")?.takeIf { it.isNotEmpty() }?.let { com.personal.tpm.data.Jv.parse(it) },
-                template = when (val templateId = entry.arguments?.getString("template").orEmpty()) {
-                    "" -> null
-                    FaultTemplate.blank.id -> FaultTemplate.blank
-                    else -> readFaultTemplates(context, session.draftScope).firstOrNull { it.id == templateId }
-                },
-            )
-                    }
+            val id = entry.arguments?.getString("id").orEmpty()
+            val batch = entry.arguments?.getBoolean("batch") == true
+            val form: @Composable () -> Unit = {
+                FaultFormScreen(
+                    existingId = id.ifEmpty { null },
+                    startDraftId = entry.arguments?.getString("draft").orEmpty().ifEmpty { null },
+                    onClose = { nav.popBackStack() }, onSaved = {},
+                    initialAsset = entry.arguments?.getString("asset")?.takeIf { it.isNotEmpty() }?.let { com.personal.tpm.data.Jv.parse(it) },
+                    batchMode = batch,
+                    initialAssetCodes = com.personal.tpm.data.Jv.parse(entry.arguments?.getString("codes").orEmpty()).array.map { it.text },
+                    template = when (val templateId = entry.arguments?.getString("template").orEmpty()) {
+                        "" -> null
+                        FaultTemplate.blank.id -> FaultTemplate.blank
+                        else -> readFaultTemplates(context, session.draftScope).firstOrNull { it.id == templateId }
+                    },
+                )
+            }
+            if (batch) form() else OperationAccountScope("Fault:$id", form)
         }
         composable(ERP_FORM, arguments = listOf(navArgument("id") { type = NavType.StringType; defaultValue = "" })) { entry ->
             OperationAccountScope("Erp:" + entry.arguments?.getString("id").orEmpty()) {
@@ -259,7 +321,21 @@ fun AppNav() {
             if (nav.currentBackStackEntry == entry && entry.lifecycle.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) nav.popBackStack()
         }) }
         composable(DRAFTS) {
-            DraftBoxScreen(onBack = { nav.popBackStack() }, onOpenNew = { draft -> nav.navigate(newFaultRoute(draft = draft)) })
+            DraftBoxScreen(onBack = { nav.popBackStack() },
+                onOpenNew = { draft -> nav.navigate(newFaultRoute(draft = draft)) },
+                onOpenBatch = { draft -> nav.navigate(newFaultRoute(draft = draft, batch = true)) })
+        }
+        composable(COMPLETED_ORDERS) { entry ->
+            if (AppPreferences.todoCompletionEnabled) {
+                CompletedOrdersScreen(
+                    onBack = { nav.popBackStack() },
+                    openWorkflow = { processId -> nav.navigate("flow/" + Uri.encode(processId)) },
+                )
+            } else {
+                androidx.compose.runtime.LaunchedEffect(entry) {
+                    if (nav.currentBackStackEntry == entry) nav.popBackStack()
+                }
+            }
         }
         composable("pool-order/{kind}/{id}", arguments = listOf(navArgument("kind") { type = NavType.StringType }, navArgument("id") { type = NavType.StringType })) { entry ->
             val kind = PoolKind.byPath(entry.arguments?.getString("kind").orEmpty()) ?: PoolKind.Maintenance
@@ -271,9 +347,7 @@ fun AppNav() {
             val vm = viewModel<PagedViewModel>(
                 key = "pool-" + kind.path,
                 factory = viewModelFactory {
-                    initializer { PagedViewModel(session, kind.page,
-                        if (kind == PoolKind.Maintenance) com.personal.tpm.data.maintenanceStateFilters(selectedState) else kind.waitingFilters(),
-                        listOf(SearchChoice("工单名称", kind.nameKey), SearchChoice("工单号", "sn"), SearchChoice("机台号", "asset.addressCode"), SearchChoice("资产编码", "asset.assetCode"), SearchChoice("接单人", if (kind == PoolKind.Maintenance) "maintainUser.realName" else "user.realName"))) }
+                    initializer { PagedViewModel(session, kind.page, kind.stateFilters(selectedState), kind.searches()) }
                 },
             )
             PagedScreen(
@@ -281,12 +355,14 @@ fun AppNav() {
             open = { model, _ ->
                 if (model.openId.isNotBlank()) nav.navigate("pool-order/${kind.path}/" + Uri.encode(model.openId))
             }, poolKind = kind, cardType = if (kind == PoolKind.Maintenance) CardType.Maintenance else CardType.Precision,
-            extraFilters = if (kind == PoolKind.Maintenance) ({
-                val states = listOf("") + com.personal.tpm.data.MaintenanceState.entries.map { it.code }
-                SingleChoiceGroup(states.map { com.personal.tpm.data.maintenanceStateName(it) }, states.indexOf(selectedState), {
-                    selectedState = states[it]; vm.changeFilters(com.personal.tpm.data.maintenanceStateFilters(selectedState))
+            reportSelected = ::openSelectedReports,
+            extraFilters = {
+                val states = kind.states()
+                SingleChoiceGroup(states.map { it.second }, states.indexOfFirst { it.first == selectedState }, {
+                    selectedState = states[it].first
+                    vm.changeFilters(kind.stateFilters(selectedState))
                 }, scrollable = true)
-            }) else null,
+            },
         )
         }
         composable(PAGED, arguments = listOf(navArgument("type") { type = NavType.StringType })) { entry ->

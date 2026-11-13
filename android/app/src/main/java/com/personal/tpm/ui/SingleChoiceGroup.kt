@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateIntOffsetAsState
 import androidx.compose.animation.core.animateIntSizeAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -36,7 +37,7 @@ fun centeredChoiceScroll(left: Int, width: Int, viewport: Int, maximum: Int): In
 @Composable
 fun SingleChoiceGroup(options: List<String>, selected: Int, onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier, enabled: Boolean = true, scrollable: Boolean = false,
-    columns: Int = options.size.coerceAtLeast(1), counts: List<Int?>? = null) {
+    columns: Int = options.size.coerceAtLeast(1), counts: List<Int?>? = null, liquidGlass: Boolean = AppPreferences.liquidGlass) {
     if (options.isEmpty()) return
     val shape = CircleShape
     val density = LocalDensity.current
@@ -53,10 +54,15 @@ fun SingleChoiceGroup(options: List<String>, selected: Int, onSelect: (Int) -> U
     }
     val accent = MaterialTheme.colorScheme.primary
     val surface = MaterialTheme.colorScheme.surface
-    val ink = glassContentColor(accent, accent, surface, MaterialTheme.colorScheme.onSurface)
+    val ink = glassContentColor(MaterialTheme.colorScheme.onPrimary, accent, surface, MaterialTheme.colorScheme.onSurface,
+        tintStrength = .46f)
     val trayShape = if (scrollable || options.size <= columns.coerceAtLeast(1)) CircleShape else RoundedCornerShape(26.dp)
     Box(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .62f), trayShape)
-        .then(if (scrollable) Modifier.glassHorizontalScroll(scroll) else Modifier).padding(4.dp).selectableGroup()) {
+        .then(when {
+            !scrollable -> Modifier
+            liquidGlass -> Modifier.glassHorizontalScroll(scroll)
+            else -> Modifier.horizontalScroll(scroll)
+        }).padding(4.dp).selectableGroup()) {
         if (target != null) {
             val offset by animateIntOffsetAsState(target.first,
                 tween(Motion.Normal, easing = Motion.Change), label = "selection position")
@@ -64,8 +70,8 @@ fun SingleChoiceGroup(options: List<String>, selected: Int, onSelect: (Int) -> U
                 tween(Motion.Normal, easing = Motion.Change), label = "selection size")
             Box(Modifier.offset { offset }
                 .size(with(density) { size.width.toDp() }, with(density) { size.height.toDp() })
-                .then(if (AppPreferences.liquidGlass) Modifier.glassSurface(backdrop = null, shape = shape, tint = accent, prominent = true)
-                    else Modifier.background(accent, shape)))
+                .then(if (liquidGlass) Modifier.glassSurface(backdrop = null, shape = shape, tint = accent, prominent = true, tintStrength = .46f)
+                    else Modifier.background(MaterialTheme.colorScheme.secondaryContainer, shape)))
         }
         val chunks = if (scrollable) listOf(options.indices.toList()) else options.indices.chunked(columns.coerceAtLeast(1))
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -84,7 +90,7 @@ fun SingleChoiceGroup(options: List<String>, selected: Int, onSelect: (Int) -> U
                             .heightIn(min = 44.dp).selectable(active, enabled = enabled, role = Role.RadioButton, onClick = { onSelect(index) })
                             .padding(horizontal = if (scrollable) 14.dp else 8.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                            val content = if (active && !AppPreferences.liquidGlass) MaterialTheme.colorScheme.onPrimary
+                            val content = if (active && !liquidGlass) MaterialTheme.colorScheme.onSecondaryContainer
                                 else if (active) ink else MaterialTheme.colorScheme.onSurfaceVariant
                             if (active) Icon(Icons.Default.Check, null, Modifier.size(16.dp).padding(end = 3.dp), tint = content)
                             Text(options[index], style = MaterialTheme.typography.labelLarge,

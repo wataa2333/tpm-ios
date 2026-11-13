@@ -117,10 +117,10 @@ fun ChoiceChip(selected: Boolean, onClick: () -> Unit, label: String, enabled: B
 
 /** The small heading above a group of fields on the form and process pages. */
 @Composable
-fun FormTitle(text: String) {
+fun FormTitle(text: String, modifier: Modifier = Modifier) {
     // A small rounded bar of the theme colour and the title: the groups of a page are set apart by this mark, not by a block (a block in the page's
     // own grey could not be seen, and its rounded corner cut the bar in half).
-    Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         androidx.compose.foundation.layout.Box(Modifier.width(4.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.primary))
         AnimatedLabel(text, Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
     }
@@ -167,6 +167,7 @@ fun ReadOnlyFormRow(label: String, value: String) {
 fun TextEntry(
     label: String, value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, required: Boolean = false, limit: Int = 255,
     minLines: Int = 1, maxLines: Int = if (minLines > 1) 8 else 1, keyboardType: KeyboardType = KeyboardType.Text, placeholder: String = "",
+    enabled: Boolean = true,
 ) {
     // A white block on the grey page; inside it the label, then the field in a tinted box of its own, so it is plain where to type. The box is one
     // line high while empty and grows with what is typed (up to [maxLines]); it does not start as a big empty block.
@@ -176,6 +177,7 @@ fun TextEntry(
             AnimatedLabel(requiredLabel(label, required), Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             androidx.compose.material3.TextField(
                 value = value, onValueChange = { onChange(it.take(limit)) },
+                enabled = enabled,
                 modifier = Modifier.fillMaxWidth().animateContentSize(androidx.compose.animation.core.tween(Motion.Fast, easing = Motion.Change)).glassSearchSurface(RoundedCornerShape(8.dp), quiet = true),
                 shape = RoundedCornerShape(8.dp),
                 placeholder = if (placeholder.isEmpty()) null else ({ AnimatedLabel(placeholder) }),
@@ -357,6 +359,7 @@ fun FormPage(
     wideContent: Boolean = false,
     /** What the completed back gesture does; true when the page is going away, false when it stays (a question was asked instead). */
     onBackGesture: () -> Boolean = { onClose(); true },
+    animateInterceptedBack: Boolean = true,
     /** Large forms provide keyed rows so opening the page only composes its viewport. */
     lazyContent: (androidx.compose.foundation.lazy.LazyListScope.() -> Unit)? = null,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
@@ -367,7 +370,8 @@ fun FormPage(
     // like every other page of the app. The form takes the back key itself only when it has to ask or to refuse: while it is saving or uploading
     // (nothing happens), and when entered content is saved locally before closing.
     androidx.activity.compose.BackHandler(enabled = !backEnabled) { }
-    val backMotion = predictivePageBack(enabled = backEnabled && interceptBack) { onBackGesture() }
+    androidx.activity.compose.BackHandler(enabled = backEnabled && interceptBack && !animateInterceptedBack) { onBackGesture() }
+    val backMotion = predictivePageBack(enabled = backEnabled && interceptBack && animateInterceptedBack) { onBackGesture() }
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().then(backMotion)) {
     CompactTheme { GlassScaffold(contentWindowInsets = appContentInsets(),
         containerColor = MaterialTheme.colorScheme.background,
@@ -482,13 +486,17 @@ fun InputRow(
 
 /** A modal window owns the whole screen, including when its content is taller than the calling page. */
 @Composable
-fun <T : Any> SlideUpOverlayFor(item: T?, content: @Composable (T) -> Unit) {
+fun <T : Any> SlideUpOverlayFor(item: T?, onHidden: (T) -> Unit, content: @Composable (T, Boolean) -> Unit) {
     var shown by remember { mutableStateOf(item) }
     if (item != null) shown = item
     val visible = remember { androidx.compose.animation.core.MutableTransitionState(false) }
     visible.targetState = item != null
     LaunchedEffect(item, visible.currentState, visible.isIdle) {
-        if (item == null && visible.isIdle && !visible.currentState) shown = null
+        if (item == null && visible.isIdle && !visible.currentState) {
+            val hidden = shown
+            shown = null
+            if (hidden != null) onHidden(hidden)
+        }
     }
     val last = shown ?: return
     androidx.compose.ui.window.Dialog(onDismissRequest = {}, properties = androidx.compose.ui.window.DialogProperties(
@@ -502,7 +510,9 @@ fun <T : Any> SlideUpOverlayFor(item: T?, content: @Composable (T) -> Unit) {
                     enter = androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(Motion.Page, easing = Motion.Arrive)) { it },
                     exit = androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.tween(Motion.Page, easing = Motion.Leave)) { it },
                     modifier = Modifier.fillMaxSize()) {
-                    Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { } }) { content(last) }
+                    Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { } }) {
+                        content(last, visible.currentState && visible.targetState)
+                    }
                 }
             }
         }

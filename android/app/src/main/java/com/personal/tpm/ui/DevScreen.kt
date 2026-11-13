@@ -74,6 +74,23 @@ fun DevScreen(onBack: () -> Unit) {
                         }
                         SectionTitle("精密度接口验证")
                         PrecisionApiProbe()
+                        GroupCard {
+                            Row(
+                                Modifier.fillMaxWidth().padding(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("待办完成统计", style = MaterialTheme.typography.titleSmall)
+                                    Text("在我的待办顶部显示今日已完成数量和全部已完成入口。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                GlassSwitch(
+                                    checked = AppPreferences.todoCompletionEnabled,
+                                    onCheckedChange = AppPreferences::updateTodoCompletionEnabled,
+                                    modifier = Modifier.semantics { contentDescription = "待办完成统计" },
+                                )
+                            }
+                        }
                         // ---- motion ----
                         SectionTitle("维修查询实验")
                         GroupCard {

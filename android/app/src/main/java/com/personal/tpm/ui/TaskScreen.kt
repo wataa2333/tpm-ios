@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import com.personal.tpm.data.Jv
+import com.personal.tpm.data.MaintenanceState
 import com.personal.tpm.data.OrderKind
 import com.personal.tpm.data.RefSource
 import com.personal.tpm.data.assigneesPayload
@@ -56,7 +57,10 @@ import java.util.Calendar
 
 /** The buttons at the bottom of an order: the step it is waiting on, and "退单" where the step allows it. Nothing shows when it waits for someone else. */
 @Composable
-fun TaskActionBar(kind: OrderKind, order: Jv, includeNavigationPadding: Boolean = true, onOpen: (returning: Boolean) -> Unit) {
+fun TaskActionBar(
+    kind: OrderKind, order: Jv, includeNavigationPadding: Boolean = true,
+    verticalPadding: androidx.compose.ui.unit.Dp = BarSpec.Vertical, onOpen: (returning: Boolean) -> Unit,
+) {
     val session = LocalSession.current
     val task = order["taskInfo"]
     val taskId = task["id"].text
@@ -80,7 +84,7 @@ fun TaskActionBar(kind: OrderKind, order: Jv, includeNavigationPadding: Boolean 
     }
     if (!canSubmit && !canHandoff) return
     GlassBottomSurface() {
-        Row(Modifier.fillMaxWidth().then(if(includeNavigationPadding) Modifier.navigationBarsPadding() else Modifier).padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical), horizontalArrangement = Arrangement.spacedBy(BarSpec.Gap)) {
+        Row(Modifier.fillMaxWidth().then(if(includeNavigationPadding) Modifier.navigationBarsPadding() else Modifier).padding(horizontal = BarSpec.Horizontal, vertical = verticalPadding), horizontalArrangement = Arrangement.spacedBy(BarSpec.Gap)) {
             if (canReturn) SoftButton(onClick = { onOpen(true) }, Modifier.weight(1f).height(BarSpec.ButtonHeight)) { Text("退单") }
             GlassActionButton(onClick = { onOpen(false) }, Modifier.weight(1f).height(BarSpec.ButtonHeight)) { AnimatedLabel(taskActionTitle(task, kind)) }
         }
@@ -99,7 +103,8 @@ private fun endOfToday(): String {
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> Unit, onDone: (stay: Boolean) -> Unit, poolKind: PoolKind? = null, initialCondition: String? = null) {
+fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> Unit, onDone: (stay: Boolean) -> Unit,
+    poolKind: PoolKind? = null, initialCondition: String? = null, refreshOnDone: Boolean = true) {
     val session = LocalSession.current
     val prefs = LocalPickerPrefs.current
     val scope = rememberCoroutineScope()
@@ -201,6 +206,7 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
         if (condition == "agree") missingAssigneeMessage(nodes, selections)?.let { failure = it; return }
         submitting = true
         scope.launch {
+            var completed = false
             try {
                 val payload = commitTaskPayload(task, condition, comment, if (condition == "agree") assigneesPayload(nodes, selections) else null)
                 if (needsFaultData && condition in listOf("agree", "assign", "appoint")) {
@@ -230,12 +236,18 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
                     payload.put("taskData", sent.toString())
                 }
                 session.request("process/commitTask", body = payload)
-                session.notifyChanged()
-                onDone(kind == OrderKind.Fault && category == "SIGNED" && condition == "agree")
+                if (refreshOnDone) session.notifyChanged()
+                val stayOnDetail = when (poolKind) {
+                    PoolKind.Maintenance -> category != MaintenanceState.Maintained.code || condition != "agree"
+                    PoolKind.Precision -> true
+                    null -> kind == OrderKind.Fault && category == "SIGNED" && condition == "agree"
+                }
+                onDone(stayOnDetail)
+                completed = true
             } catch (e: CancellationException) { throw e }
             catch (e: IllegalStateException) { failure = e.message }
             catch (e: Exception) { failure = "提交流程节点失败：" + (e.message ?: "") }
-            finally { submitting = false }
+            finally { if (!completed) submitting = false }
         }
     }
 
@@ -384,7 +396,11 @@ fun TaskScreen(kind: OrderKind, id: String, startReturn: Boolean, onBack: () -> 
         }
     }
     failure?.let { ErrorDialog("提交未完成", it) { failure = null } }
-    handoff?.let { operation -> HandoffSheet(state["taskId"].text, operation, onDismiss = { handoff = null }, onDone = { handoff = null; session.notifyChanged(); onDone(false) }) }
+    handoff?.let { operation -> HandoffSheet(state["taskId"].text, operation, onDismiss = { handoff = null }, onDone = {
+        handoff = null
+        if (refreshOnDone) session.notifyChanged()
+        onDone(poolKind != null)
+    }) }
 }
 
 /** 转办 / 委派 / 委派完成: choose who (not for the last), write the reason, send. */

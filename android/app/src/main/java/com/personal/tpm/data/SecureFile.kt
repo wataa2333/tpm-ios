@@ -3,6 +3,7 @@ package com.personal.tpm.data
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.util.AtomicFile
 import java.io.File
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -31,10 +32,9 @@ class SecureFile(context: Context, name: String, private val alias: String) {
         return generator.generateKey()
     }
 
-    fun read(): String? {
-        if (!file.exists()) return null
+    @Synchronized fun read(): String? {
         return try {
-            val bytes = file.readBytes()
+            val bytes = AtomicFile(file).readFully()
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(TAG_BITS, bytes.copyOfRange(0, IV_BYTES)))
             String(cipher.doFinal(bytes, IV_BYTES, bytes.size - IV_BYTES), Charsets.UTF_8).ifEmpty { null }
@@ -53,6 +53,24 @@ class SecureFile(context: Context, name: String, private val alias: String) {
         } catch (e: Exception) {
             // Nothing sensible to do: the next launch asks for the sign-in again.
         }
+    }
+
+    /** Commit a recoverable snapshot and report a failed write to its caller. */
+    @Synchronized fun writeSnapshot(text: String) {
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey())
+        val encrypted = cipher.iv + cipher.doFinal(text.toByteArray(Charsets.UTF_8))
+        val atomic = AtomicFile(file)
+        val stream = atomic.startWrite()
+        try {
+            stream.write(encrypted)
+            stream.fd.sync()
+            atomic.finishWrite(stream)
+        } catch (e: Exception) {
+            atomic.failWrite(stream)
+            throw e
+        }
+        check(atomic.readFully().contentEquals(encrypted)) { "草稿写入未完成" }
     }
 
     private companion object {

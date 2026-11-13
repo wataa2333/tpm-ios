@@ -45,6 +45,8 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -80,9 +82,8 @@ import com.personal.tpm.data.todoTitle
 import com.personal.tpm.ui.theme.ThemeConfig
 
 /**
- * A list item that fades in when it appears. The grey skeleton cards ([skeleton] = true) fade out when they go, so they melt into the real cards;
- * real cards never fade out: when a refresh brings a list whose rows moved, the rows that left would otherwise stay on screen for a moment,
- * fading, over the new ones (that showed as a stutter at the end of every pull-down refresh).
+ * Real cards animate arrival and placement here. A refresh slides outgoing cards out before releasing their space, so a lazy fade-out would
+ * leave a duplicate over the moving rows. Skeleton cards ([skeleton] = true) fade out as data arrives.
  */
 fun androidx.compose.foundation.lazy.LazyItemScope.fadeItem(skeleton: Boolean = false): Modifier =
     Modifier.animateItem(
@@ -207,7 +208,8 @@ fun OrderCard(model: CardModel, expanded: Boolean, onToggle: () -> Unit, modifie
                         FactsGrid(shownModel.facts, model.cardType)
                     }
                     SelectionContainer { facts() }
-                    if (onOpen != null && selecting == null) GlassActionButton(onClick = onOpen, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) { Text("打开工单", maxLines = 1) }
+                    if (onOpen != null && selecting == null) Button(onClick = onOpen,
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) { Text("打开工单", maxLines = 1) }
                     if(selecting==null) bottomAction?.invoke()
                 }
             }
@@ -235,7 +237,8 @@ private fun CompactCardGrid(cells: List<CompactCell>, type: CardType, button: @C
 @Composable
 private fun DetailToggle(expanded: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val turn by animateFloatAsState(if (expanded) 180f else 0f, tween(Motion.Normal, easing = Motion.Change), label = "chevron")
-    GlassTonalButton(onClick = onClick, contentPadding = PaddingValues(start = 14.dp, end = 10.dp), modifier = modifier.height(CardMetrics.footerHeight)) {
+    FilledTonalButton(onClick = onClick, contentPadding = PaddingValues(start = 14.dp, end = 10.dp),
+        modifier = modifier.height(CardMetrics.footerHeight)) {
         AnimatedLabel(if (expanded) "收起详情" else "展开详情", style = MaterialTheme.typography.labelLarge, maxLines = 1, softWrap = false)
         Icon(Icons.Filled.ExpandMore, contentDescription = null, Modifier.size(18.dp).graphicsLayer { rotationZ = turn })
     }

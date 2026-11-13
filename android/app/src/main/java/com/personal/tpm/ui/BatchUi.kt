@@ -93,6 +93,7 @@ import com.personal.tpm.data.outboundLineIdentity
 import com.personal.tpm.data.quantityText
 import com.personal.tpm.data.supportsPoolRequisition
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -108,7 +109,7 @@ class PresetRequest(val action: BatchAction, val operation: BatchOperation, val 
  * they were.
  */
 @Stable
-class BatchSelection {
+class BatchSelection(private val allowReports: Boolean = false) {
     val operationKey = "batch:" + java.util.UUID.randomUUID()
     var active by mutableStateOf(false); private set
     val items = mutableStateListOf<BatchItem>()
@@ -119,10 +120,15 @@ class BatchSelection {
     var presetting by mutableStateOf<PresetRequest?>(null)
     var preparing by mutableStateOf(false); private set
     var run by mutableStateOf<BatchRun?>(null)
+    var transitioning by mutableStateOf(false)
 
-    val group: String? get() = items.firstOrNull()?.group
+    val group: String? get() = items.firstOrNull()?.group?.takeIf { group -> items.all { it.group == group } }
     val action: BatchAction? get() = group?.let { BatchAction.forGroup(it) }
-    val groupTitle: String get() = group?.let { batchGroupName(it) } ?: "点左侧圆圈选择单据"
+    val groupTitle: String get() = group?.let { batchGroupName(it) }
+        ?: if (items.isEmpty()) "点左侧圆圈选择单据" else "可按所选资产批量报修"
+    val reportCodes: List<String> get() = if (items.all(::canReport)) items.map { it.reference }.distinct() else emptyList()
+
+    private fun canReport(item: BatchItem) = allowReports && item.kind == OrderKind.Fault && item.reference.isNotBlank()
 
     fun begin() { active = true }
     fun end() { active = false; items.clear(); peeking = null }
@@ -131,27 +137,30 @@ class BatchSelection {
     /** Whether the circle of this card works: its status has a batch action and matches what is already selected. */
     fun isSelectable(item: BatchItem): Boolean {
         if (item.id.isEmpty()) return false
-        if (BatchAction.forGroup(item.group) == null) return false
-        val current = group
-        return current == null || current == item.group
+        if (canReport(item) && items.all(::canReport)) return true
+        return BatchAction.forGroup(item.group) != null && (items.isEmpty() || group == item.group)
     }
     fun toggle(item: BatchItem) {
         if (item.id.isEmpty()) { notice = "这张单据没有编号，请刷新列表"; return }
         val index = items.indexOfFirst { it.key == item.key }
         if (index >= 0) { items.removeAt(index); return }
-        if (BatchAction.forGroup(item.group) == null) { notice = "「" + batchGroupName(item.group) + "」的单据暂不支持批量处理"; return }
-        val current = group
-        if (current != null && current != item.group) { notice = "只能选择同一种状态的单据：已选「" + batchGroupName(current) + "」，不能再选「" + batchGroupName(item.group) + "」"; return }
+        if (!isSelectable(item)) {
+            notice = if (items.isEmpty()) "这张单据暂不支持批量操作" else "这张单据无法与当前选择一起操作"
+            return
+        }
         if (items.size >= BATCH_LIMIT) { notice = "一次最多选择 $BATCH_LIMIT 张单据"; return }
         items.add(item)
     }
     /** Selects the loaded orders of the status already chosen (or of the first order that can be selected). */
     fun selectAll(candidates: List<BatchItem>) {
         val target = group ?: candidates.firstOrNull { BatchAction.forGroup(it.group) != null }?.group
-        if (target == null) { notice = "没有可批量处理的单据"; return }
+        val forReports = items.isNotEmpty() && action == null && reportCodes.isNotEmpty()
+        val selectedGroup = if (forReports) null else target
+        if (selectedGroup == null && candidates.none(::canReport)) { notice = "没有可批量操作的单据"; return }
         var full = false
         for (candidate in candidates) {
-            if (candidate.id.isEmpty() || candidate.group != target || contains(candidate)) continue
+            if (!isSelectable(candidate) || contains(candidate) ||
+                (selectedGroup != null && candidate.group != selectedGroup)) continue
             if (items.size >= BATCH_LIMIT) { full = true; break }
             items.add(candidate)
         }
@@ -268,19 +277,21 @@ class CardSelecting(val selected: Boolean, val enabled: Boolean, val toggle: () 
 
 /** The bar at the bottom of a list in selection mode: the count and the status, "全选", and the two ways out of the step as full-width buttons. */
 @Composable
-fun BatchBar(batch: BatchSelection, candidates: () -> List<BatchItem>) {
-    OperationAccountScope(batch.operationKey) { BatchBarContent(batch, candidates) }
+fun BatchBar(batch: BatchSelection, reportSelected: ((List<String>) -> Unit)? = null, candidates: () -> List<BatchItem>) {
+    OperationAccountScope(batch.operationKey) { BatchBarContent(batch, reportSelected, candidates) }
 }
 @Composable
-private fun BatchBarContent(batch: BatchSelection, candidates: () -> List<BatchItem>) {
+private fun BatchBarContent(batch: BatchSelection, reportSelected: ((List<String>) -> Unit)?, candidates: () -> List<BatchItem>) {
     val session = LocalSession.current
     val prefs = LocalPickerPrefs.current
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
+    val action = batch.action
+    val idle = !batch.preparing && !batch.transitioning && batch.presetting == null && batch.run == null
+    val canProcess = action != null && idle
+    val reportCodes = batch.reportCodes
     GlassBottomSurface() {
         Column {
-        // While the first order is read (who approves next, the ERP form), a thin bar runs here. The buttons keep their look: greying them out and
-        // changing their words for that second was the flash on tapping 批量完成.
         Box(Modifier.fillMaxWidth()) { if (batch.preparing) AppProgressIndicator(Modifier.fillMaxWidth()) }
         Column(Modifier.fillMaxWidth().then(if (LocalBarInsetsHandled.current) Modifier else Modifier.navigationBarsPadding()).padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -290,9 +301,9 @@ private fun BatchBarContent(batch: BatchSelection, candidates: () -> List<BatchI
                         AnimatedLabel(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                OperationAccountAction(locked = batch.preparing || batch.run != null)
+                OperationAccountAction(locked = !idle)
                 Box {
-                    SoftButton(onClick = { menu = true }) { Text("更多") }
+                    SoftButton(onClick = { menu = true }, enabled = idle) { Text("更多") }
                     AppOptionSheet(expanded = menu, onDismissRequest = { menu = false }) {
                         AppOptionItem(text = { Text("全选已加载的单据") }, onClick = { menu = false; batch.selectAll(candidates()) })
                         AppOptionItem(text = { Text("清空已选") }, onClick = { menu = false; batch.clear() })
@@ -302,22 +313,28 @@ private fun BatchBarContent(batch: BatchSelection, candidates: () -> List<BatchI
                     }
                 }
             }
-            // The two buttons are always on the bar: grey and disabled while nothing is picked (with the words of the last step, or general ones before
-            // the first pick), in colour once something is. The bar never changes height, so nothing moves when the first order is picked or the last
-            // one dropped.
-            var shownAction by remember { mutableStateOf(batch.action) }
-            batch.action?.let { shownAction = it }
-            val action = shownAction
+            if (reportSelected != null) {
+                GlassActionButton(onClick = { scope.launch { batch.prepare(BatchOperation.Proceed, session, prefs) } },
+                    modifier = Modifier.fillMaxWidth().height(BarSpec.ButtonHeight),
+                    enabled = canProcess,
+                ) { AnimatedLabel(action?.title ?: BatchAction.Complete.title, maxLines = 1) }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(BarSpec.Gap)) {
                 SoftButton(
                     onClick = { scope.launch { batch.prepare(BatchOperation.Reject, session, prefs) } },
-                    enabled = batch.items.isNotEmpty(), modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight),
-                    contentColor = MaterialTheme.colorScheme.error,
+                    enabled = canProcess, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight),
+                    contentColor = if (canProcess) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 ) { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null, Modifier.padding(end = 6.dp)); AnimatedLabel(action?.rejectTitle ?: "批量退单", maxLines = 1) }
-                GlassActionButton(
-                    onClick = { scope.launch { batch.prepare(BatchOperation.Proceed, session, prefs) } },
-                    enabled = batch.items.isNotEmpty(), modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight),
-                ) { AnimatedLabel(action?.title ?: "批量处理", maxLines = 1) }
+                if (reportSelected != null) {
+                    GlassActionButton(onClick = { reportSelected(reportCodes) },
+                        enabled = reportCodes.isNotEmpty() && idle, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight),
+                        strongAccent = true,
+                    ) { Text("批量报修") }
+                } else {
+                    GlassActionButton(onClick = { scope.launch { batch.prepare(BatchOperation.Proceed, session, prefs) } },
+                        enabled = canProcess, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight),
+                    ) { AnimatedLabel(action?.title ?: "批量处理", maxLines = 1) }
+                }
             }
         }
         }
@@ -335,22 +352,42 @@ fun BatchOverlays(batch: BatchSelection) {
 private fun BatchOverlaysContent(batch: BatchSelection) {
     val session = LocalSession.current
     val accounts = LocalOperationAccounts.current
+    val scope = rememberCoroutineScope()
+    var finishedRun by remember { mutableStateOf<BatchRun?>(null) }
+    LaunchedEffect(finishedRun) {
+        val run = finishedRun ?: return@LaunchedEffect
+        delay(Motion.Instant.toLong())
+        batch.remove(run.succeeded.toSet())
+        if (batch.items.isEmpty()) batch.end()
+        accounts?.clear(batch.operationKey)
+        batch.transitioning = false
+        finishedRun = null
+        if (run.succeeded.isNotEmpty()) session.notifyChanged()
+    }
+    androidx.activity.compose.BackHandler(enabled = batch.transitioning) { }
     LaunchedEffect(batch.active) { if (!batch.active && batch.run == null) accounts?.clear(batch.operationKey) }
     DisposableEffect(batch.operationKey) { onDispose { accounts?.clear(batch.operationKey) } }
     batch.presetting?.let { request ->
         CompactTheme { BatchPresetSheet(
             request, request.items.size, onDismiss = { batch.presetting = null },
-            onStart = { preset -> batch.presetting = null; batch.run = BatchRun(request.action, request.operation, request.items, preset) },
+            onStart = { preset ->
+                if (!batch.transitioning && batch.presetting === request) {
+                    batch.transitioning = true
+                    batch.presetting = null
+                    scope.launch {
+                        try {
+                            delay(Motion.Instant.toLong())
+                            batch.run = BatchRun(request.action, request.operation, request.items, preset)
+                        } finally { batch.transitioning = false }
+                    }
+                }
+            },
         ) }
     }
-    SlideUpOverlayFor(batch.run) { run ->
-        androidx.compose.runtime.CompositionLocalProvider(LocalOperationLocked provides true) { CompactTheme { BatchRunDialog(run) {
-            // The orders that went through leave the selection; the ones that failed stay selected for another try.
-            batch.remove(run.succeeded.toSet())
-            if (batch.items.isEmpty()) batch.end()
+    SlideUpOverlayFor(batch.run, onHidden = { run -> finishedRun = run }) { run, shown ->
+        androidx.compose.runtime.CompositionLocalProvider(LocalOperationLocked provides true) { CompactTheme { BatchRunDialog(run, shown) {
+            batch.transitioning = true
             batch.run = null
-            accounts?.clear(batch.operationKey)
-            if (run.succeeded.isNotEmpty()) session.notifyChanged()
         } } }
     }
     // Laid over the page inside the same window (a dialog window has its own insets and put the buttons under the navigation bar). It slides in and
@@ -571,25 +608,29 @@ private fun QuantityLine(title: String, subtitle: String, label: String, quantit
  * The "完成" button is always on screen; it works once the run is over. The screen stays awake while it runs.
  */
 @Composable
-private fun BatchRunDialog(run: BatchRun, onClose: () -> Unit) {
+private fun BatchRunDialog(run: BatchRun, shown: Boolean, onClose: () -> Unit) {
     val session = LocalSession.current
     val prefs = LocalPickerPrefs.current
     var closing by remember(run) { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
     val view = LocalView.current
     DisposableEffect(Unit) { view.keepScreenOn = true; onDispose { view.keepScreenOn = false } }
-    LaunchedEffect(run) { run.start(session, prefs) }
-    fun closeResult() {
-        if (!run.running && !closing) { closing = true; onClose() }
+    LaunchedEffect(run, shown) {
+        if (shown && !run.finished) {
+            delay(Motion.Instant.toLong())
+            run.start(session, prefs)
+        }
     }
-    androidx.activity.compose.BackHandler(enabled = run.running || closing) {}
-    val backMotion = predictivePageBack(enabled = !run.running && !closing, onBack = ::closeResult)
-    Box(Modifier.fillMaxSize().then(backMotion)) {
+    fun closeResult() {
+        if (run.finished && !closing) { closing = true; onClose() }
+    }
+    androidx.activity.compose.BackHandler { closeResult() }
+    Box(Modifier.fillMaxSize()) {
         GlassScaffold(topBar = { AppTopBar(title = run.title) },
             bottomBar = { GlassBottomSurface {
                 Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = BarSpec.Horizontal, vertical = BarSpec.Vertical), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (run.running) SoftButton(onClick = { run.stop() }, Modifier.weight(1f).height(48.dp)) { Text("停止") }
-                    GlassActionButton(onClick = ::closeResult, enabled = !run.running && !closing, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight)) { Text("完成") }
+                    GlassActionButton(onClick = ::closeResult, enabled = run.finished && !closing, modifier = Modifier.weight(1f).height(BarSpec.ButtonHeight)) { Text("完成") }
                 }
             } }) { padding ->
                 LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = androidx.compose.foundation.layout.PaddingValues(

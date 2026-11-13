@@ -32,20 +32,8 @@ class QuickRepairWriteUncertain(val stage: String, cause: Exception) : Exception
 internal class QuickRepairEngine(private val api: BatchApi) {
     suspend fun pending(): List<BatchItem> {
         val result = linkedMapOf<String, BatchItem>()
-        val seenTasks = hashSetOf<String>()
-        var offset = 0
-        while (true) {
-            val page = api.page("process/pageUserTodoTask", offset, limit = 100)
-            val rows = page["content"].array
-            var fresh = 0
-            rows.forEach { row ->
-                val identity = row["id"].text.ifEmpty { row.toString() }
-                if (seenTasks.add(identity)) fresh++
-                (quickRepairItem(row) ?: quickPoolItem(row))?.let { result.putIfAbsent(it.key, it) }
-            }
-            if (page["last"].bool || (page["last"].isNull && rows.size < 100)) break
-            if (rows.isEmpty() || fresh == 0) error("待办分页没有继续推进，尚未读取完整，请刷新后重试")
-            offset += rows.size
+        scanTodoTasks(fetch = { path, offset, limit -> api.page(path, offset, limit = limit) }) { row, _ ->
+            (quickRepairItem(row) ?: quickPoolItem(row))?.let { result.putIfAbsent(it.key, it) }
         }
         return result.values.toList()
     }

@@ -47,14 +47,16 @@ fun AppOptionItem(
     leadingIcon: (@Composable () -> Unit)? = null,
     selected: Boolean = false,
 ) {
+    val colors = MaterialTheme.colorScheme
+    val ink = if (selected) colors.onSecondaryContainer else colors.onSurface
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-        .then(if (AppPreferences.liquidGlass) Modifier.glassSurface(backdrop = null, shape = RoundedCornerShape(18.dp), tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLowest, prominent = selected) else Modifier.background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLowest))
+        .background(if (selected) colors.secondaryContainer else colors.surfaceContainerLowest)
         .semantics { this.selected = selected }
         .clickable(role = Role.Button, onClick = onClick)
         .heightIn(min = 56.dp).padding(horizontal = 18.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         if (leadingIcon != null) leadingIcon()
-        Box(Modifier.weight(1f)) { ProvideTextStyle(MaterialTheme.typography.bodyLarge.copy(color = if (selected && !AppPreferences.liquidGlass) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal)) { text() } }
-        if (selected) Icon(Icons.Filled.Check, contentDescription = "已选", tint = if (AppPreferences.liquidGlass) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimary)
+        Box(Modifier.weight(1f)) { ProvideTextStyle(MaterialTheme.typography.bodyLarge.copy(color = ink, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal)) { text() } }
+        if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = ink)
     }
 }

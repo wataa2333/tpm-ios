@@ -2,6 +2,5 @@
 <resources>
     <!-- The app icon's own background colour, so the adaptive icon's edge matches the artwork. -->
     <color name="ic_launcher_background">#FDFDFE</color>
-    <!-- The page colour (ThemeConfig.pageLight): behind the app before its first frame. -->
-    <color name="window_background">#F3F5F9</color>
+    <color name="window_background">#F0F1F4</color>
 </resources>

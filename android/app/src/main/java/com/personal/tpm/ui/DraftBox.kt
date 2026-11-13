@@ -20,7 +20,7 @@ import com.personal.tpm.data.DraftTarget
  * the draft of an existing order is continued from that order ("编辑"), because it belongs to it alone.
  */
 @Composable
-fun DraftBoxScreen(onBack: () -> Unit, onOpenNew: (String) -> Unit) {
+fun DraftBoxScreen(onBack: () -> Unit, onOpenNew: (String) -> Unit, onOpenBatch: (String) -> Unit) {
     val session = LocalSession.current
     var notice by remember { mutableStateOf<String?>(null) }
     GlassScaffold(contentWindowInsets = appContentInsets(),
@@ -35,6 +35,8 @@ fun DraftBoxScreen(onBack: () -> Unit, onOpenNew: (String) -> Unit) {
                             if (draft.orderId == null) onOpenNew(draft.id)
                             else notice = "这份草稿属于单号 " + (draft.orderSn ?: "") + " 的工单。请打开那张工单，点右上角的“编辑”继续。"
                         }
+                        FormTitle("批量报修草稿与结果")
+                        DraftList(session.batchFaultDraftScope, DraftTarget.Everything) { onOpenBatch(it.id) }
                         listOf("维修完成" to session.repairDraftScope,
                             "保养完成" to (session.repairDraftScope + ":pool:maintain"),
                             "精度完成" to (session.repairDraftScope + ":pool:precise")).forEach { (title, draftScope) ->

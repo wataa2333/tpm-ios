@@ -14,6 +14,40 @@ enum class PoolKind(val path: String, val title: String) {
     val stateKey: String get() = path + "State"
     /** The original pools default to the RECEIVED state: orders waiting to be taken. */
     fun waitingFilters() = listOf(filter(stateKey, "RECEIVED"))
+    fun stateFilters(state: String) = when (this) {
+        Maintenance -> com.personal.tpm.data.maintenanceStateFilters(state)
+        Precision -> if (state.isBlank()) emptyList() else listOf(filter(stateKey, state))
+    }
+
+    fun states(): List<Pair<String, String>> = when (this) {
+        Maintenance -> listOf("" to "全部") + com.personal.tpm.data.MaintenanceState.entries.map { it.code to maintenanceStateName(it.code) }
+        Precision -> listOf(
+            "" to "全部", "NOT_START" to "未开始", "APPROVED" to "待审批", "REPORTED" to "待受理",
+            "RECEIVED" to "待接单", "SIGNED" to "待签到", "PRECISED" to "待完成", "VERIFIED" to "待确认",
+            "RESOLVED" to "待复线", "FINISHED" to "已完结", "OVERDUE" to "逾期",
+        )
+    }
+    fun searches(): List<SearchChoice> {
+        val assetPrefix = if (this == Maintenance) "asset." else ""
+        return listOf(
+            SearchChoice("工单名称", nameKey),
+            SearchChoice("工单号", "sn"),
+            SearchChoice("机台号", "${assetPrefix}addressCode"),
+            SearchChoice("资产编码", "${assetPrefix}assetCode"),
+            SearchChoice("资产名称", "${assetPrefix}assetName"),
+        ) + when (this) {
+            Maintenance -> listOf(
+                SearchChoice("保养执行人", "maintainUser.realName"),
+                SearchChoice("受理人", "user.realName"),
+                SearchChoice("保养班组", "userGroup.groupName"),
+            )
+            Precision -> listOf(
+                SearchChoice("检测人", "user.realName"),
+                SearchChoice("受理人", "preciseDispatch.user.realName"),
+                SearchChoice("班组", "preciseDispatch.userGroup.groupName"),
+            )
+        }
+    }
 
     companion object { fun byPath(path: String): PoolKind? = entries.firstOrNull { it.path == path } }
 }

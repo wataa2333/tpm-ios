@@ -31,12 +31,15 @@ fun glassDragOffset(delta: Offset, limit: Float): Offset = Offset(
 fun glassTintColor(tint: Color, fallback: Color): Color = if (tint.isSpecified && tint.alpha > 0f) tint else fallback
 
 /** A translucent primary fill cannot safely reuse white-on-primary text. */
-fun glassContentColor(requested: Color, tint: Color, surface: Color, fallback: Color): Color {
-    val background = tint.copy(alpha = .32f * tint.alpha).compositeOver(surface)
+fun glassContentColor(requested: Color, tint: Color, surface: Color, fallback: Color, tintStrength: Float = .32f): Color {
+    val background = tint.copy(alpha = tintStrength * tint.alpha).compositeOver(surface)
     val foreground = requested.copy(alpha = 1f)
     val light = maxOf(foreground.luminance(), background.luminance())
     val dark = minOf(foreground.luminance(), background.luminance())
-    return if ((light + .05f) / (dark + .05f) >= 4.5f) requested else fallback.copy(alpha = requested.alpha)
+    if ((light + .05f) / (dark + .05f) >= 4.5f) return requested
+    val ink = if (tintStrength <= .32f) fallback
+        else if (background.luminance() > .179f) Color.Black else Color.White
+    return ink.copy(alpha = requested.alpha)
 }
 
 fun glassScale(size: Size, inflation: Float, drag: Offset): Offset {

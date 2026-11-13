@@ -23,18 +23,20 @@ enum class RefSource(val title: String) {
 /** The ways a server-searched list can be searched by. */
 enum class PickerSearch(val label: (RefSource) -> String) {
     Name({ if (it == RefSource.Assets) "名称" else "物料名称" }), Code({ if (it == RefSource.Assets) "资产编码" else "料号" }),
-    Recipient({ "领用人" }), OutNumber({ "出库单号" });
+    Recipient({ "领用人" }), OutNumber({ "出库单号" }), Machine({ "机台号" });
 
     fun field(source: RefSource): String = when (this) {
         Name -> when (source) { RefSource.Assets -> "assetName"; RefSource.Materials -> "materialDesc"; else -> "material.materialDesc" }
         Code -> when (source) { RefSource.Assets -> "assetCode"; RefSource.Materials -> "materialCode"; else -> "material.materialCode" }
         Recipient -> "outbound.recipientUser.realName"
         OutNumber -> "outbound.outNumber"
+        Machine -> "addressCode"
     }
 }
 
 fun searchModes(source: RefSource): List<PickerSearch> = when (source) {
-    RefSource.Assets, RefSource.Materials -> listOf(PickerSearch.Name, PickerSearch.Code)
+    RefSource.Assets -> listOf(PickerSearch.Name, PickerSearch.Code, PickerSearch.Machine)
+    RefSource.Materials -> listOf(PickerSearch.Name, PickerSearch.Code)
     RefSource.OutboundMaterials -> listOf(PickerSearch.Name, PickerSearch.Code, PickerSearch.Recipient, PickerSearch.OutNumber)
     else -> emptyList()
 }
@@ -73,6 +75,7 @@ fun referenceKey(source: RefSource, value: Jv): String {
         RefSource.Divisions -> listOf("divisionId", "id")
         RefSource.Projects -> listOf("projectCode", "id")
         RefSource.FaultTypes -> listOf("key", "id")
+        RefSource.Assets -> listOf("assetId", "id")
         else -> listOf("id")
     }
     for (key in keys) value[key].text.takeIf { it.isNotEmpty() }?.let { return it }
@@ -90,7 +93,12 @@ class PickerPrefs(context: Context) {
 
     fun lists(scope: String, source: RefSource): PickerLists = try {
         val json = JSONObject(prefs.getString(listKey(scope, source), null) ?: "{}")
-        fun read(name: String) = json.optJSONArray(name)?.let { array -> List(array.length()) { entryFrom(array.getJSONObject(it)) } } ?: emptyList()
+        fun read(name: String) = json.optJSONArray(name)?.let { array ->
+            List(array.length()) {
+                val entry = entryFrom(array.getJSONObject(it))
+                if (source == RefSource.Assets) entry.copy(key = referenceKey(source, entry.value)) else entry
+            }.distinctBy(PickerEntry::key)
+        } ?: emptyList()
         PickerLists(read("pins"), read("recents"))
     } catch (e: Exception) { PickerLists() }
 

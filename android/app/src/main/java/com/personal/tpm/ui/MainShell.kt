@@ -115,8 +115,9 @@ private typealias Tab = GlassTab
 @Composable
 fun MainShell(
     openList: (String) -> Unit, openPool: (PoolKind, String) -> Unit, openOrder: (OrderKind, String) -> Unit,
-    openTextRepairQuery: () -> Unit,
-    openWork: (WorkList) -> Unit, openQuery: (com.personal.tpm.data.FaultSearchField, String) -> Unit, openDrafts: () -> Unit, openNew: (FaultTemplate) -> Unit, openQuick: () -> Unit, openDev: () -> Unit, openDashboard: () -> Unit, openPrecision: () -> Unit, openMaintenanceStats: () -> Unit, openQuerySettings: () -> Unit, openPoolOrder: (PoolKind, String) -> Unit = { _, _ -> },
+    openTextRepairQuery: () -> Unit, openCompletedOrders: () -> Unit, openAssetReports: (String) -> Unit,
+    reportAsset: (com.personal.tpm.data.Jv) -> Unit, openSelectedReports: (List<String>) -> Unit,
+    openWork: (WorkList) -> Unit, openQuery: (com.personal.tpm.data.FaultSearchField, String) -> Unit, openDrafts: () -> Unit, openNew: (FaultTemplate) -> Unit, openBatchReport: (FaultTemplate) -> Unit, editFaultTemplate: (String) -> Unit, openQuick: () -> Unit, openDev: () -> Unit, openDashboard: () -> Unit, openPrecision: () -> Unit, openMaintenanceStats: () -> Unit, openQuerySettings: () -> Unit, openPoolOrder: (PoolKind, String) -> Unit = { _, _ -> },
 ) {
     val session = LocalSession.current
     val auth by session.auth.collectAsState()
@@ -130,20 +131,12 @@ fun MainShell(
     val pull = rememberPullToRefreshState()
     var mineBusy by remember { mutableStateOf(false) }
     val homeVm = viewModel<HomeViewModel>(factory = viewModelFactory { initializer { HomeViewModel(session) } })
-    val launchReady = LocalLaunchReady.current
-    LaunchedEffect(homeVm.loading) {
-        if (!homeVm.loading) { androidx.compose.runtime.withFrameNanos { }; launchReady() }
-    }
     val todoVm = viewModel<TodoViewModel>(factory = viewModelFactory { initializer { TodoViewModel(session, autoStart = false) } })
     val workspaceVm = viewModel<WorkspaceViewModel>(factory = viewModelFactory { initializer { WorkspaceViewModel(session, autoStart = false) } })
-    val launchFinished = LocalLaunchFinished.current
-    LaunchedEffect(launchFinished, selected) {
-        if (launchFinished) {
-            // Badge refresh follows the reveal; workspace queries start only when that tab is needed.
-            kotlinx.coroutines.delay(150)
-            todoVm.ensureStarted()
-            if (selected == 2) workspaceVm.ensureStarted()
-        }
+    val startupComplete = LocalStartupComplete.current
+    LaunchedEffect(startupComplete, todoVm) { if (startupComplete) todoVm.ensureStarted() }
+    LaunchedEffect(startupComplete, selected, workspaceVm) {
+        if (startupComplete && selected == 2) workspaceVm.ensureStarted()
     }
     val gridState = rememberLazyGridState()
     val workspaceGrid = rememberLazyGridState()
@@ -152,8 +145,14 @@ fun MainShell(
     val tabs = listOf(Tab("主页", Icons.Filled.Home), Tab("我的待办", Icons.Filled.Checklist), Tab("工作台", Icons.Filled.Dashboard), Tab(mineTitle, Icons.Filled.AccountCircle), Tab("新建报修", Icons.Filled.Add))
     val tabOrder = listOf(0, 1, 4, 2, 3)
     // Each tab starts with its big title open. Selecting orders belongs to the todo tab: leaving it ends the selection.
-    LaunchedEffect(selected) { if (selected == 0) homeVm.onShown(); bar.expand(); if (selected != 1) todoVm.batch.end() }
-    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { if (selected == 0) homeVm.onShown() }
+    LaunchedEffect(startupComplete, selected) {
+        if (startupComplete && selected == 0) homeVm.onShown()
+        bar.expand()
+        if (selected != 1) todoVm.batch.end()
+    }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        if (startupComplete && selected == 0) homeVm.onShown()
+    }
     val selectingTodos = selected == 1 && todoVm.batch.active
     val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
     LaunchedEffect(todoVm.batch.notice) { todoVm.batch.notice?.let { snackbar.showSnackbar(it); todoVm.batch.notice = null } }
@@ -170,9 +169,9 @@ fun MainShell(
 
     GlassMainFrame(
         topBar = {
-            val working = switching || mineBusy ||
+            val working = startupComplete && (switching || mineBusy ||
                 (selected == 0 && (homeVm.loading || homeVm.refreshing)) || (selected == 1 && (todoVm.loading || todoVm.refreshing)) ||
-                (selected == 2 && (workspaceVm.loading || workspaceVm.refreshing))
+                (selected == 2 && (workspaceVm.loading || workspaceVm.refreshing)))
             val pulling = if ((selected == 0 && homeVm.refreshing) || (selected == 1 && todoVm.refreshing) || (selected == 2 && workspaceVm.refreshing)) 0f else if (selected <= 2) pull.distanceFraction else 0f
             CollapsingTopBar(
                 title = if (selected == 3) "我的" else tabs[selected].title, state = bar, loading = working, pull = pulling,
@@ -217,7 +216,7 @@ fun MainShell(
                 // The tab bar and the batch bar change places by a cross-fade while the room between them grows or shrinks (no slide: a slide down on top
                 // of the shrinking room made the bar fall away).
                 transitionSpec = { (androidx.compose.animation.fadeIn(tween(Motion.Slow, easing = Motion.Arrive)) togetherWith androidx.compose.animation.fadeOut(tween(Motion.Fast, easing = Motion.Leave))).using(androidx.compose.animation.SizeTransform(clip = true) { _, _ -> tween(Motion.Slow, easing = Motion.Change) }) },
-            ) { selectingNow -> if (selectingNow) BatchBar(todoVm.batch) { todoVm.rows.mapNotNull { batchItem(it) } } else if (AppPreferences.liquidGlass) {
+            ) { selectingNow -> if (selectingNow) BatchBar(todoVm.batch, reportSelected = openSelectedReports) { todoVm.rows.mapNotNull { batchItem(it) } } else if (AppPreferences.liquidGlass) {
                 GlassBottomBar(tabOrder.map(tabs::get), tabOrder.indexOf(selected), todoVm.badge) { position ->
                     val index = tabOrder[position]
                     if (selected != index) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); selected = index }
@@ -252,10 +251,10 @@ fun MainShell(
                             androidx.compose.animation.Crossfade(targetState = selected, animationSpec = tween(Motion.Normal, easing = Motion.Change), label = "tabs") { tab ->
                             when (tab) {
                                 0 -> HomeTab(homeVm, gridState, pull, nested, openList, openPool)
-                                1 -> TodoTab(todoVm, todoState, pull, nested, openOrder, openPoolOrder)
+                                1 -> TodoTab(todoVm, todoState, pull, nested, openOrder, openCompletedOrders, openPoolOrder, openAssetReports, reportAsset)
                                 2 -> WorkspaceTab(workspaceVm, workspaceGrid, pull, nested, openWork, openQuery, openDashboard, openPrecision, openMaintenanceStats, openTextRepairQuery)
                                 3 -> MineTab(session, nested, onBusy = { mineBusy = it }, onChooseFactory = { choosingFactory = true }, openDrafts = openDrafts, openDev = openDev, openQuerySettings = openQuerySettings)
-                                4 -> FaultTemplateTab(nested, openNew)
+                                4 -> FaultTemplateTab(nested, openNew, openBatchReport, editFaultTemplate)
                                 else -> Unit
                             }
                             }

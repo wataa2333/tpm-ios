@@ -71,7 +71,7 @@ fun GlassTonalButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding, interactionSource: MutableInteractionSource? = null,
     content: @Composable RowScope.() -> Unit) {
     if (!AppPreferences.liquidGlass) FilledTonalButton(onClick, modifier, enabled, shape, colors, elevation, border, contentPadding, interactionSource, content)
-    else GlassActionButton(onClick, modifier, enabled, shape, colors, null, border, contentPadding, interactionSource, content)
+    else GlassActionButton(onClick, modifier, enabled, shape, colors, null, border, contentPadding, interactionSource, content = content)
 }
 
 @Composable

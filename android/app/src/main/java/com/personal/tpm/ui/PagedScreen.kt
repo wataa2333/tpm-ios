@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import com.personal.tpm.ui.ScrollableLazyColumn as LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -37,6 +38,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextAlign
@@ -47,6 +49,7 @@ import com.personal.tpm.data.Jv
 import com.personal.tpm.data.Session
 import com.personal.tpm.data.batchItem
 import com.personal.tpm.data.filter
+import com.personal.tpm.data.SearchCondition
 import com.personal.tpm.data.serverPageCount
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -59,15 +62,17 @@ class SearchChoice(val label: String, val key: String)
 
 /**
  * A plain paged list the server answers with `{content, last, totalElements}`: the waiting pools, the asset ledger, ERP outbound orders, ERP
- * stock. [baseFilters] are always sent; the search box adds one more on the field of the chosen [searches] entry.
+ * stock. Search conditions are combined with the page's base filters before requesting results.
  */
 class PagedViewModel(
     private val session: Session, private val page: String, private var baseFilters: List<JSONObject>, val searches: List<SearchChoice>, private val independent: Boolean = false,
 ) : ViewModel() {
     var query by mutableStateOf(""); private set
     var choice by mutableStateOf(0); private set
-    var rows by mutableStateOf<List<Jv>>(emptyList()); private set
-    var last by mutableStateOf(true); private set
+    var conditions by mutableStateOf<List<SearchCondition>>(emptyList()); private set
+    internal var cardResults by mutableStateOf(OrderCardResults()); private set
+    val rows: List<Jv> get() = cardResults.rows
+    val last: Boolean get() = cardResults.lastPage
     var total by mutableStateOf<Int?>(null); private set
     var loading by mutableStateOf(true); private set
     var refreshing by mutableStateOf(false); private set
@@ -75,31 +80,41 @@ class PagedViewModel(
     var error by mutableStateOf<String?>(null)
     val expanded = mutableStateMapOf<String, Boolean>()
     /** Selecting several orders to handle them at once (the ERP outbound list). */
-    val batch = BatchSelection()
+    val batch = BatchSelection(allowReports = page == PoolKind.Maintenance.page || page == PoolKind.Precision.page)
     private var ticket = 0
 
     init { reload() }
     init { viewModelScope.launch { session.changed.drop(1).collect { reload() } } }
-    init { if (independent) viewModelScope.launch { session.queryAccounts?.changes?.drop(1)?.collect { rows = emptyList(); total = null; expanded.clear(); batch.end(); reload() } } }
+    init { if (independent) viewModelScope.launch { session.queryAccounts?.changes?.drop(1)?.collect { cardResults = OrderCardResults(); total = null; expanded.clear(); batch.end(); reload() } } }
 
     fun search(text: String) { val trimmed = text.trim(); if (trimmed != query) { query = trimmed; reload() } }
     fun choose(index: Int) { if (index != choice) { choice = index; if (query.isNotEmpty()) reload() } }
+    fun changeConditions(value: List<SearchCondition>) {
+        if (conditions == value) return
+        conditions = value
+        cardResults = OrderCardResults()
+        total = null
+        batch.clear()
+        reload()
+    }
     fun changeFilters(filters: List<JSONObject>) {
         if (baseFilters.map { it.toString() } == filters.map { it.toString() }) return
-        baseFilters = filters; rows = emptyList(); total = null; expanded.clear(); batch.end(); reload()
+        baseFilters = filters; cardResults = OrderCardResults(); total = null; expanded.clear(); batch.end(); reload()
     }
 
-    private fun filters() = baseFilters + if (query.isEmpty()) emptyList() else listOf(filter(searches[choice].key, query, "like"))
+    private fun filters() = baseFilters + conditions.map(SearchCondition::toFilter) +
+        if (query.isEmpty()) emptyList() else listOf(filter(searches[choice].key, query, "like"))
 
     fun reload(pull: Boolean = false) {
         val mine = ++ticket
-        val snapshot = "$choice|$query"
+        val snapshot = "$choice|$query|$conditions"
         loading = true; loadingMore = false; refreshing = pull; error = null
         viewModelScope.launch {
             try {
                 val answer = if (independent) session.readPage(page, 0, filters()) else session.page(page, 0, filters())
-                if (mine != ticket || snapshot != "$choice|$query") return@launch
-                rows = answer["content"].array; last = answer["last"].bool; total = serverPageCount(answer)
+                if (mine != ticket) return@launch
+                cardResults = cardResults.replace(answer["content"].array, snapshot, answer["last"].bool)
+                total = serverPageCount(answer)
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { if (mine == ticket) error = e.message ?: "加载失败" }
             finally { if (mine == ticket) { loading = false; refreshing = false } }
@@ -109,13 +124,14 @@ class PagedViewModel(
     fun loadMore() {
         if (loading || loadingMore || last) return
         val mine = ticket
-        val snapshot = "$choice|$query"
+        if (!cardResults.matchesQuery("$choice|$query|$conditions")) return
         loadingMore = true
         viewModelScope.launch {
             try {
                 val answer = if (independent) session.readPage(page, rows.size, filters()) else session.page(page, rows.size, filters())
-                if (mine != ticket || snapshot != "$choice|$query") return@launch
-                rows = rows + answer["content"].array; last = answer["last"].bool; total = serverPageCount(answer) ?: total
+                if (mine != ticket) return@launch
+                cardResults = cardResults.append(answer["content"].array, answer["last"].bool)
+                total = serverPageCount(answer) ?: total
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { if (mine == ticket) error = e.message ?: "加载失败" }
             finally { if (mine == ticket) loadingMore = false }
@@ -133,6 +149,7 @@ fun PagedScreen(
     vm: PagedViewModel, title: String, emptyText: String, modelOf: (Jv, Int) -> CardModel, onBack: () -> Unit, open: ((CardModel, Jv) -> Unit)? = null,
     onNew: (() -> Unit)? = null, batchKind: com.personal.tpm.data.OrderKind? = null, openNotice: String? = null, cardType: CardType = CardType.Fault,
     reportAsset: ((Jv) -> Unit)? = null, poolKind: PoolKind? = null, extraFilters: (@Composable () -> Unit)? = null,
+    reportSelected: ((List<String>) -> Unit)? = null,
 ) {
     val skeletonCount = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp / 80 + 2).coerceIn(4, 40)
     var noticeShown by remember { mutableStateOf(false) }
@@ -140,14 +157,23 @@ fun PagedScreen(
     val batch = vm.batch
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     val listState = rememberLazyListState()
-    AutoLoadMore(listState, vm.rows.size, !vm.loading && !vm.last && vm.error == null) { vm.loadMore() }
+    val idField = poolKind?.idKey ?: when (cardType) {
+        CardType.Asset -> "assetId"
+        CardType.Erp -> "outboundId"
+        CardType.Stock -> "id"
+        else -> "faultId"
+    }
+    val cards = rememberDisplayedOrderCards(vm.cardResults, listState, idField)
+    AutoLoadMore(listState, vm.rows.size, !cards.updating && !vm.loading && !vm.last && vm.error == null) { vm.loadMore() }
     val scope = rememberCoroutineScope()
     val hide = remember { ScrollHideState() }
     val pull = rememberPullToRefreshState()
     var input by rememberSaveable { mutableStateOf(vm.query) }
+    var searchFocused by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(input) { if (input.trim() != vm.query) { delay(350); vm.search(input) } }
+    LaunchedEffect(vm.conditions) { listState.scrollToItem(0) }
     LaunchedEffect(vm.error) {
         val message = vm.error ?: return@LaunchedEffect
         val result = snackbar.showSnackbar(message, actionLabel = "重试", withDismissAction = true)
@@ -158,12 +184,15 @@ fun PagedScreen(
     androidx.activity.compose.BackHandler(enabled = batch.active) { batch.end() }
     val filtersPagedScreen: @Composable () -> Unit = {
                         Column(Modifier.then(if (AppPreferences.liquidGlass) Modifier else Modifier.scrollHide(hide)).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SearchField(input, { input = it }, "搜索" + vm.searches[vm.choice].label, onSearch = { vm.search(input); focus.clearFocus() }, onChoose = if (vm.searches.size > 1) ({ menu = true }) else null)
+                            SearchField(input, { input = it }, "搜索" + vm.searches[vm.choice].label, onSearch = { vm.search(input); focus.clearFocus() },
+                                modifier = Modifier.onFocusChanged { searchFocused = it.hasFocus },
+                                onChoose = if (vm.searches.size > 1) ({ menu = true }) else null)
                             if (vm.searches.size > 1) Box {
                                 AppOptionSheet(expanded = menu, onDismissRequest = { menu = false }, title = "搜索方式") {
                                     vm.searches.forEachIndexed { index, option -> AppOptionItem(text = { AnimatedLabel(option.label) }, selected = index == vm.choice, onClick = { menu = false; vm.choose(index) }) }
                                 }
                             }
+                            SearchConditionsBar(vm.searches, vm.conditions, vm::changeConditions, searching = searchFocused || input.isNotBlank())
                             extraFilters?.invoke()
                         }
     }
@@ -171,7 +200,7 @@ fun PagedScreen(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         floatingOverlay = { if (onNew != null) NewButton(visible = !batch.active, label = "新建领料单", onClick = onNew) },
-        bottomBar = { if (batchKind != null || poolKind != null) BatchBarHost(batch.active) { BatchBar(batch) { vm.rows.mapNotNull { selectedItem(it) } } } },
+        bottomBar = { if (batchKind != null || poolKind != null) BatchBarHost(batch.active) { BatchBar(batch, reportSelected) { vm.rows.mapNotNull { selectedItem(it) } } } },
         topBar = {
             AppTopBar(
                 title = title, subtitle = vm.total?.let { "共 $it 条" }, onBack = onBack,
@@ -192,7 +221,7 @@ fun PagedScreen(
                     Column(Modifier.fillMaxSize()) {
                         if (!AppPreferences.liquidGlass) filtersPagedScreen()
                         PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.reload(pull = true) }, state = pull, indicator = {}, modifier = Modifier.weight(1f).fillMaxWidth()) {
-                            val dim by animateFloatAsState(if (vm.loading && vm.rows.isNotEmpty()) 0.45f else 1f, tween(Motion.Fast, easing = Motion.Change), label = "dim")
+                            val dim by animateFloatAsState(if (vm.loading && !vm.refreshing && vm.rows.isNotEmpty()) 0.45f else 1f, tween(Motion.Fast, easing = Motion.Change), label = "dim")
                             Box(Modifier.fillMaxSize().then(if (AppPreferences.liquidGlass) Modifier else Modifier.nestedScroll(hide.connection))) {
                                 LazyColumn(
                                     state = listState, modifier = Modifier.fillMaxSize().then(if (dim < 1f) Modifier.graphicsLayer { alpha = dim } else Modifier),
@@ -200,16 +229,15 @@ fun PagedScreen(
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
                                     if (AppPreferences.liquidGlass) item(key = "glass-filters") { filtersPagedScreen() }
-                                    if (vm.loading && vm.rows.isEmpty()) items(skeletonCount, key = { "skeleton$it" }, contentType = { "skeleton" }) { SkeletonCard(fadeItem(skeleton = true), cardType) }
-                                    // The key is the position: a page that shifts under the list can repeat a row, and a repeated key crashes a lazy list (and building a card just for its key was slow).
-                                    items(vm.rows.size, key = { "row#$it" }, contentType = { "card" }) { index ->
-                                        val row = vm.rows[index]
-                                        val model = remember(row) { modelOf(row, index) }
+                                    if (vm.loading && cards.rows.isEmpty()) items(skeletonCount, key = { "skeleton$it" }, contentType = { "skeleton" }) { SkeletonCard(fadeItem(skeleton = true), cardType) }
+                                    itemsIndexed(cards.rows, key = { _, card -> card.key }, contentType = { _, _ -> "card" }) { index, card ->
+                                        val row = card.row
+                                        val model = remember(row, index) { modelOf(row, index) }
                                         val entry = remember(row) { selectedItem(row) }
                                         OrderCard(
                                             model, vm.expanded[model.key] == true,
                                             { val opening = vm.expanded[model.key] != true; vm.expanded[model.key] = opening; if (opening && openNotice != null) noticeShown = true },
-                                            fadeItem(),
+                                            fadeItem().then(cards.exitMotion(card.key)),
                                             onOpen = if (open != null && model.openId.isNotEmpty()) ({ open(model, row) }) else null,
                                             bottomAction = if(reportAsset!=null && row["assetId"].text.isNotBlank() && row["assetCode"].text.isNotBlank()) ({
                                                 AssetReportButton(onClick={reportAsset(row)},modifier=Modifier.fillMaxWidth().padding(top=12.dp))
@@ -219,7 +247,7 @@ fun PagedScreen(
                                     }
                                     item(contentType = "footer") {
                                         when {
-                                            !vm.loading && vm.rows.isEmpty() && vm.error == null -> EmptyState(emptyText)
+                                            !vm.loading && cards.rows.isEmpty() && vm.error == null -> EmptyState(emptyText)
                                             // More rows are read only when the list is pulled up past its end (the loading animation of the top bar runs then).
                                             vm.rows.isNotEmpty() && !vm.last -> { LoadMoreFooter(vm.loadingMore) }
                                             vm.rows.isNotEmpty() -> AnimatedLabel(vm.total?.let { "共 $it 条" } ?: "已显示全部 ${vm.rows.size} 条", Modifier.fillMaxWidth().padding(8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)

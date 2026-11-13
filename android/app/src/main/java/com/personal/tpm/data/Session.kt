@@ -109,6 +109,7 @@ class Session(context: Context, private val queryOnly: Boolean = false, private 
     val draftScope: String get() = "$accountKey#$currentFactoryId"
     /** The repair-result form and the ERP form keep their own local drafts, apart from the repair-report drafts. */
     val repairDraftScope: String get() = "$draftScope|repair"
+    val batchFaultDraftScope: String get() = "$draftScope|batch-fault"
     val erpDraftScope: String get() = "$draftScope|erp"
 
     private fun update(value: JSONObject) {

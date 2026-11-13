@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -45,6 +46,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -75,12 +78,13 @@ class HomeViewModel(private val session: Session) : ViewModel() {
     var refreshing by mutableStateOf(false); private set
     var loading by mutableStateOf(true); private set
     var error by mutableStateOf<String?>(null); private set
+    private var started = false
     private var ticket = 0
 
-    init { reload() }
-    init { viewModelScope.launch { session.changed.drop(1).collect { reload() } } }
+    init { viewModelScope.launch { session.changed.drop(1).collect { if (started) reload() } } }
 
     fun reload(pull: Boolean = false) {
+        started = true
         val mine = ++ticket
         refreshing = pull; loading = true
         viewModelScope.launch {
@@ -117,7 +121,7 @@ class HomeViewModel(private val session: Session) : ViewModel() {
         }
     }
 
-    fun onShown() { if (!loading) reload() }
+    fun onShown() { if (!started || !loading) reload() }
 }
 
 private fun symbolOf(state: FaultState): ImageVector = when (state) {
@@ -141,6 +145,7 @@ fun HomeTab(vm: HomeViewModel, gridState: LazyGridState, pullState: PullToRefres
     // The states the home shows, as on iOS (the "报修" draft state has its own place in the list's strip).
     val cards = listOf(FaultState.Reported, FaultState.Received, FaultState.Signed, FaultState.Repaired, FaultState.Verified, FaultState.Resolved, FaultState.Finished)
     val layout = rememberDashboardLayout("home", listOf("repair", "maintain", "precision"))
+    CompositionLocalProvider(LocalHomeCountsLoading provides vm.loading) {
     PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.reload(pull = true) }, state = pullState, indicator = {}, modifier = Modifier.fillMaxSize()) {
         PageWidth {
             LazyVerticalGrid(
@@ -186,7 +191,10 @@ fun HomeTab(vm: HomeViewModel, gridState: LazyGridState, pullState: PullToRefres
             }
         }
     }
+    }
 }
+
+private val LocalHomeCountsLoading = compositionLocalOf<Boolean?> { null }
 
 @Composable
 fun SectionTitle(text: String) {
@@ -210,7 +218,15 @@ fun AnimatedCount(count: Int?, style: androidx.compose.ui.text.TextStyle, color:
             if (initialState == null) fadeIn(tween(Motion.Normal, easing = Motion.Change)) togetherWith fadeOut(tween(Motion.Instant, easing = Motion.Change))
             else (slideInVertically(tween(Motion.Slow, easing = Motion.Change)) { it / 2 } + fadeIn(tween(Motion.Slow, easing = Motion.Change))) togetherWith (slideOutVertically(tween(Motion.Slow, easing = Motion.Change)) { -it / 2 } + fadeOut(tween(Motion.Fast, easing = Motion.Change)))
         },
-    ) { value -> if (value == null) LoadingText("", style.copy(fontWeight = weight), color) else AnimatedLabel(value.toString(), style = style, fontWeight = weight, color = color) }
+    ) { value ->
+        val loading = LocalHomeCountsLoading.current
+        when {
+            value != null -> AnimatedLabel(value.toString(), style = style, fontWeight = weight, color = color)
+            loading == null -> LoadingText("", style.copy(fontWeight = weight), color)
+            loading -> Box(Modifier.width(36.dp).height(22.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape))
+            else -> Text("—", style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }
 
 /** A full-width card: badge, title and a line under it, the number (or an arrow) on the right. */

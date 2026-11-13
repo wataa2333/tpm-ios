@@ -41,17 +41,14 @@ object ThemeConfig {
     enum class Mode(val title: String) { System("跟随系统"), Light("浅色"), Dark("深色") }
 
 
-    /**
-     * The colours on offer. The first six have names of their own (and values chosen to look like their names); the rest are the Material Design
-     * palette (the 500 tones).
-     */
+    /** The named accent colours offered alongside custom hex values. */
     data class Preset(val name: String, val color: Color)
+    private val violetAccent = Color(0xFFA962CF)
     val presets = listOf(
-        Preset("胖次蓝", Color(0xFF039BE5)), Preset("哔哩哔哩粉", Color(0xFFFF6699)), Preset("基佬紫", Color(0xFF8E24AA)),
-        Preset("傲娇红", Color(0xFFE53935)), Preset("咸蛋黄", Color(0xFFFFB300)), Preset("靛蓝", Color(0xFF3949AB)),
-        Preset("橙色", Color(0xFFFB8C00)), Preset("浅绿", Color(0xFF7CB342)),
-        Preset("绿色", Color(0xFF43A047)), Preset("青绿", Color(0xFF00897B)), Preset("青色", Color(0xFF00ACC1)), 
-        Preset("深紫", Color(0xFF5E35B1)), Preset("灰色", Color(0xFF757575)),
+        Preset("晴空蓝", Color(0xFF28B1FF)),
+        Preset("哔哩哔哩粉", Color(0xFFFF6699)), Preset("基佬紫", violetAccent),
+        Preset("傲娇红", Color(0xFFE53935)), Preset("咸蛋黄", Color(0xFFFFB300)),
+        Preset("草苗绿", Color(0xFF43A047)), Preset("水鸭青", Color(0xFF00897B)),
     )
 
     /**
@@ -161,8 +158,12 @@ object ThemeConfig {
     fun load(context: Context) {
         val saved = context.applicationContext.getSharedPreferences("tpm_theme", Context.MODE_PRIVATE)
         prefs = saved
-        accentArgb = saved.getInt("accent", accentArgb)
-        if (accentArgb == 0xFFEC407A.toInt()) accentArgb = 0xFFFF6699.toInt()
+        accentArgb = when (val storedAccent = saved.getInt("accent", accentArgb)) {
+            0xFFEC407A.toInt() -> 0xFFFF6699.toInt()
+            0xFF8E24AA.toInt() -> violetAccent.toArgb()
+            0xFFFB8C00.toInt() -> presets.first().color.toArgb()
+            else -> storedAccent
+        }
         // By default the colour changes at every start, the look follows the system (light or dark), and the loading animation is the wave.
         randomValue = saved.getBoolean("random", true)
         if (randomValue) shuffleAccent()

@@ -1,6 +1,5 @@
 package com.personal.tpm.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -41,7 +40,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.ImeAction
@@ -68,8 +66,9 @@ enum class WorkList(val key: String, val title: String, val page: String) {
 
     fun base(): List<JSONObject> = if (this == Stock) listOf(Jv.obj("field" to "onhandQty", "operator" to "gt", "value" to 0)) else emptyList()
     fun searches(): List<SearchChoice> = when (this) {
-        Assets -> listOf(SearchChoice("名称", "assetName"), SearchChoice("编码", "assetCode"))
-        Outbound -> listOf(SearchChoice("出库单号", "outNumber"))
+        Assets -> listOf(SearchChoice("名称", "assetName"), SearchChoice("编码", "assetCode"), SearchChoice("机台号", "addressCode"))
+        Outbound -> listOf(SearchChoice("出库单号", "outNumber"), SearchChoice("领用人", "recipientUser.realName"),
+            SearchChoice("领用部门", "dept.deptName"))
         Stock -> listOf(SearchChoice("物料名称", "materialDesc"), SearchChoice("料号", "materialCode"))
     }
     companion object { fun byKey(key: String): WorkList? = entries.firstOrNull { it.key == key } }
@@ -175,12 +174,14 @@ fun WorkspaceTab(vm: WorkspaceViewModel, gridState: LazyGridState, pullState: Pu
 
 @Composable
 private fun TextRepairQueryCard(open: () -> Unit) {
-    val shape = MaterialTheme.shapes.large
-    GlassPanelSurface(
-        Modifier.fillMaxWidth(), shape = shape, color = MaterialTheme.colorScheme.surfaceContainerLowest,
+    Card(
+        onClick = open,
+        modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp, pressedElevation = 0.dp),
     ) {
         Row(
-            Modifier.fillMaxWidth().clip(shape).clickable(onClick = open).padding(16.dp),
+            Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
             Badge(Icons.Filled.Search, Color(0xFF007C84))
@@ -200,7 +201,11 @@ private fun TextRepairQueryCard(open: () -> Unit) {
 private fun QuickQueryCard(title: String, icon: ImageVector, tint: Color, placeholder: String, onSearch: (String) -> Unit) {
     var text by rememberSaveable { mutableStateOf("") }
     fun go() { val typed = text.trim(); if (typed.isNotEmpty()) { text = ""; onSearch(typed) } }
-    GlassPanelSurface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLowest) {
+    Card(
+        Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Badge(icon, tint)

@@ -67,7 +67,10 @@ class DraftStore(context: Context) {
         cache = loaded
         return loaded
     }
-    @Synchronized private fun writeAll(all: JSONObject) { cache = all; file.write(all.toString()) }
+    @Synchronized private fun writeAll(all: JSONObject) {
+        cache = all
+        runCatching { file.writeSnapshot(all.toString()) }
+    }
 
     /** Reads the file now (call from a background thread). */
     fun warmUp() { readAll() }
@@ -79,8 +82,8 @@ class DraftStore(context: Context) {
     }
 
     /** Saves a new draft, or replaces the one with the same id. */
-    @Synchronized fun save(draft: FormDraft, scope: String) {
-        val all = readAll()
+    @Synchronized fun save(draft: FormDraft, scope: String, durable: Boolean = false) {
+        val all = if (durable) JSONObject(readAll().toString()) else readAll()
         val list = all.optJSONArray(scope) ?: JSONArray()
         val kept = JSONArray()
         var replaced = false
@@ -90,7 +93,10 @@ class DraftStore(context: Context) {
         }
         if (!replaced) kept.put(draft.toJson())
         all.put(scope, kept)
-        writeAll(all)
+        if (durable) {
+            file.writeSnapshot(all.toString())
+            cache = all
+        } else writeAll(all)
     }
 
     @Synchronized fun remove(id: String, scope: String) {

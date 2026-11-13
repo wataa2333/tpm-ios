@@ -21,7 +21,7 @@ fun faultStateName(code: String): String = if (code.isEmpty()) "全部" else Fau
 enum class FaultSearchField(val label: String, val key: String) {
     Name("报修名称", "faultName"), Number("任务号", "sn"), Machine("机台号", "asset.addressCode"), AssetCode("资产编码", "asset.assetCode"),
     AssetName("资产名称", "asset.assetName"), Address("地址", "asset.address"), Reporter("报修人", "applyUser.realName"),
-    Group("维修班组", "userGroup.groupName"), Repairer("执行人", "repairUser.realName"),
+    Group("维修班组", "userGroup.groupName"), Repairer("维修执行人", "repairUser.realName"),
 }
 
 fun serverPageCount(page: Jv): Int? = page["totalElements"].raw.let { if (it is Number && it.toDouble() >= 0) it.toInt() else null }
@@ -39,13 +39,22 @@ fun dateBetween(field: String, span: DateSpan): JSONObject =
     Jv.obj("field" to field, "value" to JSONArray(listOf(span.days.first.toString(), span.days.second.toString())), "operator" to "dateBetween", "logic" to "and")
 
 /** The search words and the date range: shared by the list and the per-state counts. */
-fun faultSearchFilters(query: String, field: FaultSearchField, span: DateSpan?): List<JSONObject> = buildList {
+fun faultSearchFilters(
+    query: String, field: FaultSearchField, span: DateSpan?, conditions: List<SearchCondition> = emptyList(),
+): List<JSONObject> = buildList {
     if (query.isNotEmpty()) add(filter(field.key, query, "like"))
     if (span != null) add(dateBetween("faultTime", span))
+    addAll(conditions.map(SearchCondition::toFilter))
 }
 
-suspend fun Session.faultPage(state: String, query: String, field: FaultSearchField, span: DateSpan?, offset: Int, limit: Int = 20, independent: Boolean = false): OrderPage {
-    val filters = buildList { if (state.isNotEmpty()) add(filter("faultState", state)); addAll(faultSearchFilters(query, field, span)) }
+suspend fun Session.faultPage(
+    state: String, query: String, field: FaultSearchField, span: DateSpan?, offset: Int, limit: Int = 20,
+    independent: Boolean = false, conditions: List<SearchCondition> = emptyList(),
+): OrderPage {
+    val filters = buildList {
+        if (state.isNotEmpty()) add(filter("faultState", state))
+        addAll(faultSearchFilters(query, field, span, conditions))
+    }
     val page = if (independent) readPage("fault/pageAssetFault", offset, filters, limit) else page("fault/pageAssetFault", offset, filters, limit)
     return OrderPage(page["content"].array, page["last"].bool, serverPageCount(page))
 }

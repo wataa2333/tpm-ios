@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -40,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import com.personal.tpm.data.Jv
@@ -61,6 +63,7 @@ fun FaultDetailScreen(
     id: String, onBack: () -> Unit, onOpenFlow: (String) -> Unit, onOpenTask: (returning: Boolean) -> Unit,
     onEdit: (() -> Unit)? = null, onOpenRepair: () -> Unit = {}, peeking: Boolean = false,
     onReportAsset: ((Jv) -> Unit)? = null, independent: Boolean = false,
+    onAssetReports: ((String) -> Unit)? = null,
 ) {
     val session = LocalSession.current
     val queryAccounts = LocalQueryAccounts.current
@@ -147,11 +150,32 @@ fun FaultDetailScreen(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             // Looking at an order from a selection is reading only: no buttons to take it forward.
-            if (!peeking) Column(Modifier.fillMaxWidth().then(if(onReportAsset!=null) Modifier.navigationBarsPadding() else Modifier)) {
-                operationDetail?.let { d -> TaskActionBar(OrderKind.Fault, d, includeNavigationPadding=onReportAsset==null) { returning -> if (!returning && d["taskInfo"]["category"].text == "REPAIRED") onOpenRepair() else onOpenTask(returning) } }
-                val asset=detail?.get("asset")
-                if(onReportAsset!=null && asset!=null && asset["assetId"].text.isNotBlank() && asset["assetCode"].text.isNotBlank()) {
-                    AssetReportButton(onClick={onReportAsset(asset)},enabled=!loading,modifier=Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp))
+            if (!peeking) {
+                val asset = detail?.get("asset")
+                val code = asset?.get("assetCode")?.text.orEmpty()
+                val showAssets = code.isNotBlank() && (onAssetReports != null || onReportAsset != null)
+                Column(Modifier.fillMaxWidth().then(if (showAssets) Modifier.navigationBarsPadding().padding(bottom = 8.dp) else Modifier)) {
+                    operationDetail?.let { d ->
+                        TaskActionBar(OrderKind.Fault, d, includeNavigationPadding = !showAssets,
+                            verticalPadding = if (showAssets) 4.dp else BarSpec.Vertical) { returning ->
+                            if (!returning && d["taskInfo"]["category"].text == "REPAIRED") onOpenRepair() else onOpenTask(returning)
+                        }
+                    }
+                    if (showAssets && asset != null) Row(
+                        Modifier.fillMaxWidth().padding(horizontal = BarSpec.Horizontal, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(BarSpec.Gap),
+                    ) {
+                        onAssetReports?.let { action ->
+                            SoftButton(onClick = { action(code) }, Modifier.weight(1f).heightIn(min = BarSpec.ButtonHeight), enabled = !loading) {
+                                Text("资产报修记录", textAlign = TextAlign.Center)
+                            }
+                        }
+                        onReportAsset?.let { action ->
+                            SoftButton(onClick = { action(asset) }, Modifier.weight(1f).heightIn(min = BarSpec.ButtonHeight), enabled = !loading) {
+                                Text("用此资产报修", textAlign = TextAlign.Center)
+                            }
+                        }
+                    }
                 }
             }
         },

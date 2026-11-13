@@ -27,9 +27,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.draw.clip
 import androidx.compose.animation.togetherWith
 import com.personal.tpm.ui.ScrollableLazyColumn as LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.runtime.SideEffect
 import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.SideEffect
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -68,6 +67,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
@@ -84,7 +84,9 @@ import java.time.ZoneOffset
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, onOpen: (String) -> Unit, onNew: (() -> Unit)? = null, reportAsset: ((com.personal.tpm.data.Jv) -> Unit)? = null) {
+fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, onOpen: (String) -> Unit, onNew: (() -> Unit)? = null,
+    reportAsset: ((com.personal.tpm.data.Jv) -> Unit)? = null, assetReports: ((String) -> Unit)? = null,
+    reportSelected: ((List<String>) -> Unit)? = null) {
     val skeletonCount = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp / 80 + 2).coerceIn(4, 40)
     val categoryMotion = remember { androidx.compose.animation.core.Animatable(0f) }
     var previousCategory by remember { mutableStateOf(vm.state) }
@@ -148,11 +150,11 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         floatingOverlay = { if (onNew != null) NewButton(visible = !batch.active, label = "新建报修", onClick = onNew) },
-        bottomBar = { BatchBarHost(batch.active) { BatchBar(batch) { vm.rows.map { batchItem(com.personal.tpm.data.OrderKind.Fault, it) } } } },
+        bottomBar = { BatchBarHost(batch.active) { BatchBar(batch, reportSelected) { vm.rows.map { batchItem(com.personal.tpm.data.OrderKind.Fault, it) } } } },
         topBar = {
             AppTopBar(
                 title = title, onBack = onBack,
-                subtitle = vm.total?.let { "共 $it 单" },
+                subtitle = listOfNotNull(vm.assetCode.takeIf(String::isNotBlank), vm.total?.let { "共 $it 单" }).joinToString(" · ").ifBlank { null },
                 loading = vm.loading || vm.refreshing, pull = if (vm.refreshing) 0f else pull.distanceFraction,
                 actions = {
                     SelectButton(batch.active) { if (batch.active) batch.end() else batch.begin() }
@@ -173,12 +175,13 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
                         Box(Modifier.weight(1f).fillMaxWidth()) {
                         val stateCode = vm.state
                         val listState = rememberLazyListState()
-                        LaunchedEffect(stateCode) { listState.scrollToItem(0) }
-                        AutoLoadMore(listState, vm.rows.size, stateCode == vm.state && !vm.loading && !vm.last && vm.error == null) { vm.loadMore() }
+                        val cards = rememberDisplayedOrderCards(vm.cardResults, listState, "faultId")
+                        LaunchedEffect(stateCode, vm.conditions) { listState.scrollToItem(0) }
+                        AutoLoadMore(listState, vm.rows.size, !cards.updating && stateCode == vm.state && !vm.loading && !vm.last && vm.error == null) { vm.loadMore() }
                         if (stateCode == vm.state) SideEffect { activeList = listState }
                         PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.reload(pull = true) }, state = pull, indicator = {}, modifier = Modifier.fillMaxSize()) {
                             // While a search or a date is loading, the old rows stay but dim; they fade out as the new ones fade in.
-                            val dim by animateFloatAsState(if (vm.loading && vm.rows.isNotEmpty()) 0.45f else 1f, tween(Motion.Fast, easing = Motion.Change), label = "dim")
+                            val dim by animateFloatAsState(if (vm.loading && !vm.refreshing && vm.rows.isNotEmpty()) 0.45f else 1f, tween(Motion.Fast, easing = Motion.Change), label = "dim")
                             Box(Modifier.fillMaxSize().then(if (AppPreferences.liquidGlass) Modifier else Modifier.nestedScroll(hide.connection))) {
                                 LazyColumn(
                                     state = listState, modifier = Modifier.fillMaxSize().then(if (dim < 1f) Modifier.graphicsLayer { alpha = dim } else Modifier),
@@ -186,25 +189,32 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
                                     if (AppPreferences.liquidGlass) item(key = "glass-filters") { filtersOrderListScreen() }
-                                    if (vm.loading && vm.rows.isEmpty()) {
+                                    if (vm.loading && cards.rows.isEmpty()) {
                                         items(skeletonCount, key = { "skeleton$it" }, contentType = { "skeleton" }) { SkeletonCard(fadeItem(skeleton = true).then(pageMotion())) }
                                     }
-                                    // The key carries the position: a page that shifts under the list can repeat an order, and a repeated key crashes a lazy list.
-                                    itemsIndexed(vm.rows, key = { index, row -> row["faultId"].text + "#" + index }, contentType = { _, _ -> "order" }) { _, item ->
+                                    items(cards.rows, key = { it.key }, contentType = { "order" }) { card ->
+                                        val item = card.row
                                         val model = remember(item) { faultCardModel(item) }
                                         val entry = remember(item) { batchItem(com.personal.tpm.data.OrderKind.Fault, item) }
+                                        val asset = item["asset"]
+                                        val assetCode = asset["assetCode"].text
+                                        val showHistory = assetReports != null && assetCode.isNotBlank()
+                                        val canReport = reportAsset != null && assetCode.isNotBlank() && asset["assetId"].text.isNotBlank()
                                         OrderCard(
-                                            model, vm.expanded[model.key] == true, { vm.expanded[model.key] = vm.expanded[model.key] != true }, fadeItem().then(pageMotion()),
+                                            model, vm.expanded[model.key] == true, { vm.expanded[model.key] = vm.expanded[model.key] != true }, fadeItem().then(pageMotion()).then(cards.exitMotion(card.key)),
                                             onOpen = { OrderPreview.put("Fault", model.openId, item); onOpen(model.openId) },
-                                            bottomAction = if(reportAsset!=null && item["asset"]["assetId"].text.isNotBlank() && item["asset"]["assetCode"].text.isNotBlank()) ({
-                                                AssetReportButton(onClick={reportAsset(item["asset"])},modifier=Modifier.fillMaxWidth().padding(top=12.dp))
+                                            bottomAction = if (showHistory || canReport) ({
+                                                AssetReportActions(
+                                                    onHistory = assetReports?.takeIf { showHistory }?.let { action -> { action(assetCode) } },
+                                                    onReport = reportAsset?.takeIf { canReport }?.let { action -> { action(asset) } },
+                                                )
                                             }) else null,
                                             selecting = if (batch.active) CardSelecting(batch.contains(entry), batch.isSelectable(entry), { batch.toggle(entry) }, { batch.peeking = entry }) else null,
                                         )
                                     }
                                     item(contentType = "footer") {
                                         when {
-                                            !vm.loading && vm.rows.isEmpty() && vm.error == null -> EmptyState()
+                                            !vm.loading && cards.rows.isEmpty() && vm.error == null -> EmptyState()
                                             // More pages are read only when the list is pulled up past its end (the loading animation of the top bar runs then).
                                             vm.rows.isNotEmpty() && !vm.last -> { LoadMoreFooter(vm.loadingMore) }
                                             vm.rows.isNotEmpty() -> Text(
@@ -232,9 +242,12 @@ fun OrderListScreen(vm: OrderListViewModel, title: String, onBack: () -> Unit, o
 @Composable
 private fun SearchRow(vm: OrderListViewModel, input: String, onInput: (String) -> Unit, focus: FocusManager) {
     var fieldMenu by remember { mutableStateOf(false) }
+    var searchFocused by remember { mutableStateOf(false) }
+    val searchFields = FaultSearchField.entries.filter { vm.assetCode.isBlank() || it != FaultSearchField.AssetCode }
     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextField(
-            value = input, onValueChange = onInput, singleLine = true, modifier = Modifier.fillMaxWidth().glassSearchSurface(),
+            value = input, onValueChange = onInput, singleLine = true,
+            modifier = Modifier.onFocusChanged { searchFocused = it.hasFocus }.fillMaxWidth().glassSearchSurface(),
             placeholder = { AnimatedLabel("搜索" + vm.field.label) },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             trailingIcon = {
@@ -251,11 +264,15 @@ private fun SearchRow(vm: OrderListViewModel, input: String, onInput: (String) -
         )
         Box {
             AppOptionSheet(expanded = fieldMenu, onDismissRequest = { fieldMenu = false }, title = "搜索方式") {
-                FaultSearchField.entries.forEach { option ->
+                searchFields.forEach { option ->
                     AppOptionItem(text = { AnimatedLabel(option.label) }, selected = option == vm.field, onClick = { fieldMenu = false; vm.changeField(option) })
                 }
             }
         }
+        SearchConditionsBar(
+            searchFields.map { SearchChoice(it.label, it.key) },
+            vm.conditions, vm::changeConditions, searching = searchFocused || input.isNotBlank(),
+        )
     }
 }
 
@@ -270,7 +287,7 @@ private fun StatusStrip(vm: OrderListViewModel) {
     val labels = states.map { it.title }
     SingleChoiceGroup(labels, selected, { vm.select(states[it].code) }, scrollable = true,
         counts = states.map { if(it.hasCount) vm.counts[it.code] else null },
-        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
+        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp), liquidGlass = false)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

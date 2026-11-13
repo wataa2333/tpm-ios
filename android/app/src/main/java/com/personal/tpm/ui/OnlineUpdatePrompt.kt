@@ -69,10 +69,7 @@ class OnlineUpdateState(context: Context) {
 @Composable
 fun OnlineUpdatePrompt(state: OnlineUpdateState) {
     val context = LocalContext.current
-    val launchFinished = LocalLaunchFinished.current
-    LaunchedEffect(state, launchFinished) {
-        if (launchFinished) state.check()
-    }
+    LaunchedEffect(state) { state.check() }
     fun open(link: String) {
         try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) }
         catch (_: android.content.ActivityNotFoundException) { return }
@@ -92,7 +89,7 @@ fun OnlineUpdatePrompt(state: OnlineUpdateState) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("当前版本 ${BuildConfig.VERSION_NAME}")
                     Text(update.name)
-                    Text("在应用内下载完整 APK，完成后打开系统安装界面。")
+                    Text("打开安装包下载页，支持在应用内或浏览器下载。")
                 }
             },
             confirmButton = { GlassTextButton(onClick = { downloading = update; state.dismiss() }) { Text("下载") } },

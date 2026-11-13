@@ -50,6 +50,18 @@ class OrdersTest {
         assertTrue(faultSearchFilters("", FaultSearchField.Name, null).isEmpty())
     }
 
+    @Test fun additionalConditionsKeepQuickSearchAndDateFilters() {
+        val span = DateSpan(LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 13))
+        val conditions = listOf(
+            SearchCondition(FaultSearchField.Repairer.key, "甲"),
+            SearchCondition(FaultSearchField.Machine.key, "AB01", exact = true),
+        )
+        val filters = faultSearchFilters("护罩", FaultSearchField.Name, span, conditions).map(::Jv)
+        assertEquals(listOf("faultName", "faultTime", "repairUser.realName", "asset.addressCode"), filters.map { it["field"].text })
+        assertEquals(listOf("like", "dateBetween", "like", "eq"), filters.map { it["operator"].text })
+        assertTrue(filters.all { it["logic"].text == "and" })
+    }
+
     @Test fun jvReadsMissingKeysAsEmptyAndDatesInBothShapes() {
         val value = Jv.parse("""{"a":{"b":5},"t":[2026,10,7,9,5],"s":"2026-10-17 10:00","n":1.5,"i":3}""")
         assertEquals("", value["x"]["y"].text)

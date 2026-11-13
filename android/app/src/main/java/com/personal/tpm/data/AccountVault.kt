@@ -16,8 +16,8 @@ data class SavedAccount(val username: String, val displayName: String, val lastU
  */
 class AccountVault(context: Context) {
     private val file = SecureFile(context, "accounts.bin", "tpm_accounts_v1")
-    private val _accounts = MutableStateFlow(readList())
-    val accounts: StateFlow<List<SavedAccount>> = _accounts.asStateFlow()
+    private val _accounts by lazy { MutableStateFlow(readList()) }
+    val accounts: StateFlow<List<SavedAccount>> by lazy { _accounts.asStateFlow() }
 
     private fun readArray(): JSONArray = try { JSONArray(file.read() ?: "[]") } catch (e: Exception) { JSONArray() }
     private fun readList(): List<SavedAccount> = readArray().let { array ->

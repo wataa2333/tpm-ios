@@ -20,6 +20,7 @@ object AppPreferences {
     val repairPageSizes = listOf(50, 100, 200, 500)
     val repairConcurrencyLevels = listOf(1, 3, 5, 8)
     var repairReadExperiment by mutableStateOf(false); private set
+    var todoCompletionEnabled by mutableStateOf(false); private set
     var repairPageSize by mutableStateOf(500); private set
     var repairConcurrency by mutableStateOf(8); private set
     val effectiveRepairPageSize get() = if (repairReadExperiment) repairPageSize else 500
@@ -52,10 +53,12 @@ object AppPreferences {
             prefs!!.edit().putInt("glassPresetRevision", 115).apply()
         }
         repairReadExperiment = prefs!!.getBoolean("repairReadExperiment", false)
+        todoCompletionEnabled = prefs!!.getBoolean("todoCompletionEnabled", false)
         repairPageSize = prefs!!.getInt("repairPageSize", 500).takeIf { it in repairPageSizes } ?: 500
         repairConcurrency = prefs!!.getInt("repairConcurrency", 8).takeIf { it in repairConcurrencyLevels } ?: 8
     }
     fun updateRepairReadExperiment(on: Boolean) { repairReadExperiment = on; prefs?.edit()?.putBoolean("repairReadExperiment", on)?.apply() }
+    fun updateTodoCompletionEnabled(on: Boolean) { todoCompletionEnabled = on; prefs?.edit()?.putBoolean("todoCompletionEnabled", on)?.apply() }
     fun updateRepairPageSize(value: Int) { require(value in repairPageSizes); repairPageSize = value; prefs?.edit()?.putInt("repairPageSize", value)?.apply() }
     fun updateRepairConcurrency(value: Int) { require(value in repairConcurrencyLevels); repairConcurrency = value; prefs?.edit()?.putInt("repairConcurrency", value)?.apply() }
 }

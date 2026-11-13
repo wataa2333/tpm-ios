@@ -46,6 +46,12 @@ class FormState(val kind: OrderKind) {
     /** Choosing a receiving department also fills in its default assignee (the person can still pick another). */
     fun selectReceiverDepartment(department: Jv) = setAll("dept" to department.raw, "user" to department["acceptUser"].raw)
 
+    fun selectFaultApplicant(user: Jv) = setAll(
+        "applyUser" to user.raw,
+        "applyDept" to (user["depts"].array.firstOrNull()?.raw ?: this["applyDept"].raw),
+        "userPhone" to user["mobile"].text,
+    )
+
     /** Reads the order being edited (or the person's own details for a new one) and the approver steps of the process. */
     suspend fun load(session: Session, existingId: String?, referenceSn: String? = null) {
         loading = true; ready = false; error = null
@@ -99,10 +105,10 @@ class FormState(val kind: OrderKind) {
         for (item in defaultFields(kind)) {
             val choice = prefs.defaultChoice(scope, item.field) ?: continue
             val result = try { resolveReference(session, item.source, choice.value) } catch (e: CancellationException) { throw e } catch (e: Exception) { continue }
-            if (kind == OrderKind.Fault && item.dataKey == "dept") selectReceiverDepartment(result)
-            else {
-                set(item.dataKey, result.raw)
-                if (kind == OrderKind.Fault && item.dataKey == "applyUser") result["depts"].array.firstOrNull()?.let { set("applyDept", it.raw) }
+            when {
+                kind == OrderKind.Fault && item.dataKey == "dept" -> selectReceiverDepartment(result)
+                kind == OrderKind.Fault && item.dataKey == "applyUser" -> selectFaultApplicant(result)
+                else -> set(item.dataKey, result.raw)
             }
         }
     }

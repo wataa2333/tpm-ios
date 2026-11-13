@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.Dp
@@ -140,6 +143,21 @@ fun SoftButton(
 fun AssetReportButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     SoftButton(onClick = onClick, enabled = enabled, modifier = modifier.then(Modifier.heightIn(min = BarSpec.ButtonHeight))) {
         androidx.compose.material3.Text("使用此资产编码进行新建报修", textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    }
+}
+
+@Composable
+internal fun AssetReportActions(onHistory: (() -> Unit)?, onReport: (() -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    if (onHistory == null && onReport == null) return
+    Row(modifier.fillMaxWidth().padding(top = 12.dp),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+        listOf("报修记录" to onHistory, "用此资产报修" to onReport)
+            .forEach { (label, action) ->
+                if (action != null) FilledTonalButton(
+                    onClick = action, enabled = enabled, modifier = Modifier.weight(1f).heightIn(min = BarSpec.ButtonHeight),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 10.dp),
+                ) { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            }
     }
 }
 

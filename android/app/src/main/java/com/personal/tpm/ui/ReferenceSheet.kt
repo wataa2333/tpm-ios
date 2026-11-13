@@ -47,8 +47,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.personal.tpm.data.Jv
@@ -57,16 +59,21 @@ import com.personal.tpm.data.PickerLists
 import com.personal.tpm.data.PickerRules
 import com.personal.tpm.data.PickerSearch
 import com.personal.tpm.data.RefSource
+import com.personal.tpm.data.SearchCondition
 import com.personal.tpm.data.Session
 import com.personal.tpm.data.filter
 import com.personal.tpm.data.materialQuantity
+import com.personal.tpm.data.outboundLineIdentity
 import com.personal.tpm.data.quantityText
 import com.personal.tpm.data.referenceKey
 import com.personal.tpm.data.resolveReference
 import com.personal.tpm.data.searchModes
+import com.personal.tpm.data.serverPageCount
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import org.json.JSONArray
 
 /** One row of a tree (departments, fault types) laid flat: how deep it is, whether it opens, whether it can be chosen. */
 private class TreeRow(val path: String, val node: Jv, val depth: Int, val opens: Boolean, val choosable: Boolean)
@@ -140,6 +147,7 @@ fun ReferenceSheet(
     val session = LocalSession.current
     val prefs = LocalPickerPrefs.current
     val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
     val scopeKey = session.draftScope
     val modes = searchModes(source)
     val paged = source.pagePath != null
@@ -152,7 +160,9 @@ fun ReferenceSheet(
     var closing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
+    var searchFocused by remember { mutableStateOf(false) }
     var committed by remember { mutableStateOf("") }
+    var conditions by remember { mutableStateOf<List<SearchCondition>>(emptyList()) }
     var searchMode by remember { mutableStateOf(PickerSearch.Name) }
     var userMode by remember { mutableStateOf(0) }
     var lists by remember { mutableStateOf(if (source.hasMenu) prefs.lists(scopeKey, source) else PickerLists()) }
@@ -163,8 +173,18 @@ fun ReferenceSheet(
     var hideUsedUp by remember { mutableStateOf(true) }
     val opened = remember { mutableStateListOf<String>() }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val outbound = source == RefSource.OutboundMaterials
+    var generation by remember { mutableStateOf(0) }
+    var rawOffset by remember { mutableStateOf(0) }
 
     suspend fun load(more: Boolean) {
+        if (more && (loading || loadingMore || last || error != null)) return
+        val ticket = if (more) generation else ++generation
+        val offset = if (more) rawOffset else 0
+        val words = committed
+        val mode = searchMode
+        val applied = conditions
+        if (!more) loadingMore = false
         if (more) loadingMore = true else loading = true
         error = null
         try {
@@ -172,24 +192,50 @@ fun ReferenceSheet(
             if (path != null) {
                 val filters = buildList {
                     if (source == RefSource.Materials) add(Jv.obj("field" to "onhandQty", "operator" to "gt", "value" to 0, "logic" to "and"))
-                    if (committed.isNotEmpty()) add(filter(searchMode.field(source), committed, "like"))
+                    if (words.isNotEmpty()) add(filter(mode.field(source), words, "like"))
+                    if (outbound) addAll(applied.map(SearchCondition::toFilter))
                 }
                 // Sort on the server so the date order holds across pages, including searches.
-                val answer = if (source == RefSource.OutboundMaterials) {
+                val answer = if (outbound) {
                     session.request(path, body = Jv.obj(
-                        "offset" to if (more) values.size else 0, "limit" to 20,
+                        "offset" to offset, "limit" to 20,
                         "sort" to "outbound.applyDate", "order" to "desc",
                         "filters" to org.json.JSONArray(filters),
                     ))
-                } else session.page(path, if (more) values.size else 0, filters)
-                values = if (more) values + answer["content"].array else answer["content"].array
-                last = answer["last"].bool
-            } else values = loadWhole(session, source, committed)
+                } else session.page(path, offset, filters)
+                if (ticket != generation) return
+                val content = answer["content"]
+                check(content.raw is JSONArray) { "列表返回格式异常" }
+                val rows = content.array
+                val nextOffset = offset + rows.size
+                val total = serverPageCount(answer)
+                val end = answer["last"].bool || (total != null && nextOffset >= total) ||
+                    (answer["last"].isNull && total == null && rows.size < 20)
+                check(end || rows.isNotEmpty()) { "列表分页未推进，请重试" }
+                val next = if (more) values + rows else rows
+                val merged = if (outbound) next.distinctBy(::outboundLineIdentity) else next
+                check(!outbound || !more || end || merged.size > values.size) { "物料分页未推进，请重试" }
+                values = merged
+                rawOffset = nextOffset
+                last = end
+            } else {
+                val result = loadWhole(session, source, words)
+                if (ticket == generation) values = result
+            }
         } catch (e: CancellationException) { throw e }
-        catch (e: Exception) { error = e.message ?: "加载失败" }
-        finally { loading = false; loadingMore = false }
+        catch (e: Exception) { if (ticket == generation) error = e.message ?: "加载失败" }
+        finally { if (ticket == generation) { loading = false; loadingMore = false } }
     }
-    LaunchedEffect(source, searchMode) { load(false) }
+    LaunchedEffect(source, searchMode, committed, conditions) {
+        if (outbound) {
+            values = emptyList()
+            rawOffset = 0
+        }
+        load(false)
+    }
+    LaunchedEffect(outbound, query) {
+        if (outbound && query.trim() != committed) { delay(350); committed = query.trim() }
+    }
     LaunchedEffect(userMode) {
         if (source == RefSource.Users && userMode == 1 && userGroups.isEmpty()) {
             try { userGroups = session.request("user/getUserGroupsByFactoryId").array }
@@ -209,7 +255,7 @@ fun ReferenceSheet(
     }
     fun finish() { scope.launch { dismiss() } }
     fun choose(value: Jv) {
-        if (selecting || closing) return
+        if (selecting || closing || (outbound && loading)) return
         val key = entryOf(value).key
         if (multiple && key in picked) {
             (onRemove ?: onToggle)(value)
@@ -322,13 +368,22 @@ fun ReferenceSheet(
                 GlassTextButton(onClick = ::finish, enabled = !closing) { AnimatedLabel(if (multiple) "完成（${picked.size}）" else "关闭") }
             }
             SearchField(
-                query, { query = it }, if (modes.isEmpty()) "搜索" else "搜索" + searchMode.label(source),
-                onSearch = { if (paged || source == RefSource.WorkflowUsers) { committed = query.trim(); scope.launch { load(false) } } },
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                query, { query = it; if (outbound && it.isBlank()) committed = "" }, if (modes.isEmpty()) "搜索" else "搜索" + searchMode.label(source),
+                onSearch = {
+                    if (paged || source == RefSource.WorkflowUsers) committed = query.trim()
+                    if (outbound) focus.clearFocus()
+                },
+                modifier = Modifier.onFocusChanged { searchFocused = it.hasFocus }.padding(horizontal = 16.dp, vertical = 8.dp),
             )
             // The ways of searching: a row of chips (it scrolls sideways if the screen is narrow), each on one line.
             if (modes.isNotEmpty()) SingleChoiceGroup(modes.map { it.label(source) }, modes.indexOf(searchMode), { searchMode = modes[it] },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp), scrollable = modes.size > 3)
+            if (outbound) SearchConditionsBar(
+                modes.map { SearchChoice(it.label(source), it.field(source)) }, conditions,
+                onChange = { conditions = it },
+                modifier = Modifier.padding(horizontal = 16.dp),
+                searching = searchFocused || query.isNotBlank(),
+            )
             if (source == RefSource.Users) SingleChoiceGroup(listOf("按姓名", "按班组"), userMode, { userMode = it },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
             Box(Modifier.fillMaxWidth().padding(vertical = 2.dp)) { if (loading || selecting) AppProgressIndicator(Modifier.fillMaxWidth()) }
@@ -411,10 +466,10 @@ fun ReferenceSheet(
                     else -> items(shown.size, key = { "all-" + referenceKey(source, shown[it]) + it }) { Box(fadeItem()) { PickerRow(entryOf(shown[it])) } }
                 }
                 if (paged && values.isNotEmpty() && !last) item(key = "more") {
-                    LaunchedEffect(values.size) { if (!loading && !loadingMore) load(true) }
+                    LaunchedEffect(rawOffset, loading) { if (!loading) load(true) }
                     LoadMoreFooter(loadingMore)
                 }
-                if (!loading && error == null && (if (treeSource) tree.isEmpty() else if (source == RefSource.Users && userMode == 1) userGroups.isEmpty() else shown.isEmpty())) item(key = "empty") { EmptyState("没有匹配的内容") }
+                if (!loading && error == null && (!outbound || last) && (if (treeSource) tree.isEmpty() else if (source == RefSource.Users && userMode == 1) userGroups.isEmpty() else shown.isEmpty())) item(key = "empty") { EmptyState("没有匹配的内容") }
             }
             if (multiple) GlassBottomSurface() {
                 GlassActionButton(onClick = { finish() }, modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) { AnimatedLabel(if (picked.isEmpty()) "完成" else "完成（已选 ${picked.size} 项）") }

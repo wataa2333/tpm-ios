@@ -11,6 +11,7 @@ import com.personal.tpm.data.FaultSearchField
 import com.personal.tpm.data.FaultState
 import com.personal.tpm.data.Jv
 import com.personal.tpm.data.Session
+import com.personal.tpm.data.SearchCondition
 import com.personal.tpm.data.faultPage
 import com.personal.tpm.data.faultSearchFilters
 import com.personal.tpm.data.filter
@@ -32,17 +33,24 @@ class OrderListViewModel(
     initialState: String,
     initialQuery: String,
     initialField: FaultSearchField,
+    val assetCode: String = "",
 ) : ViewModel() {
     /** A page opened from a quick query: every matching order whatever its status, so no status strip. */
-    val searchMode = initialQuery.isNotEmpty()
+    val searchMode = initialQuery.isNotEmpty() || assetCode.isNotBlank()
+    private val assetCondition = assetCode.takeIf(String::isNotBlank)?.let {
+        SearchCondition(FaultSearchField.AssetCode.key, it, exact = true)
+    }
+    private fun appliedConditions() = listOfNotNull(assetCondition) + conditions
 
     var state by mutableStateOf(initialState); private set
     var query by mutableStateOf(initialQuery); private set
     var field by mutableStateOf(initialField); private set
     var span by mutableStateOf<DateSpan?>(null); private set
+    var conditions by mutableStateOf<List<SearchCondition>>(emptyList()); private set
 
-    var rows by mutableStateOf<List<Jv>>(emptyList()); private set
-    var last by mutableStateOf(true); private set
+    internal var cardResults by mutableStateOf(OrderCardResults()); private set
+    val rows: List<Jv> get() = cardResults.rows
+    val last: Boolean get() = cardResults.lastPage
     var total by mutableStateOf<Int?>(null); private set
     var counts by mutableStateOf<Map<String, Int>>(emptyMap()); private set
     var loading by mutableStateOf(true); private set
@@ -51,7 +59,7 @@ class OrderListViewModel(
     var error by mutableStateOf<String?>(null)
 
     /** Selecting several orders to handle them at once. */
-    val batch = BatchSelection()
+    val batch = BatchSelection(allowReports = true)
 
     /** Which cards are open (by key). Kept here, not in each card, so the cards are plain and cheap to scroll, and the open ones stay open. */
     val expanded = mutableStateMapOf<String, Boolean>()
@@ -60,26 +68,36 @@ class OrderListViewModel(
 
     init { reload(withCounts = true) }
     init { viewModelScope.launch { session.changed.drop(1).collect { reload(withCounts = true) } } }
-    init { if (searchMode) viewModelScope.launch { session.queryAccounts?.changes?.drop(1)?.collect { rows = emptyList(); counts = emptyMap(); batch.end(); reload(withCounts = true) } } }
+    init { if (searchMode) viewModelScope.launch { session.queryAccounts?.changes?.drop(1)?.collect { cardResults = OrderCardResults(); counts = emptyMap(); batch.end(); reload(withCounts = true) } } }
 
-    private fun key() = "$state|$query|${field.key}|${span?.key}|${session.queryRevision}"
+    private fun key() = "$state|$query|${field.key}|${span?.key}|${session.queryRevision}|$conditions"
 
     /** Another status: the old rows go at once (the page slides to the new status and shows grey cards while it loads). */
-    fun select(code: String) { if (code != state) { state = code; rows = emptyList(); last = true; total = null; reload(withCounts = false) } }
+    fun select(code: String) { if (code != state) { state = code; cardResults = OrderCardResults(); total = null; reload(withCounts = false) } }
     fun search(text: String) { val trimmed = text.trim(); if (trimmed != query) { query = trimmed; reload(withCounts = true) } }
     fun changeField(value: FaultSearchField) { if (value != field) { field = value; if (query.isNotEmpty()) reload(withCounts = true) } }
     fun changeSpan(value: DateSpan?) { span = value; reload(withCounts = true) }
+    fun changeConditions(value: List<SearchCondition>) {
+        if (conditions == value) return
+        conditions = value
+        cardResults = OrderCardResults()
+        total = null
+        counts = emptyMap()
+        batch.clear()
+        reload(withCounts = true)
+    }
 
     /** [pull]: the system pull-to-refresh is showing its own spinner. */
     fun reload(withCounts: Boolean = true, pull: Boolean = false) {
         val mine = ++ticket
         val snapshot = key()
-        loading = true; refreshing = pull; error = null
+        loading = true; loadingMore = false; refreshing = pull; error = null
         viewModelScope.launch {
             try {
-                val page = session.faultPage(state, query, field, span, 0, independent = searchMode)
+                val page = session.faultPage(state, query, field, span, 0, independent = searchMode, conditions = appliedConditions())
                 if (mine != ticket || snapshot != key()) return@launch
-                rows = page.rows; last = page.last; total = page.total
+                cardResults = cardResults.replace(page.rows, snapshot, page.last)
+                total = page.total
                 page.total?.let { total -> counts = counts + (state to total) }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { if (mine == ticket) error = e.message ?: "加载失败" }
@@ -92,15 +110,17 @@ class OrderListViewModel(
         if (loading || loadingMore || last) return
         val mine = ticket
         val snapshot = key()
+        if (!cardResults.matchesQuery(snapshot)) return
         loadingMore = true
         viewModelScope.launch {
             try {
-                val page = session.faultPage(state, query, field, span, rows.size, independent = searchMode)
+                val page = session.faultPage(state, query, field, span, rows.size, independent = searchMode, conditions = appliedConditions())
                 if (mine != ticket || snapshot != key()) return@launch
-                rows = rows + page.rows; last = page.last; total = page.total ?: total
+                cardResults = cardResults.append(page.rows, page.last)
+                total = page.total ?: total
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { if (mine == ticket) error = e.message ?: "加载失败" }
-            finally { loadingMore = false }
+            finally { if (mine == ticket) loadingMore = false }
         }
     }
 
@@ -108,7 +128,7 @@ class OrderListViewModel(
     private fun reloadCounts() {
         if (searchMode) return
         val mine = ++countsTicket
-        val filters = faultSearchFilters(query, field, span)
+        val filters = faultSearchFilters(query, field, span, conditions)
         viewModelScope.launch {
             val fresh = try {
                 coroutineScope {

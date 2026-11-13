@@ -1,38 +1,104 @@
 package com.personal.tpm.ui
 
+import android.animation.ValueAnimator
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import com.personal.tpm.ui.theme.ThemeConfig
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.background
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import com.personal.tpm.data.AccountVault
+import com.personal.tpm.data.QueryAccounts
 import com.personal.tpm.data.Session
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
+import com.personal.tpm.TpmApp
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 private enum class Screen { Login, Main }
+internal val LocalStartupComplete = compositionLocalOf { true }
+private const val StartupSkeletonMillis = 250L
+private const val StartupRenderBufferMillis = 100L
+
+@Composable
+fun AppRoot(app: TpmApp) {
+    var services by remember(app) { mutableStateOf<Pair<Session, QueryAccounts>?>(null) }
+    var showSkeleton by remember { mutableStateOf(true) }
+    val firstSkeletonDraw = remember { CompletableDeferred<Unit>() }
+    val firstAppDraw = remember { CompletableDeferred<Unit>() }
+    val skeletonAlpha = remember { Animatable(1f) }
+
+    LaunchedEffect(app) {
+        firstSkeletonDraw.await()
+        withFrameNanos { }
+        delay(StartupSkeletonMillis)
+        services = withContext(Dispatchers.IO) { app.session to QueryAccounts(app) }
+        firstAppDraw.await()
+        withFrameNanos { }
+        delay(StartupRenderBufferMillis)
+        skeletonAlpha.animateTo(0f, tween(Motion.Fast, easing = Motion.Leave))
+        showSkeleton = false
+        withContext(Dispatchers.IO) { app.drafts.warmUp() }
+    }
+
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        services?.let { (session, queries) ->
+            Box(Modifier.fillMaxSize().drawWithContent {
+                drawContent()
+                if (!firstAppDraw.isCompleted) firstAppDraw.complete(Unit)
+            }) {
+                CompositionLocalProvider(LocalStartupComplete provides !showSkeleton) {
+                    AppContent(session, app.vault, app.pickerPrefs, app.drafts, queries)
+                }
+            }
+        }
+        if (showSkeleton) {
+            androidx.activity.compose.BackHandler { }
+            HomeStartupSkeleton(
+                modifier = Modifier.fillMaxSize()
+                    .graphicsLayer { alpha = skeletonAlpha.value }
+                    .drawWithContent {
+                        drawContent()
+                        if (!firstSkeletonDraw.isCompleted) firstSkeletonDraw.complete(Unit)
+                    }.pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                        }
+                    },
+                animate = ValueAnimator.areAnimatorsEnabled(),
+            )
+        }
+    }
+}
 
 /** Sign in, then open the app. Each change is a plain cross-fade. */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.PickerPrefs, drafts: com.personal.tpm.data.DraftStore) {
+private fun AppContent(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.PickerPrefs,
+    drafts: com.personal.tpm.data.DraftStore, queries: QueryAccounts) {
     TransparentSystemBars()
     val auth by session.auth.collectAsState()
     val screen = when {
@@ -42,12 +108,8 @@ fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.
     val scope by session.scope.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val updates = androidx.compose.runtime.remember(context) { OnlineUpdateState(context) }
-    val launchReady = LocalLaunchReady.current
-    androidx.compose.runtime.LaunchedEffect(screen) {
-        if (screen == Screen.Login) { androidx.compose.runtime.withFrameNanos { }; launchReady() }
-    }
-    val queries = androidx.compose.runtime.remember { com.personal.tpm.data.QueryAccounts(context).also { session.queryAccounts = it } }
-    androidx.compose.runtime.LaunchedEffect(scope) { queries.invalidate() }
+    androidx.compose.runtime.SideEffect { session.queryAccounts = queries }
+    LaunchedEffect(scope) { queries.invalidate() }
     // Scrolling containers own their platform overscroll effect; do not disable or duplicate it here.
     CompositionLocalProvider(
         LocalSession provides session, LocalVault provides vault, LocalPickerPrefs provides prefs, LocalDrafts provides drafts,
@@ -73,43 +135,6 @@ fun AppRoot(session: Session, vault: AccountVault, prefs: com.personal.tpm.data.
             }
         }
         }
-        OnlineUpdatePrompt(updates)
+        if (LocalStartupComplete.current) OnlineUpdatePrompt(updates)
     }
-}
-
-/** What the first moment of the app shows instead of a blank page: the shape of the home page in grey, the light sweeping across it. */
-@Composable
-private fun StartupSkeleton() {
-    Column(Modifier.fillMaxSize()) {
-        androidx.compose.material3.Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primaryContainer) {
-            Column(Modifier.statusBarsPadding().padding(start = 20.dp, bottom = 22.dp, top = 18.dp)) {
-                Box(Modifier.width(120.dp).height(30.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)))
-            }
-        }
-        Column(Modifier.padding(16.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
-            repeat(4) { SkeletonCard() }
-        }
-    }
-}
-
-private fun Modifier.statusBarsPadding(): Modifier = this.statusBarsPadding()
-
-/**
- * The grey start-up skeleton stays laid over the app until its first frames are on screen, then fades away slowly (ease in and out), so the page
- * is revealed under it instead of replacing it in one cut. It lies over the app only for that moment and takes no touches.
- */
-@Composable
-private fun StartupCover() {
-    var covering by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        // Two frames of the real page first (its first composition is the heavy one), then a short rest, then the fade.
-        androidx.compose.runtime.withFrameNanos { }
-        androidx.compose.runtime.withFrameNanos { }
-        kotlinx.coroutines.delay(180)
-        covering = false
-    }
-    val alpha by androidx.compose.animation.core.animateFloatAsState(
-        if (covering) 1f else 0f, androidx.compose.animation.core.tween(Motion.Page, easing = Motion.Change), label = "cover",
-    )
-    if (alpha > 0f) Box(Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha }.background(MaterialTheme.colorScheme.background)) { StartupSkeleton() }
 }

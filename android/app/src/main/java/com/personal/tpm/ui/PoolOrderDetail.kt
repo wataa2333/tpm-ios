@@ -17,6 +17,7 @@ import com.personal.tpm.data.Jv
 import com.personal.tpm.data.isReturnCondition
 import com.personal.tpm.data.isRejectCondition
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Read contracts recovered from the original App; business writes remain permission gated. */
@@ -41,9 +42,9 @@ fun PoolOrderDetail(kind: PoolKind, id: String, readOnly: Boolean = false, onClo
         records = nextRecords; materials = nextMaterials
         selected = orderId
     }
-    suspend fun load() {
+    suspend fun load(keepContent: Boolean = false) {
         busy = true; error = null; canOperate = false; returnBranch = Jv.NULL
-        detail = null; orders = emptyList(); records = emptyList(); materials = emptyList()
+        if (!keepContent) { detail = null; orders = emptyList(); records = emptyList(); materials = emptyList() }
         try {
             detail = loadPoolOrder(session, kind, id)
             val task = detail?.get("taskInfo") ?: Jv.NULL
@@ -54,7 +55,7 @@ fun PoolOrderDetail(kind: PoolKind, id: String, readOnly: Boolean = false, onClo
             }
             orders = session.request("${kind.path}/get${name}OrdersBy${name}Id", mapOf(kind.idKey to id)).array
             val first = orders.firstOrNull { it["orderId"].text == selected } ?: orders.firstOrNull()
-            if (first == null) selected = ""
+            if (first == null) { selected = ""; records = emptyList(); materials = emptyList() }
             first?.get("orderId")?.text?.takeIf { it.isNotEmpty() }?.let { loadRecords(it) }
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) { canOperate = false; selected = ""; error = e.message ?: "读取失败，请重试" }
@@ -147,7 +148,20 @@ fun PoolOrderDetail(kind: PoolKind, id: String, readOnly: Boolean = false, onClo
             WorkflowScreen(processId = detail?.get("processInstanceId")?.text.orEmpty(), onBack = { action = null })
         }
         else TaskScreen(com.personal.tpm.data.OrderKind.Fault, id, page == "RETURN", onBack = { action = null },
-            onDone = { action = null; scope.launch { load() } }, poolKind = kind, initialCondition = if (page == "RETURN") returnBranch["value"].text else null)
+            onDone = { stayOnDetail ->
+                if (stayOnDetail) {
+                    action = null
+                    busy = true
+                    scope.launch {
+                        delay((Motion.Page + Motion.Instant).toLong())
+                        session.notifyChanged()
+                        load(keepContent = true)
+                    }
+                } else {
+                    onClose()
+                    session.notifyChanged()
+                }
+            }, poolKind = kind, initialCondition = if (page == "RETURN") returnBranch["value"].text else null, refreshOnDone = false)
     }
 }
 
